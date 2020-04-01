@@ -1,11 +1,37 @@
 import React from 'react';
-import { Table } from 'react-bootstrap';
+import { Table, DropdownButton, Dropdown } from 'react-bootstrap';
 import IServerProps from '../IServerProps';
+
+function Player(props: { name: string, role: string, online: boolean, last_seen: string }) {
+    return (
+        <tr>
+            <td className="align-middle">{props.name}</td>
+            <td className="align-middle">{props.role}</td>
+            <td className="align-middle">{props.online}</td>
+            <td className="align-middle">{props.last_seen}</td>
+            <td>
+                <DropdownButton id={props.name + "-control"} title="Control" size="sm" alignRight>
+                    <Dropdown.Item as="button">Kick</Dropdown.Item>
+                    <Dropdown.Item as="button">Ban</Dropdown.Item>
+                    <Dropdown.Divider />
+                    <Dropdown.Header>Chat</Dropdown.Header>
+                    <Dropdown.Item as="button">Mute</Dropdown.Item>
+                    <Dropdown.Item as="button" disabled>Unmute</Dropdown.Item>
+                    <Dropdown.Item as="button">Purge</Dropdown.Item>
+                    <Dropdown.Divider />
+                    <Dropdown.Header>Administrator</Dropdown.Header>
+                    <Dropdown.Item as="button">Promote</Dropdown.Item>
+                    <Dropdown.Item as="button" disabled>Demote</Dropdown.Item>
+                </DropdownButton>
+            </td>
+        </tr>
+    );
+}
 
 export default class Status extends React.Component<IServerProps> {
     public render(): JSX.Element {
         return (
-            <Table striped bordered hover>
+            <Table striped bordered hover size="sm">
                 <thead>
                     <tr>
                         <th>Name</th>
@@ -16,27 +42,9 @@ export default class Status extends React.Component<IServerProps> {
                     </tr>
                 </thead>
                 <tbody>
-                    <tr>
-                        <td>Spans</td>
-                        <td>Administrator</td>
-                        <td>Yes</td>
-                        <td>1 day ago</td>
-                        <td></td>
-                    </tr>
-                    <tr>
-                        <td>whitensnake</td>
-                        <td>Player</td>
-                        <td>No</td>
-                        <td>1 day ago</td>
-                        <td></td>
-                    </tr>
-                    <tr>
-                        <td>some gui</td>
-                        <td>Player</td>
-                        <td>No</td>
-                        <td>1 day ago</td>
-                        <td></td>
-                    </tr>
+                    <Player name="Spans" role="Administrator" online={true} last_seen="1 day ago" />
+                    <Player name="Whitensnake" role="Player" online={true} last_seen="1 day ago" />
+                    <Player name="nuppih" role="Player" online={true} last_seen="1 year ago" />
                 </tbody>
             </Table>
         );

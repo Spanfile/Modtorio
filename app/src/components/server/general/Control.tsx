@@ -29,6 +29,9 @@ export default class General extends React.Component<IServerProps> {
                     <Col className="pr-0">
                         <Button variant="primary" block>Save</Button>
                     </Col>
+                    <Col className="pr-0">
+                        <Button variant="primary" block>Lua command</Button>
+                    </Col>
                 </Row>
             </>
         );
