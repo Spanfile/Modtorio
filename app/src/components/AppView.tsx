@@ -1,6 +1,6 @@
 import React from 'react';
 import { Switch, Route, Redirect } from 'react-router-dom';
-import ServerView from './servers/ServerView';
+import ServerView from './server/ServerView';
 
 export default class AppView extends React.Component {
     public render(): JSX.Element {
