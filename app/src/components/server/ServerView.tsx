@@ -16,7 +16,7 @@ function ModNavItem(props: { serverId: string }) {
             <Accordion.Collapse eventKey={props.serverId}>
                 <Card.Body className="p-0 pl-3">
                     <Nav className="flex-column">
-                        <ModNavLink to={url + "/status"}>Status</ModNavLink>
+                        <ModNavLink to={url + "/general"}>General</ModNavLink>
                         <ModNavLink to={url + "/log"}>Log</ModNavLink>
                         <ModNavLink to={url + "/configuration"}>Configuration</ModNavLink>
                     </Nav>
@@ -49,7 +49,7 @@ export default class ServerView extends React.Component {
                     </Accordion>
                 </Col>
 
-                <Col className="pl-0">
+                <Col className="pl-0 mt-3 mr-3 mb-3">
                     <Switch>
                         <Route path={baseUrl + ":serverId"} component={Server} />
                         <Redirect from={baseUrl} to={baseUrl + "0"} />
