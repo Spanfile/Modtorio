@@ -1,5 +1,5 @@
 import React from 'react';
-import { Nav } from 'react-bootstrap';
+import { Tabs, Tab } from 'react-bootstrap';
 import { RouteComponentProps } from 'react-router';
 
 interface IServerProps {
@@ -10,9 +10,20 @@ export default class Server extends React.Component<RouteComponentProps<IServerP
     public render(): JSX.Element {
         let props = this.props.match.params;
         return (
-            <Nav variant="tabs">
-
-            </Nav>
+            <Tabs id="server-tab" transition={false} className="mt-3 mr-3">
+                <Tab eventKey="status" title="Status">
+                    Status {props.serverId}
+                </Tab>
+                <Tab eventKey="control" title="Control">
+                    Control {props.serverId}
+                </Tab>
+                <Tab eventKey="logs" title="Logs">
+                    Logs {props.serverId}
+                </Tab>
+                <Tab eventKey="config" title="Configuration">
+                    Configuration {props.serverId}
+                </Tab>
+            </Tabs>
         );
     }
 }
