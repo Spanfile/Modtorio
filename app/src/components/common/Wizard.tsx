@@ -1,30 +1,33 @@
 import React from 'react';
 import { Button } from 'react-bootstrap';
 
-export interface IWizardProps {
-    initialStep?: number,
-    done: () => void,
-    children: React.ReactNode;
-}
-
-export interface IWizardStepProps {
+export type StepComponentProps<T extends { [K in keyof T]?: any } = {}> = {
     next: () => void,
     cancel: () => void,
+} & T
+
+export type WizardProps = {
+    initialStep?: number,
+    done: () => void,
+    children: React.ReactElement[];
 }
 
-export function Wizard(props: IWizardProps) {
+export function Wizard(props: WizardProps) {
     const [step, setStep] = React.useState(props.initialStep ?? 0);
 
-    let childArray = React.Children.toArray(props.children);
-    let maxSteps = childArray.length;
+    let maxSteps = React.Children.count(props.children);
     let lastStep = maxSteps - 1;
-    let currentStep = React.Children.toArray(props.children)[step];
 
     const nextStep = () => {
         if (step < lastStep) {
             return setStep(step + 1);
         }
     };
+
+    let steps = React.Children.map(
+        props.children,
+        (step) => React.cloneElement(step, { next: nextStep, cancel: () => { console.log("cancel") } }));
+    let currentStep = steps[step];
 
     return (
         <>
@@ -43,6 +46,18 @@ export function Wizard(props: IWizardProps) {
                     Cancel
                 </Button>
             </div>
+        </>
+    );
+}
+
+type StepProps = {
+    render: (props: StepComponentProps<any>) => React.ReactNode;
+}
+
+export function Step<T extends StepProps = StepProps>(props: T) {
+    return (
+        <>
+            {props.render({ ...props })}
         </>
     );
 }
