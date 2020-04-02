@@ -1,25 +1,7 @@
 import React from 'react';
-import { Row, Col, Button, Dropdown, SplitButton, Modal } from 'react-bootstrap';
-
-function ServerControlModal(props: { onHide: any, show: boolean }) {
-    return (
-        <Modal
-            {...props}
-            centered
-        >
-            <Modal.Header closeButton>
-                <Modal.Title>Shut down server</Modal.Title>
-            </Modal.Header>
-            <Modal.Body>
-                <p>You're about to execute a server control action: Shut down</p>
-            </Modal.Body>
-            <Modal.Footer>
-                <Button variant="secondary" className="rounded-0" onClick={props.onHide}>No</Button>
-                <Button variant="danger" className="rounded-0" onClick={props.onHide}>Yes</Button>
-            </Modal.Footer>
-        </Modal >
-    );
-}
+import { Row, Col, Button, Dropdown, SplitButton } from 'react-bootstrap';
+import { ServerControlModal } from './ServerControlModal';
+import { Wizard } from 'components/common/Wizard';
 
 export function Control(props: { id: string | undefined }) {
     const [modalShow, setModalShow] = React.useState(false);
@@ -58,7 +40,13 @@ export function Control(props: { id: string | undefined }) {
                 </Col>
             </Row>
 
-            <ServerControlModal onHide={handleClose} show={modalShow} />
+            <ServerControlModal variant="danger" onHide={handleClose} show={modalShow} title="Shut down">
+                <Wizard done={handleClose}>
+                    <p>Step 1</p>
+                    <p>Step 2</p>
+                    <p>Step 3</p>
+                </Wizard>
+            </ServerControlModal>
         </>
     );
 }

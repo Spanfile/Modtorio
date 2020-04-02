@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card } from 'react-bootstrap';
-import { Control } from './Control';
+import { Control } from './control/Control';
 import { Status } from './Status';
 import { Players } from './Players';
 
