@@ -2,7 +2,7 @@ import React from 'react';
 import { Row, Col, Navbar, Nav } from 'react-bootstrap';
 import { NavLink } from 'react-router-dom';
 
-export default function () {
+export function ModNav() {
     return (
         <Row>
             <Col>

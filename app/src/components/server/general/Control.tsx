@@ -1,8 +1,7 @@
 import React from 'react';
 import { Row, Col, Button, Dropdown, SplitButton } from 'react-bootstrap';
-import IServer from '../IServer';
 
-export default function (props: IServer) {
+export function Control(props: { id: string | undefined }) {
     return (
         <>
             <Row xs={2} md={4} lg={6}>

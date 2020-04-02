@@ -1,6 +1,5 @@
 import React from 'react';
 import { Row, Col, Badge } from 'react-bootstrap';
-import IServer from '../IServer';
 
 function ModInfoRow(props: { title: string, children: React.ReactNode }) {
     return (
@@ -15,7 +14,7 @@ function ModInfoRow(props: { title: string, children: React.ReactNode }) {
     );
 }
 
-export default function (props: IServer) {
+export function Status(props: { id: string | undefined }) {
     return (
         <>
             <ModInfoRow title="Server status">Running</ModInfoRow>

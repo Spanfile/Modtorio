@@ -1,6 +1,5 @@
 import React from 'react';
 import { Table, DropdownButton, Dropdown } from 'react-bootstrap';
-import IServer from '../IServer';
 
 function Player(props: { name: string, role: string, online: boolean, last_seen: string }) {
     return (
@@ -28,7 +27,7 @@ function Player(props: { name: string, role: string, online: boolean, last_seen:
     );
 }
 
-export default function (props: IServer) {
+export function Players(props: { id: string | undefined }) {
     return (
         <Table striped bordered hover size="sm">
             <thead>

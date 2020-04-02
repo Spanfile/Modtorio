@@ -1,9 +1,8 @@
 import React from 'react';
 import { Card } from 'react-bootstrap';
-import IServer from '../IServer';
-import Control from './Control';
-import Status from './Status';
-import Players from './Players';
+import { Control } from './Control';
+import { Status } from './Status';
+import { Players } from './Players';
 
 function ModCard(props: { title: string, children: React.ReactNode }) {
     return (
@@ -14,7 +13,7 @@ function ModCard(props: { title: string, children: React.ReactNode }) {
     );
 }
 
-export default function (props: IServer) {
+export function General(props: { id: string | undefined }) {
     return (
         <>
             <ModCard title="Control">
