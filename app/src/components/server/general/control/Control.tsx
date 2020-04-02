@@ -3,6 +3,9 @@ import { Row, Col, Button, Dropdown, SplitButton } from 'react-bootstrap';
 import { ServerControlModal } from './ServerControlModal';
 import { Wizard } from 'components/common/Wizard';
 
+import { ShutdownConfirmation } from './ShutdownConfirmation';
+import { WaitPlayers } from './WaitPlayers';
+
 export function Control(props: { id: string | undefined }) {
     const [modalShow, setModalShow] = React.useState(false);
 
@@ -42,8 +45,8 @@ export function Control(props: { id: string | undefined }) {
 
             <ServerControlModal variant="danger" onHide={handleClose} show={modalShow} title="Shut down">
                 <Wizard done={handleClose}>
-                    <p>Step 1</p>
-                    <p>Step 2</p>
+                    <ShutdownConfirmation playerCount={1} />
+                    <WaitPlayers timeout={30} />
                     <p>Step 3</p>
                 </Wizard>
             </ServerControlModal>

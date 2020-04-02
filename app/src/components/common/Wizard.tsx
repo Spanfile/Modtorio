@@ -7,6 +7,11 @@ export interface IWizardProps {
     children: React.ReactNode;
 }
 
+export interface IWizardStepProps {
+    next: () => void,
+    cancel: () => void,
+}
+
 export function Wizard(props: IWizardProps) {
     const [step, setStep] = React.useState(props.initialStep ?? 0);
 
