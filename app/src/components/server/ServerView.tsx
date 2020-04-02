@@ -38,24 +38,22 @@ function ModNavLink(props: { to: string, children: React.ReactNode }) {
     );
 }
 
-export default class ServerView extends React.Component {
-    public render(): JSX.Element {
-        return (
-            <Row>
-                <Col sm={2}>
-                    <Accordion className="flex-column" as={Nav} defaultActiveKey="0">
-                        <ModNavItem serverId="0" />
-                        <ModNavItem serverId="1" />
-                    </Accordion>
-                </Col>
+export default function () {
+    return (
+        <Row>
+            <Col sm={2}>
+                <Accordion className="flex-column" as={Nav} defaultActiveKey="0">
+                    <ModNavItem serverId="0" />
+                    <ModNavItem serverId="1" />
+                </Accordion>
+            </Col>
 
-                <Col className="pl-0 mt-3 mr-3 mb-3">
-                    <Switch>
-                        <Route path={baseUrl + ":serverId"} component={Server} />
-                        <Redirect from={baseUrl} to={baseUrl + "0"} />
-                    </Switch>
-                </Col>
-            </Row >
-        );
-    }
+            <Col className="pl-0 mt-3 mr-3 mb-3">
+                <Switch>
+                    <Route path={baseUrl + ":serverId"} component={Server} />
+                    <Redirect from={baseUrl} to={baseUrl + "0"} />
+                </Switch>
+            </Col>
+        </Row >
+    );
 }

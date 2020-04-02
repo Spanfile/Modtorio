@@ -1,8 +1,8 @@
 import React from 'react';
 import { Table } from 'react-bootstrap';
-import IServerProps from '../IServerProps';
+import IServer from '../IServer';
 
-export default class Parsed extends React.Component<IServerProps> {
+export default class Parsed extends React.Component<IServer> {
     public render(): JSX.Element {
         return (
             <Table striped bordered size="sm" className="m-3">

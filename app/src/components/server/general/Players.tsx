@@ -1,6 +1,6 @@
 import React from 'react';
 import { Table, DropdownButton, Dropdown } from 'react-bootstrap';
-import IServerProps from '../IServerProps';
+import IServer from '../IServer';
 
 function Player(props: { name: string, role: string, online: boolean, last_seen: string }) {
     return (
@@ -28,25 +28,23 @@ function Player(props: { name: string, role: string, online: boolean, last_seen:
     );
 }
 
-export default class Status extends React.Component<IServerProps> {
-    public render(): JSX.Element {
-        return (
-            <Table striped bordered hover size="sm">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th>Role</th>
-                        <th>Online</th>
-                        <th>Last seen</th>
-                        <th></th>
-                    </tr>
-                </thead>
-                <tbody>
-                    <Player name="Spans" role="Administrator" online={true} last_seen="1 day ago" />
-                    <Player name="Whitensnake" role="Player" online={true} last_seen="1 day ago" />
-                    <Player name="nuppih" role="Player" online={true} last_seen="1 year ago" />
-                </tbody>
-            </Table>
-        );
-    }
+export default function (props: IServer) {
+    return (
+        <Table striped bordered hover size="sm">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Role</th>
+                    <th>Online</th>
+                    <th>Last seen</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                <Player name="Spans" role="Administrator" online={true} last_seen="1 day ago" />
+                <Player name="Whitensnake" role="Player" online={true} last_seen="1 day ago" />
+                <Player name="nuppih" role="Player" online={true} last_seen="1 year ago" />
+            </tbody>
+        </Table>
+    );
 }

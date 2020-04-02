@@ -1,6 +1,6 @@
 import React from 'react';
 import { Card } from 'react-bootstrap';
-import IServerProps from '../IServerProps';
+import IServer from '../IServer';
 import Control from './Control';
 import Status from './Status';
 import Players from './Players';
@@ -14,20 +14,18 @@ function ModCard(props: { title: string, children: React.ReactNode }) {
     );
 }
 
-export default class General extends React.Component<IServerProps> {
-    public render(): JSX.Element {
-        return (
-            <>
-                <ModCard title="Control">
-                    <Control {...this.props} />
-                </ModCard>
-                <ModCard title="Status">
-                    <Status {...this.props} />
-                </ModCard>
-                <ModCard title="Players">
-                    <Players {...this.props} />
-                </ModCard>
-            </>
-        );
-    }
+export default function (props: IServer) {
+    return (
+        <>
+            <ModCard title="Control">
+                <Control {...props} />
+            </ModCard>
+            <ModCard title="Status">
+                <Status {...props} />
+            </ModCard>
+            <ModCard title="Players">
+                <Players {...props} />
+            </ModCard>
+        </>
+    );
 }

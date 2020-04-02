@@ -1,6 +1,6 @@
 import React from 'react';
 import { Row, Col, Badge } from 'react-bootstrap';
-import IServerProps from '../IServerProps';
+import IServer from '../IServer';
 
 function ModInfoRow(props: { title: string, children: React.ReactNode }) {
     return (
@@ -15,18 +15,16 @@ function ModInfoRow(props: { title: string, children: React.ReactNode }) {
     );
 }
 
-export default class Status extends React.Component<IServerProps> {
-    public render(): JSX.Element {
-        return (
-            <>
-                <ModInfoRow title="Server status">Running</ModInfoRow>
-                <ModInfoRow title="Uptime">1 day, 20 hours</ModInfoRow>
-                <ModInfoRow title="Last autosave">2 minutes ago</ModInfoRow>
-                <ModInfoRow title="Players online">1 / 8</ModInfoRow>
-                <ModInfoRow title="Version">
-                    0.17.79 <Badge variant="success" className="rounded-0">Up-to date</Badge>
-                </ModInfoRow>
-            </>
-        );
-    }
+export default function (props: IServer) {
+    return (
+        <>
+            <ModInfoRow title="Server status">Running</ModInfoRow>
+            <ModInfoRow title="Uptime">1 day, 20 hours</ModInfoRow>
+            <ModInfoRow title="Last autosave">2 minutes ago</ModInfoRow>
+            <ModInfoRow title="Players online">1 / 8</ModInfoRow>
+            <ModInfoRow title="Version">
+                0.17.79 <Badge variant="success" className="rounded-0">Up-to date</Badge>
+            </ModInfoRow>
+        </>
+    );
 }

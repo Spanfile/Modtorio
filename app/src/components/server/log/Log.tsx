@@ -1,10 +1,10 @@
 import React from 'react';
 import { Tabs, Tab } from 'react-bootstrap';
-import IServerProps from '../IServerProps';
+import IServer from '../IServer';
 import Parsed from './Parsed';
 import Raw from './Raw';
 
-export default class Log extends React.Component<IServerProps> {
+export default class Log extends React.Component<IServer> {
     public render(): JSX.Element {
         return (
             <Tabs defaultActiveKey="parsed" transition={false} id="log-tab">
