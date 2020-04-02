@@ -36,7 +36,7 @@ export function ServerControlModal(props: ModModalProps) {
             {...props}
             centered
         >
-            <Modal.Header closeButton className={`${bg} ${text}`}>
+            <Modal.Header className={`${bg} ${text}`}>
                 <Modal.Title>{props.title}</Modal.Title>
             </Modal.Header>
             <Modal.Body>

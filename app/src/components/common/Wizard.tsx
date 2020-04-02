@@ -4,11 +4,13 @@ import { Button } from 'react-bootstrap';
 export type StepComponentProps<T extends { [K in keyof T]?: any } = {}> = {
     next: () => void,
     cancel: () => void,
+    setUserControlled: (userControlled: boolean) => void,
+    setCancelable: (cancelable: boolean) => void,
 } & T
 
 export type WizardProps = {
     initialStep?: number,
-    done: () => void,
+    done: (result: boolean) => void,
     children: React.ReactElement[];
 }
 
@@ -18,16 +20,23 @@ export function Wizard(props: WizardProps) {
     let maxSteps = React.Children.count(props.children);
     let lastStep = maxSteps - 1;
 
+    const success = () => props.done(true);
+    const cancel = () => props.done(false);
     const nextStep = () => {
         if (step < lastStep) {
             return setStep(step + 1);
+        } else {
+            success();
         }
     };
 
     let steps = React.Children.map(
         props.children,
-        (step) => React.cloneElement(step, { next: nextStep, cancel: () => { console.log("cancel") } }));
+        (step) => React.cloneElement(step, { next: nextStep, cancel: cancel }));
     let currentStep = steps[step];
+
+    const [nextEnabled, setNextEnabled] = React.useState(currentStep.props.userControlled ?? true);
+    const [cancelEnabled, setCancelEnabled] = React.useState(currentStep.props.cancelable ?? true);
 
     return (
         <>
@@ -37,12 +46,15 @@ export function Wizard(props: WizardProps) {
                 <Button
                     variant="primary"
                     className="ml-3"
-                    onClick={nextStep}>
+                    onClick={nextStep}
+                    disabled={!nextEnabled}>
                     {step < lastStep ? "Next" : "Done"}
                 </Button>
                 <Button
                     variant="secondary"
-                    className="ml-3">
+                    className="ml-3"
+                    disabled={!cancelEnabled}
+                    onClick={cancel}>
                     Cancel
                 </Button>
             </div>
@@ -51,10 +63,12 @@ export function Wizard(props: WizardProps) {
 }
 
 type StepProps = {
+    userControlled?: boolean,
+    cancelable?: boolean,
     render: (props: StepComponentProps<any>) => React.ReactNode;
 }
 
-export function Step<T extends StepProps = StepProps>(props: T) {
+export function Step(props: StepProps) {
     return (
         <>
             {props.render({ ...props })}

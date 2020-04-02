@@ -5,12 +5,16 @@ import { Wizard, Step } from 'components/common/Wizard';
 
 import { ShutdownConfirmation } from './ShutdownConfirmation';
 import { WaitPlayers } from './WaitPlayers';
+import { Shutdown } from './Shutdown';
 
 export function Control(props: { id: string | undefined }) {
     const [modalShow, setModalShow] = React.useState(false);
 
-    const handleClose = () => setModalShow(false);
-    const handleShow = () => setModalShow(true);
+    const showWizard = () => setModalShow(true);
+    const wizardDone = (result: boolean) => {
+        console.log(`wizard returned ${result}`);
+        setModalShow(false);
+    }
 
     return (
         <>
@@ -24,7 +28,7 @@ export function Control(props: { id: string | undefined }) {
                         id="shutdown"
                         variant="danger"
                         title="Shut down"
-                        onClick={handleShow}
+                        onClick={showWizard}
                     >
                         <Dropdown.Item eventKey="kill">Kill</Dropdown.Item>
                     </SplitButton>
@@ -43,10 +47,11 @@ export function Control(props: { id: string | undefined }) {
                 </Col>
             </Row>
 
-            <ServerControlModal variant="danger" onHide={handleClose} show={modalShow} title="Shut down">
-                <Wizard done={handleClose}>
+            <ServerControlModal variant="danger" onHide={() => wizardDone(false)} show={modalShow} title="Shut down">
+                <Wizard done={wizardDone}>
                     <Step render={(p) => <ShutdownConfirmation playerCount={1} {...p} />} />
-                    <Step render={(p) => <WaitPlayers timeout={30} {...p} />} />
+                    <Step userControlled={false} render={(p) => <WaitPlayers timeout={2} {...p} />} />
+                    <Step userControlled={false} cancelable={false} render={(p) => <Shutdown {...p} />} />
                 </Wizard>
             </ServerControlModal>
         </>

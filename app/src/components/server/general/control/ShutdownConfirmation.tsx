@@ -1,12 +1,11 @@
 import React from 'react';
 import { StepComponentProps } from 'components/common/Wizard';
 
-interface IShutdownConfirmationProps {
+type ShutdownConfirmationProps = {
     playerCount: number,
 }
 
-export function ShutdownConfirmation(props: StepComponentProps<IShutdownConfirmationProps>) {
-    props.next();
+export function ShutdownConfirmation(props: StepComponentProps<ShutdownConfirmationProps>) {
     return (
         <>
             <p>Are you sure you want to shut down the server?</p>
