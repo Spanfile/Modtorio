@@ -1,10 +1,20 @@
 use serde::Deserialize;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug)]
 pub struct Information {
     name: String,
     description: String,
     tags: Vec<String>,
+}
+
+impl Default for Information {
+    fn default() -> Self {
+        Self {
+            name: String::from("A Factorio server"),
+            description: String::from("A Factorio server"),
+            tags: Vec::new(),
+        }
+    }
 }
 
 #[cfg(test)]

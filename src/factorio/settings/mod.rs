@@ -21,7 +21,7 @@ struct Range {
     max: u32,
 }
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Debug, Default)]
 pub struct ServerSettings {
     #[serde(flatten)]
     information: information::Information,
@@ -30,4 +30,10 @@ pub struct ServerSettings {
     autosave: autosave::Autosave,
     pause: pause::Pause,
     allow_commands: AllowCommands,
+}
+
+impl Default for AllowCommands {
+    fn default() -> Self {
+        Self::AdminsOnly
+    }
 }
