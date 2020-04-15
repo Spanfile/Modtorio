@@ -2,6 +2,7 @@
 mod macros;
 mod factorio;
 
-use factorio::Factorio;
-
-fn main() {}
+fn main() -> anyhow::Result<()> {
+    let factorio = factorio::Importer::from("./sample").import()?;
+    Ok(())
+}

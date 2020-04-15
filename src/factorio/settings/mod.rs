@@ -82,6 +82,12 @@ where
     deserializer.deserialize_any(AllowCommandsVisitor)
 }
 
+impl ServerSettings {
+    pub fn from_json(json: &str) -> anyhow::Result<Self> {
+        Ok(serde_json::from_str(json)?)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
