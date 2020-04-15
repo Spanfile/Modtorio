@@ -1,11 +1,15 @@
 use serde::Deserialize;
 
-#[derive(Deserialize, Debug)]
+#[derive(Deserialize, Debug, PartialEq)]
 pub struct Autosave {
-    interval: u32,
-    slots: u32,
-    only_on_server: bool,
-    non_blocking: bool,
+    #[serde(rename = "autosave_interval")]
+    pub interval: u32,
+    #[serde(rename = "autosave_slots")]
+    pub slots: u32,
+    #[serde(rename = "autosave_only_on_server")]
+    pub only_on_server: bool,
+    #[serde(rename = "non_blocking_saving")]
+    pub non_blocking: bool,
 }
 
 impl Default for Autosave {

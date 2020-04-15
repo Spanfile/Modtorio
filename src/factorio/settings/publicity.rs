@@ -17,19 +17,19 @@ pub struct PublicVisibility {
 }
 
 #[derive(Deserialize, Debug, PartialEq)]
-struct PlayerLimit {
-    max: Limit,
-    ignore_for_returning: bool,
-    autokick: Limit,
+pub struct PlayerLimit {
+    pub max: Limit,
+    pub ignore_for_returning: bool,
+    pub autokick: Limit,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Publicity {
-    public: Option<PublicVisibility>,
-    lan: bool,
-    require_user_verification: bool,
-    player_limit: PlayerLimit,
-    password: String,
+    pub public: Option<PublicVisibility>,
+    pub lan: bool,
+    pub require_user_verification: bool,
+    pub player_limit: PlayerLimit,
+    pub password: String,
 }
 
 impl Default for Publicity {
@@ -101,39 +101,8 @@ impl<'de> Deserialize<'de> for Publicity {
             where
                 V: MapAccess<'de>,
             {
-                #[derive(Debug, Deserialize)]
-                #[serde(field_identifier, rename_all = "lowercase")]
-                enum VisibilityField {
-                    Public,
-                    LAN,
-                }
-
-                macro_rules! field_deserializers {
-                    ( $([$name:ident, $type:ty, $field:ident]),+) => {
-                        $(
-                            let mut $name: Option<$type> = None;
-                        )*
-
-                        while let Some(key) = map.next_key()? {
-                            match key {
-                                $(
-                                Field::$field => {
-                                    if $name.is_some() {
-                                        return Err(de::Error::duplicate_field("$name"));
-                                    }
-                                    $name = Some(map.next_value()?);
-                                }
-                                )*
-                            }
-                        }
-
-                        $(
-                            let $name = $name.ok_or_else(|| de::Error::missing_field("$name"))?;
-                        )*
-                    };
-                }
-
                 field_deserializers!(
+                    map,
                     [visibility, Visibility, Visibility],
                     [username, String, Username],
                     [password, String, Password],
