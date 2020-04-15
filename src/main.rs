@@ -1,3 +1,5 @@
-fn main() {
-    println!("Hello, world!");
-}
+mod factorio;
+
+use factorio::Factorio;
+
+fn main() {}
