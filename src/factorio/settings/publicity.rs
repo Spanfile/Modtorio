@@ -108,96 +108,46 @@ impl<'de> Deserialize<'de> for Publicity {
                     LAN,
                 }
 
-                let mut visibility: Option<Visibility> = None;
-                let mut username = None;
-                let mut password = None;
-                let mut token: Option<String> = None;
-                let mut require_user_verification = None;
-                let mut max_players = None;
-                let mut ignore_player_limit_for_returning_players = None;
-                let mut afk_autokick_interval = None;
-                let mut game_password = None;
+                macro_rules! field_deserializers {
+                    ( $([$name:ident, $type:ty, $field:ident]),+) => {
+                        $(
+                            let mut $name: Option<$type> = None;
+                        )*
 
-                while let Some(key) = map.next_key()? {
-                    match key {
-                        Field::Visibility => {
-                            if visibility.is_some() {
-                                return Err(de::Error::duplicate_field("visibility"));
+                        while let Some(key) = map.next_key()? {
+                            match key {
+                                $(
+                                Field::$field => {
+                                    if $name.is_some() {
+                                        return Err(de::Error::duplicate_field("$name"));
+                                    }
+                                    $name = Some(map.next_value()?);
+                                }
+                                )*
                             }
-                            visibility = Some(map.next_value()?);
                         }
-                        Field::Username => {
-                            if username.is_some() {
-                                return Err(de::Error::duplicate_field("username"));
-                            }
-                            username = Some(map.next_value()?);
-                        }
-                        Field::Password => {
-                            if password.is_some() {
-                                return Err(de::Error::duplicate_field("password"));
-                            }
-                            password = Some(map.next_value()?);
-                        }
-                        Field::Token => {
-                            if token.is_some() {
-                                return Err(de::Error::duplicate_field("token"));
-                            }
-                            token = Some(map.next_value()?);
-                        }
-                        Field::RequireUserVerification => {
-                            if require_user_verification.is_some() {
-                                return Err(de::Error::duplicate_field(
-                                    "require_user_verification",
-                                ));
-                            }
-                            require_user_verification = Some(map.next_value()?);
-                        }
-                        Field::MaxPlayers => {
-                            if max_players.is_some() {
-                                return Err(de::Error::duplicate_field("max_players"));
-                            }
-                            max_players = Some(map.next_value()?);
-                        }
-                        Field::IgnorePlayerLimitForReturningPlayers => {
-                            if ignore_player_limit_for_returning_players.is_some() {
-                                return Err(de::Error::duplicate_field(
-                                    "ignore_player_limit_for_returning_players",
-                                ));
-                            }
-                            ignore_player_limit_for_returning_players = Some(map.next_value()?);
-                        }
-                        Field::AfkAutokickInterval => {
-                            if afk_autokick_interval.is_some() {
-                                return Err(de::Error::duplicate_field("afk_autokick_interval"));
-                            }
-                            afk_autokick_interval = Some(map.next_value()?);
-                        }
-                        Field::GamePassword => {
-                            if game_password.is_some() {
-                                return Err(de::Error::duplicate_field("game_password"));
-                            }
-                            game_password = Some(map.next_value()?);
-                        }
-                    }
+
+                        $(
+                            let $name = $name.ok_or_else(|| de::Error::missing_field("$name"))?;
+                        )*
+                    };
                 }
 
-                let visibility =
-                    visibility.ok_or_else(|| de::Error::missing_field("visibility"))?;
-                let username = username.ok_or_else(|| de::Error::missing_field("username"))?;
-                let password = password.ok_or_else(|| de::Error::missing_field("password"))?;
-                let token = token.ok_or_else(|| de::Error::missing_field("token"))?;
-                let require_user_verification = require_user_verification
-                    .ok_or_else(|| de::Error::missing_field("require_user_verification"))?;
-                let max_players =
-                    max_players.ok_or_else(|| de::Error::missing_field("max_players"))?;
-                let ignore_player_limit_for_returning_players =
-                    ignore_player_limit_for_returning_players.ok_or_else(|| {
-                        de::Error::missing_field("ignore_player_limit_for_returning_players")
-                    })?;
-                let afk_autokick_interval = afk_autokick_interval
-                    .ok_or_else(|| de::Error::missing_field("afk_autokick_interval"))?;
-                let game_password =
-                    game_password.ok_or_else(|| de::Error::missing_field("game_password"))?;
+                field_deserializers!(
+                    [visibility, Visibility, Visibility],
+                    [username, String, Username],
+                    [password, String, Password],
+                    [token, String, Token],
+                    [require_user_verification, bool, RequireUserVerification],
+                    [max_players, Limit, MaxPlayers],
+                    [
+                        ignore_player_limit_for_returning_players,
+                        bool,
+                        IgnorePlayerLimitForReturningPlayers
+                    ],
+                    [afk_autokick_interval, Limit, AfkAutokickInterval],
+                    [game_password, String, GamePassword]
+                );
 
                 Ok(Self::Value {
                     lan: visibility.lan,
