@@ -32,21 +32,25 @@ impl Mods {
 
 impl Mod {
     pub fn from_zip<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
-        let modname = path.get_file_stem()?;
+        let filename = path.get_file_name()?;
+        macros::with_context!(format_args!("Failed to load mod zip {}", filename).to_string(),
+            Self: {
+            let modname = path.get_file_stem()?;
 
-        let zipfile = fs::File::open(path)?;
-        let reader = BufReader::new(zipfile);
-        let mut archive = zip::ZipArchive::new(reader)?;
+            let zipfile = fs::File::open(path)?;
+            let reader = BufReader::new(zipfile);
+            let mut archive = zip::ZipArchive::new(reader)?;
 
-        let infopath = Path::new(&modname).join("info.json");
-        let info = serde_json::from_reader(
-            archive.by_name(
-                infopath
-                    .to_str()
-                    .ok_or_else(|| anyhow!("path isn't valid unicode"))?,
-            )?,
-        )?;
+            let infopath = Path::new(&modname).join("info.json");
+            let info = serde_json::from_reader(
+                archive.by_name(
+                    infopath
+                        .to_str()
+                        .ok_or_else(|| anyhow!("path isn't valid unicode"))?,
+                )?,
+            )?;
 
-        Ok(Self { info })
+            Ok(Mod { info })
+        })
     }
 }
