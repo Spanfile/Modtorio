@@ -101,7 +101,7 @@ impl<'de> Deserialize<'de> for Publicity {
             where
                 V: MapAccess<'de>,
             {
-                field_deserializers!(
+                macros::field_deserializers!(
                     map,
                     [visibility, Visibility, Visibility],
                     [username, String, Username],
@@ -143,7 +143,7 @@ impl<'de> Deserialize<'de> for Publicity {
             }
         }
 
-        const FIELDS: &'static [&'static str] = &[
+        const FIELDS: &[&str] = &[
             "visibility",
             "username",
             "password",

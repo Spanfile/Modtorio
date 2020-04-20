@@ -1,5 +1,3 @@
-#[macro_use]
-mod macros;
 mod factorio;
 
 fn main() -> anyhow::Result<()> {

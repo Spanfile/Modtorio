@@ -39,7 +39,7 @@ impl Importer {
         let mut settings_path = self.root.clone();
         settings_path.push(self.settings);
 
-        let mut mods_path = self.root.clone();
+        let mut mods_path = self.root;
         mods_path.push("mods/");
 
         Ok(Factorio {

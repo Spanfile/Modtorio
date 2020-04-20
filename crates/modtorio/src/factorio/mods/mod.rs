@@ -35,13 +35,33 @@ impl Mod {
             .as_ref()
             .file_name()
             .ok_or_else(|| anyhow!("given path doesn't have a filename"))?
-            .to_string_lossy();
+            .to_str()
+            .ok_or_else(|| anyhow!("path isn't valid unicode"))?
+            .to_owned();
+        let modname = path
+            .as_ref()
+            .file_stem()
+            .ok_or_else(|| anyhow!("given path doesn't have a filename"))?
+            .to_str()
+            .ok_or_else(|| anyhow!("path isn't valid unicode"))?
+            .to_owned();
         let context = format_args!("Mod zip {} failed to load", filename).to_string();
 
         let zipfile = fs::File::open(path).context(context.clone())?;
         let reader = BufReader::new(zipfile);
         let mut archive = zip::ZipArchive::new(reader)?;
-        let info = serde_json::from_reader(archive.by_name("info.json").context(context)?)?;
+
+        let infopath = Path::new(&modname).join("info.json");
+        let info = serde_json::from_reader(
+            archive
+                .by_name(
+                    infopath
+                        .to_str()
+                        .ok_or_else(|| anyhow!("path isn't valid unicode"))?,
+                )
+                .context(context.clone())?,
+        )
+        .context(context)?;
 
         Ok(Self { info })
     }

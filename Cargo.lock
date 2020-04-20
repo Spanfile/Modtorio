@@ -54,6 +54,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "ext"
+version = "0.1.0"
+
+[[package]]
 name = "flate2"
 version = "1.0.14"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -84,6 +88,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "99e85c08494b21a9054e7fe1374a732aeadaff3980b6990b94bfd3a70f690005"
 
 [[package]]
+name = "macros"
+version = "0.1.0"
+
+[[package]]
 name = "miniz_oxide"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -98,6 +106,7 @@ version = "0.1.0"
 dependencies = [
  "anyhow",
  "glob",
+ "macros",
  "semver",
  "serde",
  "serde_json",

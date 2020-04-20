@@ -1,3 +1,4 @@
+#[macro_export]
 macro_rules! field_deserializers {
     ( $map:ident, $([$name:ident, $type:ty, $field:ident]),+) => {
         $(

@@ -73,7 +73,7 @@ impl<'de> Deserialize<'de> for SegmentSize {
             where
                 V: MapAccess<'de>,
             {
-                field_deserializers!(
+                macros::field_deserializers!(
                     map,
                     [minimum_segment_size, u64, MinimumSegmentSize],
                     [maximum_segment_size, u64, MaximumSegmentSize],
@@ -102,7 +102,7 @@ impl<'de> Deserialize<'de> for SegmentSize {
             }
         }
 
-        const FIELDS: &'static [&'static str] = &[
+        const FIELDS: &[&str] = &[
             "minimum_segment_size",
             "minimum_segment_size_peer_count",
             "maximum_segment_size",
