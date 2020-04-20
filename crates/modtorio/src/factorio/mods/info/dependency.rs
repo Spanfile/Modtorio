@@ -1,4 +1,6 @@
 use anyhow::anyhow;
+use lazy_static::lazy_static;
+use regex::Regex;
 use semver::VersionReq;
 use serde::{de, de::Visitor, Deserialize};
 use std::{fmt, str::FromStr};
@@ -22,39 +24,29 @@ impl FromStr for Dependency {
     type Err = anyhow::Error;
 
     fn from_str(s: &std::primitive::str) -> Result<Self, Self::Err> {
-        let args: Vec<&str> = s.split(' ').collect();
-
-        let mut requirement = Requirement::Mandatory;
-        let name;
-        let version;
-
-        match args[0] {
-            "?" => {
-                requirement = Requirement::Optional;
-                name = Some(args[1]);
-                version = Some(VersionReq::parse(&args[2..].join(" "))?);
-            }
-            "!" => {
-                requirement = Requirement::Incompatible;
-                name = Some(args[1]);
-                version = Some(VersionReq::parse(&args[2..].join(" "))?);
-            }
-            "(?)" => {
-                requirement = Requirement::OptionalHidden;
-                name = Some(args[1]);
-                version = Some(VersionReq::parse(&args[2..].join(" "))?);
-            }
-            n => {
-                name = Some(n);
-                version = Some(VersionReq::parse(&args[1..].join(" "))?);
-            }
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r"(\?|!|\(\?\))? ?(\S*) ?(.+)?").unwrap();
         }
+        let captures = RE
+            .captures(s)
+            .ok_or_else(|| anyhow!("dependency regex returned no captures"))?;
 
-        let name = name
-            .ok_or_else(|| anyhow!("failed to parse dependency name"))?
+        let requirement = match captures.get(1).map(|c| c.as_str()) {
+            Some("?") => Requirement::Optional,
+            Some("!") => Requirement::Incompatible,
+            Some("(?)") => Requirement::OptionalHidden,
+            Some(_) => panic!("impossible case"),
+            None => Requirement::Mandatory,
+        };
+
+        let name = captures
+            .get(2)
+            .ok_or_else(|| anyhow!("dependency regex didn't capture name"))?
+            .as_str()
             .to_string();
-        let version = version.ok_or_else(|| anyhow!("failed to parse dependency version"))?;
-
+        let version = captures
+            .get(3)
+            .map_or(VersionReq::parse("*"), |c| VersionReq::parse(c.as_str()))?;
         Ok(Dependency {
             requirement,
             name,

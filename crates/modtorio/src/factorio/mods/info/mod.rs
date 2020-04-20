@@ -1,14 +1,15 @@
 mod dependency;
 
 use dependency::Dependency;
-use semver::Version;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
 pub struct Info {
     pub name: String,
-    pub version: Version,
-    pub factorio_version: Version,
+    // TODO: the semver crate is cool and all but it errors if the parse input isn't 100% up to
+    // spec. user input sure as fuck is not up to spec
+    pub version: String,
+    pub factorio_version: String,
     pub title: String,
     pub author: String,
     pub homepage: String,

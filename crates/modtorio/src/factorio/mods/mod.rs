@@ -1,6 +1,7 @@
 mod info;
 
 use anyhow::{anyhow, Context};
+use ext::PathExt;
 use info::Info;
 use std::{fs, io::BufReader, path::Path};
 
@@ -31,37 +32,20 @@ impl Mods {
 
 impl Mod {
     pub fn from_zip<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
-        let filename = path
-            .as_ref()
-            .file_name()
-            .ok_or_else(|| anyhow!("given path doesn't have a filename"))?
-            .to_str()
-            .ok_or_else(|| anyhow!("path isn't valid unicode"))?
-            .to_owned();
-        let modname = path
-            .as_ref()
-            .file_stem()
-            .ok_or_else(|| anyhow!("given path doesn't have a filename"))?
-            .to_str()
-            .ok_or_else(|| anyhow!("path isn't valid unicode"))?
-            .to_owned();
-        let context = format_args!("Mod zip {} failed to load", filename).to_string();
+        let modname = path.get_file_stem()?;
 
-        let zipfile = fs::File::open(path).context(context.clone())?;
+        let zipfile = fs::File::open(path)?;
         let reader = BufReader::new(zipfile);
         let mut archive = zip::ZipArchive::new(reader)?;
 
         let infopath = Path::new(&modname).join("info.json");
         let info = serde_json::from_reader(
-            archive
-                .by_name(
-                    infopath
-                        .to_str()
-                        .ok_or_else(|| anyhow!("path isn't valid unicode"))?,
-                )
-                .context(context.clone())?,
-        )
-        .context(context)?;
+            archive.by_name(
+                infopath
+                    .to_str()
+                    .ok_or_else(|| anyhow!("path isn't valid unicode"))?,
+            )?,
+        )?;
 
         Ok(Self { info })
     }
