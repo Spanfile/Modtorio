@@ -53,7 +53,7 @@ impl FromStr for HumanVersionReq {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         lazy_static! {
-            static ref RE: Regex = Regex::new(r"(>=|>|=|<|<=) ?(.*)").unwrap();
+            static ref RE: Regex = Regex::new(r"(>=|<=|>|=|<) ?(.*)").unwrap();
         }
 
         let captures = RE

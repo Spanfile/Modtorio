@@ -26,7 +26,7 @@ impl FromStr for Dependency {
     fn from_str(s: &std::primitive::str) -> Result<Self, Self::Err> {
         lazy_static! {
             static ref RE: Regex =
-                Regex::new(r"^(\?|!|\(\?\))? ?([^>=<]+)(?: ?([>=<]{1,2}) ?([\d\.]*))?$").unwrap();
+                Regex::new(r"(\?|!|\(\?\))? ?([^>=<]+)( ?[>=<]{1,2} ?[\d\.]*)?$").unwrap();
         }
 
         let captures = RE
@@ -115,6 +115,7 @@ mod tests {
                 version: None,
             }
         );
+
         assert_eq!(
             "base >= 0.18.0".parse::<Dependency>()?,
             Dependency {
@@ -123,6 +124,7 @@ mod tests {
                 version: Some(">= 0.18.0".parse().unwrap()),
             }
         );
+
         assert_eq!(
             "base >= 0.18.00".parse::<Dependency>()?,
             Dependency {
@@ -131,14 +133,16 @@ mod tests {
                 version: Some(">= 0.18.00".parse().unwrap()),
             }
         );
+
         assert_eq!(
             "!base".parse::<Dependency>()?,
             Dependency {
                 requirement: Requirement::Incompatible,
                 name: String::from("base"),
-                version: Some("*".parse().unwrap()),
+                version: None,
             }
         );
+
         assert_eq!(
             "?base".parse::<Dependency>()?,
             Dependency {
@@ -147,6 +151,7 @@ mod tests {
                 version: None,
             }
         );
+
         assert_eq!(
             "(?)base".parse::<Dependency>()?,
             Dependency {
@@ -155,6 +160,7 @@ mod tests {
                 version: None,
             }
         );
+
         Ok(())
     }
 }

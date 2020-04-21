@@ -1,5 +1,6 @@
 mod info;
 
+use anyhow::anyhow;
 use ext::PathExt;
 use info::Info;
 use std::{fs, io::BufReader, path::Path};
@@ -34,18 +35,20 @@ impl Mod {
         let filename = path.get_file_name()?;
         macros::with_context!(format_args!("Failed to load mod zip {}", filename).to_string(),
             Self: {
-            let modname = path.get_file_stem()?;
-
             let zipfile = fs::File::open(path)?;
             let reader = BufReader::new(zipfile);
             let mut archive = zip::ZipArchive::new(reader)?;
 
-            let infopath = Path::new(&modname).join("info.json");
-            let info = serde_json::from_reader(
-                archive.by_name(
-                    infopath.get_str()?
-                )?,
-            )?;
+            let mut infopath: Option<String> = None;
+            for filepath in archive.file_names() {
+                if Path::new(filepath).get_file_name()? == "info.json" {
+                    infopath = Some(filepath.to_owned());
+                    break;
+                }
+            }
+
+            let infopath = infopath.ok_or_else(|| anyhow!("no info.json found"))?;
+            let info = serde_json::from_reader(archive.by_name(&infopath)?)?;
 
             Ok(Mod { info })
         })
