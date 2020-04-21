@@ -3,10 +3,13 @@ mod info;
 use anyhow::anyhow;
 use ext::PathExt;
 use info::Info;
+use log::*;
 use std::{fs, io::BufReader, path::Path};
 
 #[derive(Debug)]
-pub struct Mods(Vec<Mod>);
+pub struct Mods {
+    pub mods: Vec<Mod>,
+}
 
 #[derive(Debug)]
 pub struct Mod {
@@ -21,11 +24,18 @@ impl Mods {
             Self: {
             let zips = path.as_ref().join("*.zip");
 
-            Ok(Mods(
-                glob::glob(&zips.get_str()?)?
-                    .map(|entry| Ok(Mod::from_zip(entry?)?))
-                    .collect::<anyhow::Result<Vec<Mod>>>()?,
-            ))
+            let mut mods = Vec::new();
+            for entry in glob::glob(zips.get_str()?)? {
+                let fact_mod = Mod::from_zip(entry?);
+                match fact_mod {
+                    Ok(m) => mods.push(m),
+                    Err(e) => {
+                        warn!("Mod {} failed to load: {}", pathname, e);
+                    }
+                }
+            }
+
+            Ok(Mods { mods })
         })
     }
 }

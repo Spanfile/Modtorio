@@ -10,8 +10,8 @@ use std::{
 
 #[derive(Debug)]
 pub struct Factorio {
-    settings: ServerSettings,
-    mods: Mods,
+    pub settings: ServerSettings,
+    pub mods: Mods,
 }
 
 pub struct Importer {
