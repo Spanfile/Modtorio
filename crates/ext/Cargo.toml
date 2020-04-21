@@ -6,7 +6,3 @@ edition = "2018"
 
 [dependencies]
 anyhow = "1.0.28"
-
-[lib]
-name = "ext"
-path = "src/lib.rs"

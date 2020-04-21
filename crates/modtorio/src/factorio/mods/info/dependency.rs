@@ -1,9 +1,9 @@
 use anyhow::anyhow;
 use lazy_static::lazy_static;
 use regex::Regex;
-use semver::VersionReq;
 use serde::{de, de::Visitor, Deserialize};
 use std::{fmt, str::FromStr};
+use util::HumanVersionReq;
 
 #[derive(Debug, PartialEq)]
 pub enum Requirement {
@@ -17,7 +17,7 @@ pub enum Requirement {
 pub struct Dependency {
     pub requirement: Requirement,
     pub name: String,
-    pub version: VersionReq,
+    pub version: Option<HumanVersionReq>,
 }
 
 impl FromStr for Dependency {
@@ -26,8 +26,9 @@ impl FromStr for Dependency {
     fn from_str(s: &std::primitive::str) -> Result<Self, Self::Err> {
         lazy_static! {
             static ref RE: Regex =
-                Regex::new(r"^(\?|!|\(\?\))? ?([^>=<]+)( ?[>=<]{1,2} ?[\d\.]*)?$?").unwrap();
+                Regex::new(r"^(\?|!|\(\?\))? ?([^>=<]+)(?: ?([>=<]{1,2}) ?([\d\.]*))?$").unwrap();
         }
+
         let captures = RE
             .captures(s)
             .ok_or_else(|| anyhow!("dependency regex returned no captures"))?;
@@ -46,9 +47,11 @@ impl FromStr for Dependency {
             .as_str()
             .trim()
             .to_string();
-        let version = captures
-            .get(3)
-            .map_or(VersionReq::parse("*"), |c| VersionReq::parse(c.as_str()))?;
+
+        let version = captures.get(3).map_or(Ok(None), |c| {
+            c.as_str().parse::<HumanVersionReq>().map(Some)
+        })?;
+
         Ok(Dependency {
             requirement,
             name,
@@ -57,19 +60,19 @@ impl FromStr for Dependency {
     }
 }
 
-impl fmt::Display for Dependency {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.requirement {
-            Requirement::Optional => f.write_str("? ")?,
-            Requirement::Incompatible => f.write_str("! ")?,
-            Requirement::OptionalHidden => f.write_str("(?) ")?,
-            _ => {}
-        }
+// impl fmt::Display for Dependency {
+//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+//         match self.requirement {
+//             Requirement::Optional => f.write_str("? ")?,
+//             Requirement::Incompatible => f.write_str("! ")?,
+//             Requirement::OptionalHidden => f.write_str("(?) ")?,
+//             _ => {}
+//         }
 
-        f.write_fmt(format_args!("{} ", &self.name))?;
-        f.write_str(&self.version.to_string())
-    }
-}
+//         f.write_fmt(format_args!("{} ", &self.name))?;
+//         f.write_str(&self.version.to_string())
+//     }
+// }
 
 impl<'de> Deserialize<'de> for Dependency {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
@@ -109,7 +112,7 @@ mod tests {
             Dependency {
                 requirement: Requirement::Mandatory,
                 name: String::from("base"),
-                version: "*".parse().unwrap(),
+                version: None,
             }
         );
         assert_eq!(
@@ -117,7 +120,7 @@ mod tests {
             Dependency {
                 requirement: Requirement::Mandatory,
                 name: String::from("base"),
-                version: ">= 0.18.0".parse().unwrap(),
+                version: Some(">= 0.18.0".parse().unwrap()),
             }
         );
         assert_eq!(
@@ -125,7 +128,7 @@ mod tests {
             Dependency {
                 requirement: Requirement::Mandatory,
                 name: String::from("base"),
-                version: ">= 0.18.00".parse().unwrap(),
+                version: Some(">= 0.18.00".parse().unwrap()),
             }
         );
         assert_eq!(
@@ -133,7 +136,7 @@ mod tests {
             Dependency {
                 requirement: Requirement::Incompatible,
                 name: String::from("base"),
-                version: "*".parse().unwrap(),
+                version: Some("*".parse().unwrap()),
             }
         );
         assert_eq!(
@@ -141,7 +144,7 @@ mod tests {
             Dependency {
                 requirement: Requirement::Optional,
                 name: String::from("base"),
-                version: "*".parse().unwrap(),
+                version: None,
             }
         );
         assert_eq!(
@@ -149,7 +152,7 @@ mod tests {
             Dependency {
                 requirement: Requirement::OptionalHidden,
                 name: String::from("base"),
-                version: "*".parse().unwrap(),
+                version: None,
             }
         );
         Ok(())
