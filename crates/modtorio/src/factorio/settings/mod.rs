@@ -1,101 +1,82 @@
+mod allow_commands;
 mod autosave;
+mod game_format;
 mod information;
 mod limit;
 mod pause;
 mod publicity;
 mod traffic;
 
+use allow_commands::AllowCommands;
+use autosave::Autosave;
+use game_format::{GameFormatConversion, ServerSettingsGameFormat};
+use information::Information;
 use limit::Limit;
-use serde::{de, de::Visitor, Deserialize, Deserializer};
+use pause::Pause;
+use publicity::Publicity;
+use serde::{Deserialize, Serialize};
+use traffic::Traffic;
 
-#[derive(Deserialize, Debug, PartialEq)]
-enum AllowCommands {
-    Yes,
-    No,
-    AdminsOnly,
-}
-
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct Range {
     pub min: u64,
     pub max: u64,
 }
 
-#[derive(Deserialize, Debug, Default)]
+#[derive(Deserialize, Serialize, Debug, Default)]
 pub struct ServerSettings {
-    #[serde(flatten)]
-    information: information::Information,
-    #[serde(flatten)]
-    publicity: publicity::Publicity,
-    #[serde(flatten)]
-    autosave: autosave::Autosave,
-    #[serde(flatten)]
-    pause: pause::Pause,
-    #[serde(deserialize_with = "allow_commands_deserialize")]
-    allow_commands: AllowCommands,
-    #[serde(flatten)]
-    traffic: traffic::Traffic,
-}
-
-impl Default for AllowCommands {
-    fn default() -> Self {
-        Self::AdminsOnly
-    }
-}
-
-fn allow_commands_deserialize<'de, D>(deserializer: D) -> Result<AllowCommands, D::Error>
-where
-    D: Deserializer<'de>,
-{
-    struct AllowCommandsVisitor;
-
-    impl<'de> Visitor<'de> for AllowCommandsVisitor {
-        type Value = AllowCommands;
-
-        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-            formatter.write_str("boolean or the string 'admins-only'")
-        }
-
-        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
-            if value == "admins-only" {
-                Ok(Self::Value::AdminsOnly)
-            } else {
-                Err(de::Error::invalid_value(de::Unexpected::Str(value), &self))
-            }
-        }
-
-        fn visit_bool<E>(self, value: bool) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
-            Ok(if value {
-                Self::Value::Yes
-            } else {
-                Self::Value::No
-            })
-        }
-    }
-
-    deserializer.deserialize_any(AllowCommandsVisitor)
+    pub information: Information,
+    pub publicity: Publicity,
+    pub autosave: Autosave,
+    pub pause: Pause,
+    pub allow_commands: AllowCommands,
+    pub traffic: Traffic,
 }
 
 impl ServerSettings {
-    pub fn from_json(json: &str) -> anyhow::Result<Self> {
-        Ok(serde_json::from_str(json)?)
+    pub fn from_game_json(json: &str) -> anyhow::Result<Self> {
+        let game_format = serde_json::from_str(json)?;
+        Ok(ServerSettings::from_game_format(&game_format)?)
+    }
+
+    pub fn to_game_json(&self) -> anyhow::Result<String> {
+        let mut game_format = ServerSettingsGameFormat::default();
+        self.to_game_format(&mut game_format)?;
+        Ok(serde_json::to_string(&game_format)?)
+    }
+}
+
+impl GameFormatConversion for ServerSettings {
+    fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
+        Ok(Self {
+            information: Information::from_game_format(game_format)?,
+            publicity: Publicity::from_game_format(game_format)?,
+            autosave: Autosave::from_game_format(game_format)?,
+            pause: Pause::from_game_format(game_format)?,
+            allow_commands: AllowCommands::from_game_format(game_format)?,
+            traffic: Traffic::from_game_format(game_format)?,
+        })
+    }
+
+    fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
+        self.information.to_game_format(game_format)?;
+        self.publicity.to_game_format(game_format)?;
+        self.autosave.to_game_format(game_format)?;
+        self.pause.to_game_format(game_format)?;
+        self.allow_commands.to_game_format(game_format)?;
+        self.traffic.to_game_format(game_format)?;
+
+        Ok(())
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use serde_json::from_str;
 
     #[test]
-    fn deserialize() -> anyhow::Result<()> {
-        let obj: ServerSettings = from_str(
+    fn from_game_format() -> anyhow::Result<()> {
+        let obj = ServerSettings::from_game_json(
             r#"{
   "name": "test",
   "description": "test",
@@ -134,7 +115,7 @@ mod tests {
 
         assert_eq!(
             obj.information,
-            information::Information {
+            Information {
                 name: String::from("test"),
                 description: String::from("test"),
                 tags: vec![String::from("1"), String::from("2")],
@@ -143,7 +124,7 @@ mod tests {
 
         assert_eq!(
             obj.publicity,
-            publicity::Publicity {
+            Publicity {
                 lan: true,
                 public: Some(publicity::PublicVisibility {
                     username: String::from("test"),
@@ -161,7 +142,7 @@ mod tests {
 
         assert_eq!(
             obj.autosave,
-            autosave::Autosave {
+            Autosave {
                 interval: 5,
                 slots: 10,
                 only_on_server: true,
@@ -171,7 +152,7 @@ mod tests {
 
         assert_eq!(
             obj.pause,
-            pause::Pause {
+            Pause {
                 auto: true,
                 only_admins: true,
             }
@@ -181,7 +162,7 @@ mod tests {
 
         assert_eq!(
             obj.traffic,
-            traffic::Traffic {
+            Traffic {
                 minimum_latency: 0,
                 segment_size: traffic::SegmentSize {
                     size: Range { min: 25, max: 100 },

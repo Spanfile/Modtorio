@@ -43,7 +43,7 @@ impl Importer {
         mods_path.push("mods/");
 
         Ok(Factorio {
-            settings: ServerSettings::from_json(&fs::read_to_string(settings_path)?)?,
+            settings: ServerSettings::from_game_json(&fs::read_to_string(settings_path)?)?,
             mods: Mods::from_directory(mods_path)?,
         })
     }

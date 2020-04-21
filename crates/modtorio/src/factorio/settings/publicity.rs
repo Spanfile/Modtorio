@@ -1,29 +1,26 @@
-use super::Limit;
-use serde::{
-    de::{self, MapAccess, Visitor},
-    Deserialize,
-};
+use super::{GameFormatConversion, Limit, ServerSettingsGameFormat};
+use serde::{Deserialize, Serialize};
 
-#[derive(Debug, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
 pub enum Credential {
     Password(String),
     Token(String),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
 pub struct PublicVisibility {
     pub username: String,
     pub credential: Credential,
 }
 
-#[derive(Deserialize, Debug, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct PlayerLimit {
     pub max: Limit,
     pub ignore_for_returning: bool,
     pub autokick: Limit,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct Publicity {
     pub public: Option<PublicVisibility>,
     pub lan: bool,
@@ -63,144 +60,50 @@ impl Default for PublicVisibility {
     }
 }
 
-impl<'de> Deserialize<'de> for Publicity {
-    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-    {
-        #[derive(Debug, Deserialize)]
-        #[serde(field_identifier, rename_all = "snake_case")]
-        enum Field {
-            Visibility,
-            Username,
-            Password,
-            Token,
-            RequireUserVerification,
-            MaxPlayers,
-            IgnorePlayerLimitForReturningPlayers,
-            AfkAutokickInterval,
-            GamePassword,
-        }
-
-        #[derive(Debug, Deserialize)]
-        struct Visibility {
-            public: bool,
-            lan: bool,
-        }
-
-        struct PublicityVisitor;
-
-        impl<'de> Visitor<'de> for PublicityVisitor {
-            type Value = Publicity;
-
-            fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-                formatter.write_str("publicity settings")
-            }
-
-            fn visit_map<V>(self, mut map: V) -> Result<Self::Value, V::Error>
-            where
-                V: MapAccess<'de>,
-            {
-                macros::field_deserializers!(
-                    map,
-                    [visibility, Visibility, Visibility],
-                    [username, String, Username],
-                    [password, String, Password],
-                    [token, String, Token],
-                    [require_user_verification, bool, RequireUserVerification],
-                    [max_players, Limit, MaxPlayers],
-                    [
-                        ignore_player_limit_for_returning_players,
-                        bool,
-                        IgnorePlayerLimitForReturningPlayers
-                    ],
-                    [afk_autokick_interval, Limit, AfkAutokickInterval],
-                    [game_password, String, GamePassword]
-                );
-
-                Ok(Self::Value {
-                    lan: visibility.lan,
-                    public: if visibility.public {
-                        Some(PublicVisibility {
-                            username,
-                            credential: if !token.is_empty() {
-                                Credential::Token(token)
-                            } else {
-                                Credential::Password(password)
-                            },
-                        })
+impl GameFormatConversion for Publicity {
+    fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
+        Ok(Self {
+            public: if game_format.visibility.public {
+                Some(PublicVisibility {
+                    username: game_format.username.clone(),
+                    credential: if !game_format.token.is_empty() {
+                        Credential::Token(game_format.token.clone())
                     } else {
-                        None
-                    },
-                    require_user_verification,
-                    password: game_password,
-                    player_limit: PlayerLimit {
-                        max: max_players,
-                        ignore_for_returning: ignore_player_limit_for_returning_players,
-                        autokick: afk_autokick_interval,
+                        Credential::Password(game_format.password.clone())
                     },
                 })
+            } else {
+                None
+            },
+            lan: game_format.visibility.lan,
+            require_user_verification: game_format.require_user_verification,
+            player_limit: PlayerLimit {
+                max: Limit::from(game_format.max_players),
+                ignore_for_returning: game_format.ignore_player_limit_for_returning_players,
+                autokick: Limit::from(game_format.afk_autokick_interval),
+            },
+            password: game_format.game_password.clone(),
+        })
+    }
+
+    fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
+        game_format.visibility.public = self.public.is_some();
+        game_format.visibility.lan = self.lan;
+
+        if let Some(publicity) = self.public.clone() {
+            game_format.username = publicity.username;
+            match publicity.credential {
+                Credential::Password(password) => game_format.password = password,
+                Credential::Token(token) => game_format.token = token,
             }
         }
 
-        const FIELDS: &[&str] = &[
-            "visibility",
-            "username",
-            "password",
-            "token",
-            "require_user_verification",
-            "max_players",
-            "ignore_player_limit_for_returning_players",
-            "afk_autokick_interval",
-            "game_password",
-        ];
-
-        deserializer.deserialize_struct("Publicity", FIELDS, PublicityVisitor)
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use serde_json::from_str;
-
-    #[test]
-    fn deserialize() -> anyhow::Result<()> {
-        let obj: Publicity = from_str(
-            r#"{
-    "visibility": {
-        "public": true,
-        "lan": true
-    },
-    "username": "test",
-    "password": "test",
-    "token": "test",
-    "require_user_verification": true,
-    "max_players": 8,
-    "ignore_player_limit_for_returning_players": true,
-    "afk_autokick_interval": 5,
-    "game_password": "test"
-}"#,
-        )?;
-
-        assert_eq!(
-            obj.public,
-            Some(PublicVisibility {
-                username: String::from("test"),
-                credential: Credential::Token(String::from("test"))
-            })
-        );
-        assert_eq!(obj.lan, true);
-        assert_eq!(obj.require_user_verification, true);
-        assert_eq!(
-            obj.player_limit,
-            PlayerLimit {
-                max: Limit::Limited(8),
-                ignore_for_returning: true,
-                autokick: Limit::Limited(5)
-            }
-        );
-        assert_eq!(obj.password, "test");
+        game_format.require_user_verification = self.require_user_verification;
+        game_format.max_players = self.player_limit.max.into();
+        game_format.ignore_player_limit_for_returning_players =
+            self.player_limit.ignore_for_returning;
+        game_format.afk_autokick_interval = self.player_limit.autokick.into();
+        game_format.game_password = self.password.clone();
 
         Ok(())
     }
