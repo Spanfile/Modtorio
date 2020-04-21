@@ -8,7 +8,7 @@ use std::{fs, io::BufReader, path::Path};
 
 #[derive(Debug)]
 pub struct Mods {
-    pub mods: Vec<Mod>,
+    mods: Vec<Mod>,
 }
 
 #[derive(Debug)]
@@ -37,6 +37,10 @@ impl Mods {
 
             Ok(Mods { mods })
         })
+    }
+
+    pub fn count(&self) -> usize {
+        self.mods.len()
     }
 }
 
