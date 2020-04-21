@@ -12,7 +12,16 @@ pub struct Info {
     pub factorio_version: String,
     pub title: String,
     pub author: String,
+    #[serde(default)]
+    pub contact: String,
+    #[serde(default)]
     pub homepage: String,
+    #[serde(default = "default_dependencies")]
     pub dependencies: Vec<Dependency>,
+    #[serde(default)]
     pub description: String,
+}
+
+fn default_dependencies() -> Vec<Dependency> {
+    vec!["base".parse().unwrap()]
 }

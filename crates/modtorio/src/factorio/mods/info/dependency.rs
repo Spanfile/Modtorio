@@ -5,7 +5,7 @@ use semver::VersionReq;
 use serde::{de, de::Visitor, Deserialize};
 use std::{fmt, str::FromStr};
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub enum Requirement {
     Mandatory,
     Optional,
@@ -13,7 +13,7 @@ pub enum Requirement {
     Incompatible,
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct Dependency {
     pub requirement: Requirement,
     pub name: String,
@@ -25,7 +25,8 @@ impl FromStr for Dependency {
 
     fn from_str(s: &std::primitive::str) -> Result<Self, Self::Err> {
         lazy_static! {
-            static ref RE: Regex = Regex::new(r"(\?|!|\(\?\))? ?(\S*) ?(.+)?").unwrap();
+            static ref RE: Regex =
+                Regex::new(r"^(\?|!|\(\?\))? ?([^>=<]+)( ?[>=<]{1,2} ?[\d\.]*)?$?").unwrap();
         }
         let captures = RE
             .captures(s)
@@ -43,6 +44,7 @@ impl FromStr for Dependency {
             .get(2)
             .ok_or_else(|| anyhow!("dependency regex didn't capture name"))?
             .as_str()
+            .trim()
             .to_string();
         let version = captures
             .get(3)
@@ -60,7 +62,7 @@ impl fmt::Display for Dependency {
         match self.requirement {
             Requirement::Optional => f.write_str("? ")?,
             Requirement::Incompatible => f.write_str("! ")?,
-            Requirement::OptionalHidden => f.write_str("(?)")?,
+            Requirement::OptionalHidden => f.write_str("(?) ")?,
             _ => {}
         }
 
@@ -93,5 +95,63 @@ impl<'de> Deserialize<'de> for Dependency {
         }
 
         deserializer.deserialize_str(DependencyVisitor)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_str() -> anyhow::Result<()> {
+        assert_eq!(
+            "base".parse::<Dependency>()?,
+            Dependency {
+                requirement: Requirement::Mandatory,
+                name: String::from("base"),
+                version: "*".parse().unwrap(),
+            }
+        );
+        assert_eq!(
+            "base >= 0.18.0".parse::<Dependency>()?,
+            Dependency {
+                requirement: Requirement::Mandatory,
+                name: String::from("base"),
+                version: ">= 0.18.0".parse().unwrap(),
+            }
+        );
+        assert_eq!(
+            "base >= 0.18.00".parse::<Dependency>()?,
+            Dependency {
+                requirement: Requirement::Mandatory,
+                name: String::from("base"),
+                version: ">= 0.18.00".parse().unwrap(),
+            }
+        );
+        assert_eq!(
+            "!base".parse::<Dependency>()?,
+            Dependency {
+                requirement: Requirement::Incompatible,
+                name: String::from("base"),
+                version: "*".parse().unwrap(),
+            }
+        );
+        assert_eq!(
+            "?base".parse::<Dependency>()?,
+            Dependency {
+                requirement: Requirement::Optional,
+                name: String::from("base"),
+                version: "*".parse().unwrap(),
+            }
+        );
+        assert_eq!(
+            "(?)base".parse::<Dependency>()?,
+            Dependency {
+                requirement: Requirement::OptionalHidden,
+                name: String::from("base"),
+                version: "*".parse().unwrap(),
+            }
+        );
+        Ok(())
     }
 }
