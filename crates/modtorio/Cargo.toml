@@ -14,6 +14,9 @@ regex = "1.3.7"
 lazy_static = "1.4.0"
 fern = { version = "0.6.0", features = ["colored"] }
 log = "0.4.8"
+isahc = { version = "0.9.1", features = ["json"] }
+url = "2.1.1"
+http = "0.2.1"
 macros = { path = "../macros" }
 ext = { path = "../ext" }
 util = { path = "../util" }

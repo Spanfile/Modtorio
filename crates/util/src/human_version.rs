@@ -2,7 +2,7 @@ use anyhow::anyhow;
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{de, de::Visitor, Deserialize};
-use std::{fmt, str::FromStr};
+use std::{fmt, fmt::Display, str::FromStr};
 
 #[derive(Debug, PartialEq)]
 pub enum Comparator {
@@ -45,6 +45,12 @@ impl FromStr for HumanVersion {
             minor,
             patch,
         })
+    }
+}
+
+impl Display for HumanVersion {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("{}.{}.{}", self.major, self.minor, self.patch))
     }
 }
 
