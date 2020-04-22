@@ -5,6 +5,21 @@ use ext::PathExt;
 use info::Info;
 use log::*;
 use std::{fs, io::BufReader, path::Path};
+use util::HumanVersion;
+
+#[derive(Debug)]
+pub enum ModSource<P>
+where
+    P: AsRef<Path>,
+{
+    Portal {
+        name: String,
+        version: Option<HumanVersion>,
+    },
+    Zip {
+        path: P,
+    },
+}
 
 #[derive(Debug)]
 pub struct Mods {
@@ -41,6 +56,15 @@ impl Mods {
 
     pub fn count(&self) -> usize {
         self.mods.len()
+    }
+
+    pub fn add<P: AsRef<Path>>(&mut self, source: ModSource<P>) -> anyhow::Result<()> {
+        match source {
+            ModSource::Portal { name, version } => {}
+            ModSource::Zip { path } => {}
+        }
+
+        Ok(())
     }
 }
 
