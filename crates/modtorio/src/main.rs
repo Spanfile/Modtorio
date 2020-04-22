@@ -5,7 +5,8 @@ mod mod_portal;
 
 use ::log::*;
 
-fn main() -> anyhow::Result<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     log::setup_logging()?;
 
     let config = config::Config {

@@ -2,15 +2,15 @@ mod portal_mod;
 
 use crate::config::Config;
 use anyhow::{anyhow, ensure};
+use bytes::Bytes;
 use ext::PathExt;
-use http::StatusCode;
-use isahc::{HttpClient, ResponseExt};
 use log::*;
 use portal_mod::PortalMod;
-use std::io::Read;
+use reqwest::{Client, StatusCode};
 use url::Url;
 use util::HumanVersion;
 
+const USER_AGENT: &str = "modtorio";
 const SITE_ROOT: &str = "https://mods.factorio.com";
 const API_ROOT: &str = "/api/mods/";
 
@@ -23,12 +23,13 @@ struct Credentials {
 #[derive(Debug)]
 pub struct ModPortal {
     credentials: Credentials,
-    client: HttpClient,
+    client: Client,
 }
 
 impl ModPortal {
     pub fn new(config: &Config) -> anyhow::Result<Self> {
-        let client = HttpClient::new()?;
+        let client = Client::builder().user_agent(USER_AGENT).build()?;
+
         Ok(Self {
             credentials: Credentials {
                 username: config.portal.username.clone(),
@@ -38,16 +39,16 @@ impl ModPortal {
         })
     }
 
-    pub fn download_mod(
+    pub async fn download_mod(
         &self,
         title: &str,
         version: Option<HumanVersion>,
-    ) -> anyhow::Result<&mut impl Read> {
+    ) -> anyhow::Result<Bytes> {
         let url = Url::parse(SITE_ROOT)?.join(API_ROOT)?.join(title)?;
 
         debug!("Mod GET URL: {}", url);
 
-        let portal_mod: PortalMod = self.client.get(url.as_str())?.json()?;
+        let portal_mod: PortalMod = self.client.get(url.as_str()).send().await?.json().await?;
 
         let release = match version {
             Some(version) => portal_mod
@@ -67,7 +68,7 @@ impl ModPortal {
 
         debug!("Mod download GET URL: {}", download_url);
 
-        let mut response = self.client.get(download_url.as_str())?;
+        let response = self.client.get(download_url.as_str()).send().await?;
         let status = response.status();
 
         debug!("Mod download response status: {}", status);
@@ -76,6 +77,6 @@ impl ModPortal {
             anyhow!("download returned non-OK status code {}", status)
         );
 
-        Ok(response.body_mut())
+        Ok(response.bytes().await?)
     }
 }
