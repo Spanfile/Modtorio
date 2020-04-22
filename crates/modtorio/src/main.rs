@@ -16,10 +16,19 @@ async fn main() -> anyhow::Result<()> {
         },
     };
 
-    let mod_portal = mod_portal::ModPortal::new(&config);
-    let factorio = factorio::Importer::from("./sample").import()?;
+    let mod_portal = mod_portal::ModPortal::new(&config)?;
+    let mut factorio = factorio::Importer::from("./sample").import()?;
 
     info!("Factorio imported. {} mods", factorio.mods.count());
+
+    factorio
+        .mods
+        .add(factorio::ModSource::Portal {
+            mod_portal: &mod_portal,
+            name: String::from("Aircraft"),
+            version: None,
+        })
+        .await?;
 
     Ok(())
 }

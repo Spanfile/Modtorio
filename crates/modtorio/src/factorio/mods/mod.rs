@@ -1,23 +1,21 @@
 mod info;
 
+use crate::mod_portal::ModPortal;
 use anyhow::anyhow;
 use ext::PathExt;
 use info::Info;
 use log::*;
-use std::{fs, io::BufReader, path::Path};
+use std::{fmt::Debug, fs, io::BufReader, path::Path};
 use util::HumanVersion;
 
-#[derive(Debug)]
-pub enum ModSource<P>
-where
-    P: AsRef<Path>,
-{
+pub enum ModSource<'a> {
     Portal {
+        mod_portal: &'a ModPortal,
         name: String,
         version: Option<HumanVersion>,
     },
     Zip {
-        path: P,
+        path: &'a (dyn AsRef<Path>),
     },
 }
 
@@ -58,9 +56,16 @@ impl Mods {
         self.mods.len()
     }
 
-    pub fn add<P: AsRef<Path>>(&mut self, source: ModSource<P>) -> anyhow::Result<()> {
+    pub async fn add<'a>(&mut self, source: ModSource<'_>) -> anyhow::Result<()> {
         match source {
-            ModSource::Portal { name, version } => {}
+            ModSource::Portal {
+                mod_portal,
+                name,
+                version,
+            } => {
+                let response_bytes = mod_portal.download_mod(&name, version).await?;
+                debug!("Downloaded {} bytes", response_bytes.len());
+            }
             ModSource::Zip { path } => {}
         }
 

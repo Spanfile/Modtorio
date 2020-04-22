@@ -68,7 +68,15 @@ impl ModPortal {
 
         debug!("Mod download GET URL: {}", download_url);
 
-        let response = self.client.get(download_url.as_str()).send().await?;
+        let response = self
+            .client
+            .get(download_url.as_str())
+            .query(&[
+                ("username", self.credentials.username.as_str()),
+                ("token", self.credentials.token.as_str()),
+            ])
+            .send()
+            .await?;
         let status = response.status();
 
         debug!("Mod download response status: {}", status);

@@ -1,6 +1,7 @@
 mod mods;
 mod settings;
 
+pub use mods::ModSource;
 use mods::Mods;
 use settings::ServerSettings;
 use std::{
