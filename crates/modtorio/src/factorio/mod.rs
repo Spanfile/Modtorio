@@ -42,7 +42,7 @@ impl Importer {
         }
     }
 
-    pub fn import(self) -> anyhow::Result<Factorio> {
+    pub async fn import(self) -> anyhow::Result<Factorio> {
         let mut settings_path = self.root.clone();
         settings_path.push(self.settings);
 
@@ -51,7 +51,7 @@ impl Importer {
 
         Ok(Factorio {
             settings: ServerSettings::from_game_json(&fs::read_to_string(settings_path)?)?,
-            mods: Mods::from_directory(mods_path)?,
+            mods: Mods::from_directory(mods_path).await?,
         })
     }
 }
