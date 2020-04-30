@@ -4,17 +4,14 @@ mod log;
 mod mod_portal;
 
 use ::log::*;
+use config::Config;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     log::setup_logging()?;
+    dotenv::dotenv()?;
 
-    let config = config::Config {
-        portal: config::PortalConfig {
-            username: String::from("Spans"),
-            token: String::from("e41a4beb65dd776d47ae1fc8cffb8d"),
-        },
-    };
+    let config = Config::from_env()?;
 
     let mod_portal = mod_portal::ModPortal::new(&config)?;
     let mut factorio = factorio::Importer::from("./sample").import()?;
