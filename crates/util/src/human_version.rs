@@ -13,7 +13,7 @@ pub enum Comparator {
     LessOrEqual,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
 pub struct HumanVersion {
     pub major: u64,
     pub minor: u64,
@@ -258,6 +258,19 @@ mod tests {
                 }
             }
         );
+
+        Ok(())
+    }
+
+    #[test]
+    fn compare_version() -> anyhow::Result<()> {
+        assert!("1.0.0".parse::<HumanVersion>()? < "2.0.0".parse::<HumanVersion>()?);
+        assert!("1.0.0".parse::<HumanVersion>()? < "1.1.0".parse::<HumanVersion>()?);
+        assert!("1.0.0".parse::<HumanVersion>()? < "1.0.1".parse::<HumanVersion>()?);
+
+        assert!("1.0.0".parse::<HumanVersion>()? > "0.1.0".parse::<HumanVersion>()?);
+        assert!("1.0.0".parse::<HumanVersion>()? > "0.0.1".parse::<HumanVersion>()?);
+        assert!("1.0.0".parse::<HumanVersion>()? == "1.0.0".parse::<HumanVersion>()?);
 
         Ok(())
     }

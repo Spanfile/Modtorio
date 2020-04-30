@@ -1,6 +1,4 @@
-mod dependency;
-
-use dependency::Dependency;
+use super::dependency::Dependency;
 use serde::Deserialize;
 use util::HumanVersion;
 

@@ -6,9 +6,11 @@ use crate::{
 };
 use anyhow::{anyhow, ensure};
 use log::*;
-use portal_mod::PortalMod;
+use portal_mod::{PortalMod, Release};
 use reqwest::{Client, StatusCode};
 use std::path::{Path, PathBuf};
+use tempfile::tempfile;
+use tokio::{fs, io};
 use url::Url;
 use util::HumanVersion;
 
@@ -47,27 +49,11 @@ impl ModPortal {
         version: Option<HumanVersion>,
         directory: P,
     ) -> anyhow::Result<(PathBuf, usize)> {
-        let url = Url::parse(SITE_ROOT)?.join(API_ROOT)?.join(title)?;
-        let portal_mod: PortalMod = self.get_json(url).await?;
-
-        let release = match version {
-            Some(version) => portal_mod
-                .releases
-                .iter()
-                .find(|r| r.version == version)
-                .ok_or_else(|| {
-                    anyhow!("mod {} doesn't have a release version {}", title, version)
-                })?,
-            None => {
-                let release = portal_mod
-                    .releases
-                    .last()
-                    .ok_or_else(|| anyhow!("mod {} doesn't have any releases", title))?;
-                info!("Latest version of '{}': {}", title, release.version);
-
-                release
-            }
-        };
+        let release = self.get_specific_release_or_latest(title, version).await?;
+        info!(
+            "Downloading '{}' ver. {}, released on {}",
+            title, release.version, release.released_at
+        );
 
         let download_url = Url::parse(SITE_ROOT)?.join(release.download_url.get_str()?)?;
         let mut response = self.get(download_url).await?;
@@ -88,12 +74,30 @@ impl ModPortal {
             directory.as_ref().join(fname)
         };
 
-        debug!("Writing response to {}", dest_path.display());
+        debug!(
+            "'{}' downloading to tempfile. Destination {}",
+            title,
+            dest_path.display()
+        );
 
-        let mut dest = tokio::fs::File::create(&dest_path).await?;
-        let written = response.to_writer(&mut dest).await?;
+        let mut temp = fs::File::from_std(tempfile()?);
+        let written = response.to_writer(&mut temp).await?;
+
+        debug!(
+            "'{}' downloaded to tempfile, copying to destination ({})...",
+            title,
+            dest_path.display()
+        );
+
+        let mut dest = fs::File::create(&dest_path).await?;
+        temp.seek(std::io::SeekFrom::Start(0)).await?;
+        io::copy(&mut temp, &mut dest).await?;
 
         Ok((dest_path, written))
+    }
+
+    pub async fn latest_release(&self, title: &str) -> anyhow::Result<Release> {
+        Ok(self.get_specific_release_or_latest(title, None).await?)
     }
 }
 
@@ -118,5 +122,44 @@ impl ModPortal {
         T: serde::de::DeserializeOwned,
     {
         Ok(self.get(url).await?.json().await?)
+    }
+
+    async fn get_specific_release_or_latest(
+        &self,
+        title: &str,
+        version: Option<HumanVersion>,
+    ) -> anyhow::Result<Release> {
+        let url = Url::parse(SITE_ROOT)?.join(API_ROOT)?.join(title)?;
+        let mut portal_mod: PortalMod = self.get_json(url).await?;
+
+        let release = match version {
+            Some(version) => {
+                let mut valid_releases: Vec<Release> = portal_mod
+                    .releases
+                    .drain_filter(|r| r.version == version)
+                    .collect();
+
+                ensure!(
+                    !valid_releases.is_empty(),
+                    anyhow!("mod {} has no release ver. {}", title, version)
+                );
+
+                ensure!(
+                    valid_releases.len() == 1,
+                    anyhow!("mod {} has multiple releases with ver. {}", title, version)
+                );
+
+                valid_releases.remove(0)
+            }
+            None => {
+                ensure!(
+                    !portal_mod.releases.is_empty(),
+                    anyhow!("mod {} doesn't have any releases", title)
+                );
+                portal_mod.releases.remove(portal_mod.releases.len() - 1)
+            }
+        };
+
+        Ok(release)
     }
 }

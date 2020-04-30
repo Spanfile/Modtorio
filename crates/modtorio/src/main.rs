@@ -1,3 +1,5 @@
+#![feature(drain_filter)]
+
 mod config;
 mod ext;
 mod factorio;
@@ -19,14 +21,8 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Factorio imported. {} mods", factorio.mods.count());
 
-    factorio
-        .mods
-        .add(factorio::ModSource::Portal {
-            mod_portal: &mod_portal,
-            name: String::from("Aircraft"),
-            version: None,
-        })
-        .await?;
+    let updates = factorio.mods.check_updates(&mod_portal).await?;
+    factorio.mods.apply_updates(&updates, &mod_portal).await?;
 
     Ok(())
 }

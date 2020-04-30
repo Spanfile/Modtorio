@@ -1,3 +1,4 @@
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use std::path::PathBuf;
 use util::HumanVersion;
@@ -16,7 +17,7 @@ pub struct PortalMod {
 pub struct Release {
     pub download_url: PathBuf,
     pub file_name: String,
-    pub released_at: String, // TODO: turn into datetime (it's ISO 8601)
+    pub released_at: DateTime<Utc>,
     pub version: HumanVersion,
     pub sha1: String,
 }

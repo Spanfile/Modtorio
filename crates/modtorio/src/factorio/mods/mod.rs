@@ -1,13 +1,19 @@
-mod info;
+mod fact_mod;
+mod update;
 
 use crate::{ext::PathExt, mod_portal::ModPortal};
-use anyhow::anyhow;
+use fact_mod::Mod;
 use futures::stream::StreamExt;
 use glob::glob;
-use info::Info;
 use log::*;
-use std::{collections::HashMap, fmt::Debug, path::Path};
-use tokio::{stream, task};
+use std::{
+    collections::{hash_map::Entry, HashMap},
+    fmt::Debug,
+    path::Path,
+    sync::Mutex,
+};
+use tokio::{fs, stream};
+use update::ModUpdate;
 use util::HumanVersion;
 
 const MOD_LOAD_BUFFER_SIZE: usize = 8;
@@ -15,7 +21,7 @@ const MOD_LOAD_BUFFER_SIZE: usize = 8;
 pub enum ModSource<'a> {
     Portal {
         mod_portal: &'a ModPortal,
-        name: String,
+        name: &'a str,
         version: Option<HumanVersion>,
     },
     Zip {
@@ -32,42 +38,54 @@ where
     mods: HashMap<String, Mod>,
 }
 
-#[derive(Debug)]
-pub struct Mod {
-    info: Info,
-}
-
 impl<P> Mods<P>
 where
     P: AsRef<Path>,
 {
     pub async fn from_directory(path: P) -> anyhow::Result<Self> {
         let zips = path.as_ref().join("*.zip");
+        let mods = Mutex::new(HashMap::new());
 
-        // create a stream of loading individual mods
-        let mods = stream::iter(glob(zips.get_str()?)?.map(|entry| async move {
+        let load_results = stream::iter(glob(zips.get_str()?)?.map(|entry| async {
             let entry = entry?;
-            Ok(task::spawn(async {
-                match Mod::from_zip(entry).await {
-                    Ok(m) => Some(m),
-                    Err(e) => {
-                        warn!("Mod failed to load: {}", e);
-                        None
+            let m = Mod::from_zip(entry).await?;
+            debug!("Loaded mod '{}'", m.info.title);
+
+            let name = m.info.name.clone();
+            match mods.lock().unwrap().entry(name) {
+                Entry::Occupied(mut entry) => {
+                    let existing: &Mod = entry.get();
+
+                    warn!(
+                        "Found duplicate '{}' (new {} vs existing {}), preserving newer and removing older",
+                        entry.key(),
+                        m.info.version,
+                        existing.info.version
+                    );
+
+                    if m.info.version > existing.info.version {
+                        entry.insert(m);
                     }
                 }
-            })
-            .await?)
+                Entry::Vacant(entry) => {
+                    entry.insert(m);
+                }
+            }
+            Ok(())
         }))
-        .buffer_unordered(MOD_LOAD_BUFFER_SIZE) // buffer the stream into MOD_LOAD_BUFFER_SIZE parallel tasks
-        .collect::<Vec<anyhow::Result<Option<Mod>>>>()
-        .await // collect them into a vec of results asynchronously
-        .into_iter()
-        .filter_map(|m| m.transpose()) // turn each Result<Option<...>> into Option<Result<...>>
-        .collect::<anyhow::Result<Vec<Mod>>>()?; // aggregate the results into a final vec
+        .buffer_unordered(MOD_LOAD_BUFFER_SIZE)
+        .collect::<Vec<anyhow::Result<()>>>()
+        .await;
+
+        for result in &load_results {
+            if let Err(e) = result {
+                warn!("Mod failed to load: {}", e);
+            }
+        }
 
         Ok(Mods {
             directory: path,
-            mods: mods.into_iter().map(|m| (m.info.name.clone(), m)).collect(),
+            mods: mods.into_inner()?,
         })
     }
 }
@@ -87,7 +105,7 @@ where
                 name,
                 version,
             } => {
-                info!("Retrieve mod '{}' (ver. {:?}) from portal", name, version);
+                debug!("Retrieve mod '{}' (ver. {:?}) from portal", name, version);
 
                 let (path, written_bytes) = mod_portal
                     .download_mod(&name, version, &self.directory)
@@ -100,40 +118,105 @@ where
         };
 
         let new_mod = Mod::from_zip(zipfile).await?;
-
-        info!(
-            "Added new mod '{}' ver. {}",
-            new_mod.info.title, new_mod.info.version
-        );
         debug!("{:?}", new_mod);
 
-        self.mods.insert(new_mod.info.name.clone(), new_mod);
+        match self.mods.entry(new_mod.info.name.clone()) {
+            Entry::Occupied(mut entry) => {
+                let new_version = new_mod.info.version;
+                let old_mod = entry.insert(new_mod);
+                self.remove_mod_zip(&old_mod).await?;
+
+                info!(
+                    "Replaced '{}' ver. {} with {}",
+                    old_mod.info.name, old_mod.info.version, new_version
+                );
+            }
+            Entry::Vacant(entry) => {
+                info!(
+                    "Added '{}' ver. {}",
+                    new_mod.info.title, new_mod.info.version
+                );
+                entry.insert(new_mod);
+            }
+        }
+
+        Ok(())
+    }
+
+    pub async fn check_updates(&self, portal: &ModPortal) -> anyhow::Result<Vec<ModUpdate>> {
+        info!("Checking for mod updates");
+
+        let updates = stream::iter(self.mods.values().map(|m| async move {
+            match portal.latest_release(&m.info.name).await {
+                Ok(latest) => {
+                    debug!("Latest version for '{}': {}", m.info.name, latest.version);
+
+                    if m.info.version < latest.version {
+                        info!(
+                            "Found newer version of '{}': {} (over {}) released on {}",
+                            m.info.title, latest.version, m.info.version, latest.released_at
+                        );
+
+                        Some(ModUpdate {
+                            name: m.info.name.clone(),
+                            current_version: m.info.version,
+                            new_version: latest.version,
+                        })
+                    } else {
+                        None
+                    }
+                }
+                Err(e) => {
+                    warn!("Failed to get latest release of '{}': {}", m.info.name, e);
+                    None
+                }
+            }
+        }))
+        .buffer_unordered(MOD_LOAD_BUFFER_SIZE)
+        .collect::<Vec<Option<ModUpdate>>>()
+        .await
+        .into_iter()
+        .filter_map(|u| u)
+        .collect::<Vec<ModUpdate>>();
+
+        debug!("Mod updates: {:?}", updates);
+
+        Ok(updates)
+    }
+
+    pub async fn apply_updates(
+        &mut self,
+        updates: &[ModUpdate],
+        portal: &ModPortal,
+    ) -> anyhow::Result<()> {
+        for update in updates {
+            info!(
+                "Applying update for '{}' ver. {} (over {})",
+                update.name, update.new_version, update.current_version
+            );
+
+            self.add(ModSource::Portal {
+                mod_portal: portal,
+                name: &update.name,
+                version: Some(update.new_version),
+            })
+            .await?;
+        }
 
         Ok(())
     }
 }
 
-impl Mod {
-    pub async fn from_zip<P: 'static + AsRef<Path> + Send>(path: P) -> anyhow::Result<Self> {
-        debug!("Creating mod from zip {}", path.as_ref().display());
-        let info = task::spawn_blocking(|| -> anyhow::Result<Info> {
-            let zipfile = std::fs::File::open(path)?;
-            let mut archive = zip::ZipArchive::new(zipfile)?;
-
-            let mut infopath: Option<String> = None;
-            for filepath in archive.file_names() {
-                if Path::new(filepath).get_file_name()? == "info.json" {
-                    infopath = Some(filepath.to_owned());
-                    break;
-                }
-            }
-
-            let infopath = infopath.ok_or_else(|| anyhow!("no info.json found"))?;
-            let info = serde_json::from_reader(archive.by_name(&infopath)?)?;
-            Ok(info)
-        })
-        .await?;
-
-        Ok(Mod { info: info? })
+impl<P> Mods<P>
+where
+    P: AsRef<Path>,
+{
+    async fn remove_mod_zip(&self, fact_mod: &Mod) -> anyhow::Result<()> {
+        let path = self
+            .directory
+            .as_ref()
+            .join(fact_mod.get_archive_filename());
+        debug!("Removing mod zip {}", path.display());
+        Ok(fs::remove_file(path).await?)
     }
 }
