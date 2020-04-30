@@ -1,4 +1,5 @@
 mod config;
+mod ext;
 mod factorio;
 mod log;
 mod mod_portal;

@@ -1,13 +1,12 @@
 mod info;
 
-use crate::mod_portal::ModPortal;
+use crate::{ext::PathExt, mod_portal::ModPortal};
 use anyhow::anyhow;
-use ext::PathExt;
 use futures::stream::StreamExt;
 use glob::glob;
 use info::Info;
 use log::*;
-use std::{fmt::Debug, path::Path};
+use std::{collections::HashMap, fmt::Debug, path::Path};
 use tokio::{stream, task};
 use util::HumanVersion;
 
@@ -30,7 +29,7 @@ where
     P: AsRef<Path>,
 {
     directory: P,
-    mods: Vec<Mod>,
+    mods: HashMap<String, Mod>,
 }
 
 #[derive(Debug)]
@@ -68,10 +67,15 @@ where
 
         Ok(Mods {
             directory: path,
-            mods,
+            mods: mods.into_iter().map(|m| (m.info.name.clone(), m)).collect(),
         })
     }
+}
 
+impl<P> Mods<P>
+where
+    P: AsRef<Path>,
+{
     pub fn count(&self) -> usize {
         self.mods.len()
     }
@@ -103,7 +107,7 @@ where
         );
         debug!("{:?}", new_mod);
 
-        self.mods.push(new_mod);
+        self.mods.insert(new_mod.info.name.clone(), new_mod);
 
         Ok(())
     }

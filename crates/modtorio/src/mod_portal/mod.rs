@@ -1,13 +1,14 @@
 mod portal_mod;
 
-use crate::config::Config;
+use crate::{
+    config::Config,
+    ext::{PathExt, ResponseExt},
+};
 use anyhow::{anyhow, ensure};
-use ext::PathExt;
 use log::*;
 use portal_mod::PortalMod;
 use reqwest::{Client, StatusCode};
 use std::path::{Path, PathBuf};
-use tokio::prelude::*;
 use url::Url;
 use util::HumanVersion;
 
@@ -47,10 +48,7 @@ impl ModPortal {
         directory: P,
     ) -> anyhow::Result<(PathBuf, usize)> {
         let url = Url::parse(SITE_ROOT)?.join(API_ROOT)?.join(title)?;
-
-        debug!("Mod GET URL: {}", url);
-
-        let portal_mod: PortalMod = self.client.get(url.as_str()).send().await?.json().await?;
+        let portal_mod: PortalMod = self.get_json(url).await?;
 
         let release = match version {
             Some(version) => portal_mod
@@ -72,21 +70,9 @@ impl ModPortal {
         };
 
         let download_url = Url::parse(SITE_ROOT)?.join(release.download_url.get_str()?)?;
-
-        debug!("Mod download GET URL: {}", download_url);
-
-        let mut response = self
-            .client
-            .get(download_url.as_str())
-            .query(&[
-                ("username", self.credentials.username.as_str()),
-                ("token", self.credentials.token.as_str()),
-            ])
-            .send()
-            .await?;
+        let mut response = self.get(download_url).await?;
         let status = response.status();
 
-        debug!("Mod download response status: {}", status);
         ensure!(
             status == StatusCode::OK,
             anyhow!("download returned non-OK status code {}", status)
@@ -105,13 +91,32 @@ impl ModPortal {
         debug!("Writing response to {}", dest_path.display());
 
         let mut dest = tokio::fs::File::create(&dest_path).await?;
-
-        let mut written = 0;
-        while let Some(chunk) = response.chunk().await? {
-            written += chunk.len();
-            dest.write_all(&chunk).await?;
-        }
+        let written = response.to_writer(&mut dest).await?;
 
         Ok((dest_path, written))
+    }
+}
+
+impl ModPortal {
+    async fn get(&self, url: Url) -> anyhow::Result<reqwest::Response> {
+        debug!("Mod portal GET URL: {}", url);
+        let response = self
+            .client
+            .get(url.as_str())
+            .query(&[
+                ("username", self.credentials.username.as_str()),
+                ("token", self.credentials.token.as_str()),
+            ])
+            .send()
+            .await?;
+        debug!("URL {} GET status: {}", url, response.status());
+        Ok(response)
+    }
+
+    async fn get_json<T>(&self, url: Url) -> anyhow::Result<T>
+    where
+        T: serde::de::DeserializeOwned,
+    {
+        Ok(self.get(url).await?.json().await?)
     }
 }

@@ -22,7 +22,7 @@ tokio = { version = "0.2.18", features = ["full"] }
 futures = "0.3.4"
 envy = "0.4.1"
 dotenv = "0.15.0"
+async-trait = "0.1.30"
 
 macros = { path = "../macros" }
-ext = { path = "../ext" }
 util = { path = "../util" }
