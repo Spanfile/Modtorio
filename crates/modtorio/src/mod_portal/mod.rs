@@ -2,11 +2,12 @@ mod portal_mod;
 
 use crate::config::Config;
 use anyhow::{anyhow, ensure};
-use bytes::Bytes;
 use ext::PathExt;
 use log::*;
 use portal_mod::PortalMod;
 use reqwest::{Client, StatusCode};
+use std::path::{Path, PathBuf};
+use tokio::prelude::*;
 use url::Url;
 use util::HumanVersion;
 
@@ -39,11 +40,12 @@ impl ModPortal {
         })
     }
 
-    pub async fn download_mod(
+    pub async fn download_mod<P: AsRef<Path>>(
         &self,
         title: &str,
         version: Option<HumanVersion>,
-    ) -> anyhow::Result<Bytes> {
+        directory: P,
+    ) -> anyhow::Result<(PathBuf, usize)> {
         let url = Url::parse(SITE_ROOT)?.join(API_ROOT)?.join(title)?;
 
         debug!("Mod GET URL: {}", url);
@@ -58,17 +60,22 @@ impl ModPortal {
                 .ok_or_else(|| {
                     anyhow!("mod {} doesn't have a release version {}", title, version)
                 })?,
-            None => portal_mod
-                .releases
-                .first()
-                .ok_or_else(|| anyhow!("mod {} doesn't have any releases", title))?,
+            None => {
+                let release = portal_mod
+                    .releases
+                    .last()
+                    .ok_or_else(|| anyhow!("mod {} doesn't have any releases", title))?;
+                info!("Latest version of '{}': {}", title, release.version);
+
+                release
+            }
         };
 
         let download_url = Url::parse(SITE_ROOT)?.join(release.download_url.get_str()?)?;
 
         debug!("Mod download GET URL: {}", download_url);
 
-        let response = self
+        let mut response = self
             .client
             .get(download_url.as_str())
             .query(&[
@@ -85,6 +92,26 @@ impl ModPortal {
             anyhow!("download returned non-OK status code {}", status)
         );
 
-        Ok(response.bytes().await?)
+        let dest_path = {
+            let fname = response
+                .url()
+                .path_segments()
+                .and_then(|segments| segments.last())
+                .and_then(|name| if name.is_empty() { None } else { Some(name) })
+                .unwrap_or("tmp.bin");
+            directory.as_ref().join(fname)
+        };
+
+        debug!("Writing response to {}", dest_path.display());
+
+        let mut dest = tokio::fs::File::create(&dest_path).await?;
+
+        let mut written = 0;
+        while let Some(chunk) = response.chunk().await? {
+            written += chunk.len();
+            dest.write_all(&chunk).await?;
+        }
+
+        Ok((dest_path, written))
     }
 }

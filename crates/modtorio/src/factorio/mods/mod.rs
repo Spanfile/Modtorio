@@ -20,7 +20,11 @@ pub enum ModSource<'a> {
 }
 
 #[derive(Debug)]
-pub struct Mods {
+pub struct Mods<P>
+where
+    P: AsRef<Path>,
+{
+    directory: P,
     mods: Vec<Mod>,
 }
 
@@ -29,15 +33,19 @@ pub struct Mod {
     info: Info,
 }
 
-impl Mods {
-    pub fn from_directory<P: AsRef<Path>>(path: P) -> anyhow::Result<Self> {
+impl<P> Mods<P>
+where
+    P: AsRef<Path>,
+{
+    pub fn from_directory(path: P) -> anyhow::Result<Self> {
         let pathname = path.get_str()?;
-        macros::with_context!(
-            format_args!("Failed to load mods from {}", pathname).to_string(),
-            Self: {
-            let zips = path.as_ref().join("*.zip");
+        let zips = path.as_ref().join("*.zip");
 
+        let mods = macros::with_context!(
+        format!("Failed to load mods from {}", pathname),
+            Vec<Mod>: {
             let mut mods = Vec::new();
+
             for entry in glob::glob(zips.get_str()?)? {
                 let fact_mod = Mod::from_zip(entry?);
                 match fact_mod {
@@ -48,7 +56,12 @@ impl Mods {
                 }
             }
 
-            Ok(Mods { mods })
+            Ok(mods)
+        })?;
+
+        Ok(Mods {
+            directory: path,
+            mods,
         })
     }
 
@@ -57,17 +70,33 @@ impl Mods {
     }
 
     pub async fn add<'a>(&mut self, source: ModSource<'_>) -> anyhow::Result<()> {
-        match source {
+        let zipfile = match source {
             ModSource::Portal {
                 mod_portal,
                 name,
                 version,
             } => {
-                let response_bytes = mod_portal.download_mod(&name, version).await?;
-                debug!("Downloaded {} bytes", response_bytes.len());
+                info!("Retrieve mod '{}' (ver. {:?}) from portal", name, version);
+
+                let (path, written_bytes) = mod_portal
+                    .download_mod(&name, version, &self.directory)
+                    .await?;
+
+                debug!("Downloaded {} bytes to {}", written_bytes, path.display());
+                path
             }
-            ModSource::Zip { path } => {}
-        }
+            ModSource::Zip { path: _ } => unimplemented!(),
+        };
+
+        let new_mod = Mod::from_zip(zipfile)?;
+
+        info!(
+            "Added new mod '{}' ver. {}",
+            new_mod.info.title, new_mod.info.version
+        );
+        debug!("{:?}", new_mod);
+
+        self.mods.push(new_mod);
 
         Ok(())
     }

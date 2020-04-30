@@ -12,7 +12,7 @@ use std::{
 #[derive(Debug)]
 pub struct Factorio {
     pub settings: ServerSettings,
-    pub mods: Mods,
+    pub mods: Mods<PathBuf>,
 }
 
 pub struct Importer {
@@ -21,7 +21,10 @@ pub struct Importer {
 }
 
 impl Importer {
-    pub fn from<P: AsRef<Path>>(root: P) -> Self {
+    pub fn from<P: AsRef<Path>>(root: P) -> Self
+    where
+        P: AsRef<Path>,
+    {
         Self {
             root: root.as_ref().to_path_buf(),
             settings: PathBuf::from("server-settings.json"),
@@ -29,7 +32,10 @@ impl Importer {
     }
 
     #[allow(dead_code)]
-    pub fn with_server_settings<P: AsRef<Path>>(self, settings: P) -> Self {
+    pub fn with_server_settings<P>(self, settings: P) -> Self
+    where
+        P: AsRef<Path>,
+    {
         Self {
             settings: settings.as_ref().to_path_buf(),
             ..self
