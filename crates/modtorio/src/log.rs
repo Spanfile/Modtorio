@@ -28,6 +28,7 @@ pub fn setup_logging() -> anyhow::Result<()> {
         })
         .level(log::LevelFilter::Debug)
         .level_for("hyper", log::LevelFilter::Info)
+        .level_for("reqwest", log::LevelFilter::Info)
         .chain(std::io::stdout())
         .apply()?;
     Ok(())
