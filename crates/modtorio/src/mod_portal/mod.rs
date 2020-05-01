@@ -50,10 +50,7 @@ impl ModPortal {
         directory: P,
     ) -> anyhow::Result<(PathBuf, usize)> {
         let release = self.get_specific_release_or_latest(title, version).await?;
-        info!(
-            "Downloading '{}' ver. {}, released on {}",
-            title, release.version, release.released_at
-        );
+        info!("Downloading '{}' ver. {}", title, release.version);
 
         let download_url = Url::parse(SITE_ROOT)?.join(release.download_url.get_str()?)?;
         let mut response = self.get(download_url).await?;
@@ -70,7 +67,8 @@ impl ModPortal {
                 .path_segments()
                 .and_then(|segments| segments.last())
                 .and_then(|name| if name.is_empty() { None } else { Some(name) })
-                .unwrap_or("tmp.bin");
+                .ok_or_else(|| anyhow!(""))?;
+
             directory.as_ref().join(fname)
         };
 

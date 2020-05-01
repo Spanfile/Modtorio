@@ -48,8 +48,8 @@ where
 
         let load_results = stream::iter(glob(zips.get_str()?)?.map(|entry| async {
             let entry = entry?;
-            let m = Mod::from_zip(entry).await?;
-            debug!("Loaded mod '{}'", m.info.title);
+            let m = Mod::from_zip(&entry).await?;
+            debug!("Loaded mod '{}' from zip {}", m.info.name, entry.display());
 
             let name = m.info.name.clone();
             match mods.lock().unwrap().entry(name) {
@@ -154,13 +154,15 @@ where
                     if m.info.version < latest.version {
                         info!(
                             "Found newer version of '{}': {} (over {}) released on {}",
-                            m.info.title, latest.version, m.info.version, latest.released_at
+                            m.info.title, latest.version, m.info.version, latest.released_on
                         );
 
                         Some(ModUpdate {
                             name: m.info.name.clone(),
+                            title: m.info.title.clone(),
                             current_version: m.info.version,
                             new_version: latest.version,
+                            released_on: latest.released_on,
                         })
                     } else {
                         None
@@ -191,8 +193,8 @@ where
     ) -> anyhow::Result<()> {
         for update in updates {
             info!(
-                "Applying update for '{}' ver. {} (over {})",
-                update.name, update.new_version, update.current_version
+                "Applying update for '{}' ver. {} (over {}) released on {}",
+                update.title, update.new_version, update.current_version, update.released_on
             );
 
             self.add(ModSource::Portal {

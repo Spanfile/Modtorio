@@ -17,7 +17,8 @@ pub struct PortalMod {
 pub struct Release {
     pub download_url: PathBuf,
     pub file_name: String,
-    pub released_at: DateTime<Utc>,
+    #[serde(rename = "released_at")]
+    pub released_on: DateTime<Utc>,
     pub version: HumanVersion,
     pub sha1: String,
 }
