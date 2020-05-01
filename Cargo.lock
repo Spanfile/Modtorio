@@ -1411,8 +1411,7 @@ dependencies = [
 [[package]]
 name = "zip"
 version = "0.5.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6df134e83b8f0f8153a094c7b0fd79dfebe437f1d76e7715afa18ed95ebe2fd7"
+source = "git+https://github.com/Spanfile/zip-rs.git#85153ecd4be1bc84988f6ceb42b67c52ae3a0b61"
 dependencies = [
  "bzip2",
  "crc32fast",

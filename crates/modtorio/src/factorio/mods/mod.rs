@@ -48,8 +48,8 @@ where
 
         let load_results = stream::iter(glob(zips.get_str()?)?.map(|entry| async {
             let entry = entry?;
-            let m = Mod::from_zip(&entry).await?;
-            debug!("Loaded mod '{}' from zip {}", m.info.name, entry.display());
+            let m = Mod::from_zip(entry).await?;
+            debug!("Loaded mod '{}' from zip {}", m.info.name, "");
 
             let name = m.info.name.clone();
             match mods.lock().unwrap().entry(name) {

@@ -17,7 +17,7 @@ pub struct Mod {
 impl Mod {
     pub async fn from_zip<P>(path: P) -> anyhow::Result<Self>
     where
-        P: AsRef<Path> + Send,
+        P: 'static + AsRef<Path> + Send,
     {
         debug!("Creating mod from zip {}", path.as_ref().display());
         let info = task::spawn_blocking(|| -> anyhow::Result<Info> {
