@@ -44,8 +44,6 @@ impl ModPortal {
 
     pub async fn fetch_mod(&self, name: &str) -> anyhow::Result<PortalMod> {
         let url = Url::parse(SITE_ROOT)?.join(API_ROOT)?.join(name)?;
-        debug!("Fetch portal mod '{}' from URL {}", name, url);
-
         let portal_mod: PortalMod = self.get_json(url).await?;
         Ok(portal_mod)
     }

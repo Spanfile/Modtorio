@@ -1,7 +1,12 @@
 mod fact_mod;
 
-use crate::{ext::PathExt, mod_portal::PortalMod, Config, ModPortal};
+use crate::{
+    ext::PathExt,
+    mod_portal::{PortalMod, Release},
+    Config, ModPortal,
+};
 use anyhow::anyhow;
+use bytesize::ByteSize;
 use fact_mod::Mod;
 use futures::stream::StreamExt;
 use glob::glob;
@@ -17,6 +22,13 @@ use util::HumanVersion;
 
 const MOD_LOAD_BUFFER_SIZE: usize = 8;
 
+pub struct ModsBuilder<P>
+where
+    P: AsRef<Path>,
+{
+    directory: P,
+}
+
 #[derive(Debug)]
 pub struct Mods<'a, P>
 where
@@ -26,13 +38,6 @@ where
     mods: HashMap<String, Mod>,
     config: &'a Config,
     portal: &'a ModPortal,
-}
-
-pub struct ModsBuilder<P>
-where
-    P: AsRef<Path>,
-{
-    directory: P,
 }
 
 #[derive(Debug)]
@@ -111,28 +116,32 @@ where
         self.mods.len()
     }
 
-    pub async fn add<'a>(
+    pub async fn install<'a>(
         &self,
         name: &str,
         version: Option<HumanVersion>,
     ) -> anyhow::Result<ModVersionPair> {
-        debug!("Fetch mod '{}' (ver. {:?}) from portal", name, version);
+        if let Some(version) = version {
+            info!("Fetch '{}' ver. {:?}", name, version);
+        } else {
+            info!("Fetch latest '{}'", name);
+        }
 
-        let portal_mod = self.portal.fetch_mod(name).await?;
-        let version = portal_mod.get_release(None)?.version;
-        Ok(ModVersionPair {
-            portal_mod,
-            version,
-        })
+        self.fetch_mod(name, version).await
     }
 
-    pub async fn install<'a>(&mut self, install: &ModVersionPair) -> anyhow::Result<()> {
+    pub async fn apply_install<'a>(&mut self, install: &ModVersionPair) -> anyhow::Result<()> {
         let (path, written_bytes) = self
             .portal
             .download_mod(&install.portal_mod, &self.directory)
             .await?;
 
-        debug!("Downloaded {} bytes to {}", written_bytes, path.display());
+        debug!(
+            "Downloaded {} ({} bytes) to {}",
+            ByteSize::b(written_bytes as u64),
+            written_bytes,
+            path.display()
+        );
 
         let new_mod = Mod::from_zip(path).await?;
         debug!("{:?}", new_mod);
@@ -161,31 +170,21 @@ where
     }
 
     pub async fn check_updates(&self) -> anyhow::Result<Vec<ModVersionPair>> {
-        info!("Checking for mod updates");
+        info!("Checking for mod updates...");
 
         let mut updates = Vec::new();
         for m in self.mods.values() {
-            let portal_mod = self.portal.fetch_mod(&m.info.name).await?;
-            let latest_release = portal_mod.get_release(None)?;
-            debug!(
-                "Latest version for '{}': {}",
-                m.info.name, latest_release.version
-            );
+            let install = self.fetch_mod(&m.info.name, None).await?;
+            let release = install.get_release()?;
+            debug!("Latest version for '{}': {}", m.info.name, install.version);
 
-            if m.info.version < latest_release.version {
-                info!(
+            if m.info.version < install.version {
+                debug!(
                     "Found newer version of '{}': {} (over {}) released on {}",
-                    m.info.title,
-                    latest_release.version,
-                    m.info.version,
-                    latest_release.released_on
+                    m.info.title, install.version, m.info.version, release.released_on
                 );
 
-                let version = latest_release.version;
-                updates.push(ModVersionPair {
-                    portal_mod,
-                    version,
-                });
+                updates.push(install);
             }
         }
 
@@ -193,15 +192,19 @@ where
     }
 
     pub async fn apply_updates(&mut self, updates: &[ModVersionPair]) -> anyhow::Result<()> {
-        for update in updates {
-            let release = update.portal_mod.get_release(Some(update.version))?;
-            let current = self.get_mod(&update.portal_mod.name)?.info.version;
-            info!(
-                "Applying update for '{}' ver. {} (over {}) released on {}",
-                update.portal_mod.title, update.version, current, release.released_on
-            );
+        if updates.is_empty() {
+            info!("No updates to apply");
+        } else {
+            for update in updates {
+                let release = update.get_release()?;
+                let current = self.get_mod(&update.portal_mod.name)?.info.version;
+                info!(
+                    "Applying update for '{}' ver. {} (over {}) released on {}",
+                    update.portal_mod.title, update.version, current, release.released_on
+                );
 
-            self.install(update).await?;
+                self.apply_install(update).await?;
+            }
         }
 
         Ok(())
@@ -226,5 +229,24 @@ where
             .mods
             .get(name)
             .ok_or_else(|| anyhow!("No such mod: {}", name))?)
+    }
+
+    async fn fetch_mod(
+        &self,
+        name: &str,
+        version: Option<HumanVersion>,
+    ) -> anyhow::Result<ModVersionPair> {
+        let portal_mod = self.portal.fetch_mod(name).await?;
+        let version = portal_mod.get_release(version)?.version;
+        Ok(ModVersionPair {
+            portal_mod,
+            version,
+        })
+    }
+}
+
+impl ModVersionPair {
+    pub fn get_release(&self) -> anyhow::Result<&Release> {
+        self.portal_mod.get_release(Some(self.version))
     }
 }

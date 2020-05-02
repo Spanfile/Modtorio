@@ -24,6 +24,9 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Factorio imported. {} mods", factorio.mods.count());
 
+    let install = factorio.mods.install("Aircraft", None).await?;
+    factorio.mods.apply_install(&install).await?;
+
     let updates = factorio.mods.check_updates().await?;
     factorio.mods.apply_updates(&updates).await?;
 
