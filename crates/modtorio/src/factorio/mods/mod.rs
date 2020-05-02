@@ -153,14 +153,14 @@ where
                 self.remove_mod_zip(&old_mod).await?;
 
                 info!(
-                    "Replaced '{}' ver. {} with {}",
-                    old_mod.info.name, old_mod.info.version, new_version
+                    "Replaced '{}' ('{}') ver. {} with {}",
+                    old_mod.info.title, old_mod.info.name, old_mod.info.version, new_version
                 );
             }
             Entry::Vacant(entry) => {
                 info!(
-                    "Added '{}' ver. {}",
-                    new_mod.info.title, new_mod.info.version
+                    "Added '{}' ('{}') ver. {}",
+                    new_mod.info.title, new_mod.info.name, new_mod.info.version
                 );
                 entry.insert(new_mod);
             }
@@ -188,6 +188,7 @@ where
             }
         }
 
+        info!("Found {} updates", updates.len());
         Ok(updates)
     }
 

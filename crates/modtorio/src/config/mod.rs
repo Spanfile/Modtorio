@@ -1,5 +1,8 @@
+mod log_level;
+
 use anyhow::Context;
 use log::*;
+pub use log_level::LogLevel;
 use serde::Deserialize;
 use serde_with::with_prefix;
 
@@ -11,6 +14,8 @@ with_prefix!(prefix_portal "portal_");
 pub struct Config {
     #[serde(flatten, with = "prefix_portal")]
     pub portal: PortalConfig,
+    #[serde(default)]
+    pub log_level: LogLevel,
 }
 
 #[derive(Debug, Deserialize)]
@@ -21,7 +26,6 @@ pub struct PortalConfig {
 
 impl Config {
     pub fn from_env() -> anyhow::Result<Config> {
-        debug!("{:?}", util::dump_env_lines(APP_PREFIX));
         Ok(envy::prefixed(APP_PREFIX)
             .from_env::<Config>()
             .with_context(|| {
@@ -30,5 +34,10 @@ impl Config {
                     util::dump_env(APP_PREFIX)
                 )
             })?)
+    }
+
+    pub fn debug_values(&self) {
+        debug!("{:?}", util::dump_env_lines(APP_PREFIX));
+        debug!("{:?}", self);
     }
 }
