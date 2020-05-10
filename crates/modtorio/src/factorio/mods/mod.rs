@@ -200,8 +200,12 @@ where
                 let release = update.get_release()?;
                 let current = self.get_mod(&update.portal_mod.name)?.info.version;
                 info!(
-                    "Applying update for '{}' ver. {} (over {}) released on {}",
-                    update.portal_mod.title, update.version, current, release.released_on
+                    "Applying update for '{}' ('{}') ver. {} (over {}) released on {}",
+                    update.portal_mod.title,
+                    update.portal_mod.name,
+                    update.version,
+                    current,
+                    release.released_on
                 );
 
                 self.apply_install(update).await?;
