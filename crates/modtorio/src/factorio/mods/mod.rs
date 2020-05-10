@@ -65,7 +65,10 @@ where
         let load_results = stream::iter(glob(zips.get_str()?)?.map(|entry| async {
             let entry = entry?;
             let m = Mod::from_zip(entry).await?;
-            debug!("Loaded mod '{}' (\"{}\") ver. {}", m.info.name, m.info.title, m.info.version);
+            debug!(
+                "Loaded mod '{}' (\"{}\") ver. {}",
+                m.info.name, m.info.title, m.info.version
+            );
 
             let name = m.info.name.clone();
             match mods.lock().unwrap().entry(name) {
@@ -73,7 +76,7 @@ where
                     let existing: &Mod = entry.get();
 
                     warn!(
-                        "Found duplicate '{}' (new {} vs existing {}), preserving newer and removing older",
+                        "Found duplicate '{}' (new {} vs existing {})",
                         entry.key(),
                         m.info.version,
                         existing.info.version
