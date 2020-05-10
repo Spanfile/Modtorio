@@ -18,12 +18,11 @@ pub fn setup_logging(config: &Config) -> anyhow::Result<()> {
     Dispatch::new()
         .format(move |out, msg, record| {
             out.finish(format_args!(
-                "[{: >11.3}] [{: >5}] {{{}}} {}",
+                "[{: >11.3}] [{: >5}] {}",
                 // "[{} UTC] [{}] {}",
                 // chrono::Utc::now().format(time_format),
                 start.elapsed().as_secs_f32(),
                 colors.color(record.level()),
-                record.target(),
                 msg
             ))
         })

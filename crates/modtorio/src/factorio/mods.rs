@@ -1,13 +1,10 @@
-mod fact_mod;
-
 use crate::{
     ext::PathExt,
-    mod_portal::{PortalMod, Release},
+    mod_common::{Mod, PortalMod, Release},
     Config, ModPortal,
 };
 use anyhow::anyhow;
 use bytesize::ByteSize;
-use fact_mod::Mod;
 use futures::stream::StreamExt;
 use glob::glob;
 use log::*;
@@ -246,6 +243,7 @@ where
     ) -> anyhow::Result<ModVersionPair> {
         let portal_mod = self.portal.fetch_mod(name).await?;
         let version = portal_mod.get_release(version)?.version;
+
         Ok(ModVersionPair {
             portal_mod,
             version,

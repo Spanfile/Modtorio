@@ -3,3 +3,4 @@ wrap_comments = true
 merge_imports = true
 merge_derives = true
 normalize_comments = true
+comment_width = 100

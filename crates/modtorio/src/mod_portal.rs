@@ -1,12 +1,10 @@
-mod portal_mod;
-
 use crate::{
     config::Config,
     ext::{PathExt, ResponseExt},
+    mod_common::PortalMod,
 };
 use anyhow::{anyhow, ensure};
 use log::*;
-pub use portal_mod::{PortalMod, Release};
 use reqwest::{Client, StatusCode};
 use std::path::{Path, PathBuf};
 use tempfile::tempfile;
@@ -16,6 +14,7 @@ use url::Url;
 const USER_AGENT: &str = "modtorio";
 const SITE_ROOT: &str = "https://mods.factorio.com";
 const API_ROOT: &str = "/api/mods/";
+const FULL_ENDPOINT: &str = "full";
 
 #[derive(Debug)]
 struct Credentials {
@@ -43,8 +42,12 @@ impl ModPortal {
     }
 
     pub async fn fetch_mod(&self, name: &str) -> anyhow::Result<PortalMod> {
-        let url = Url::parse(SITE_ROOT)?.join(API_ROOT)?.join(name)?;
+        let url = Url::parse(SITE_ROOT)?
+            .join(API_ROOT)?
+            .join(&format!("{}/", name))?
+            .join(FULL_ENDPOINT)?;
         let portal_mod: PortalMod = self.get_json(url).await?;
+
         Ok(portal_mod)
     }
 
@@ -110,6 +113,7 @@ impl ModPortal {
             ])
             .send()
             .await?;
+
         Ok(response)
     }
 

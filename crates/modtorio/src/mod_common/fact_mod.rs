@@ -1,10 +1,6 @@
-mod dependency;
-mod info;
-
+use super::Info;
 use crate::ext::PathExt;
 use anyhow::anyhow;
-pub use dependency::Dependency;
-pub use info::Info;
 use log::*;
 use std::path::Path;
 use tokio::task;

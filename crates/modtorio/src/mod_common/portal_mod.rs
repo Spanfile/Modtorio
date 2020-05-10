@@ -1,3 +1,4 @@
+use super::PortalInfo;
 use anyhow::anyhow;
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
@@ -12,6 +13,14 @@ pub struct PortalMod {
     releases: Vec<Release>,
     pub summary: String,
     pub title: String,
+    pub changelog: String,
+    pub created_at: DateTime<Utc>,
+    pub description: String,
+    pub github_path: String,
+    pub homepage: String,
+    // the API docs don't explicitly state that empty tags are 'null' in the response instead of an
+    // empty array
+    pub tag: Option<Vec<Tag>>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -22,6 +31,17 @@ pub struct Release {
     pub released_on: DateTime<Utc>,
     pub version: HumanVersion,
     pub sha1: String,
+    #[serde(rename = "info_json")]
+    pub info: PortalInfo,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Tag {
+    pub id: u8,
+    pub name: String,
+    pub title: String,
+    pub description: String,
+    pub r#type: String,
 }
 
 impl PortalMod {

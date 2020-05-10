@@ -1,6 +1,13 @@
-use super::dependency::Dependency;
+mod dependency;
+mod fact_mod;
+mod portal_mod;
+
+use dependency::Dependency;
 use serde::Deserialize;
 use util::HumanVersion;
+
+pub use fact_mod::Mod;
+pub use portal_mod::{PortalMod, Release};
 
 #[derive(Debug, Deserialize)]
 pub struct Info {
@@ -17,6 +24,12 @@ pub struct Info {
     pub dependencies: Vec<Dependency>,
     #[serde(default)]
     pub description: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct PortalInfo {
+    pub factorio_version: HumanVersion,
+    pub dependencies: Vec<Dependency>,
 }
 
 fn default_dependencies() -> Vec<Dependency> {
