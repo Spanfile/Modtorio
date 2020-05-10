@@ -1,7 +1,12 @@
 mod fact_mod;
-mod update;
 
-use crate::{ext::PathExt, mod_portal::ModPortal};
+use crate::{
+    ext::PathExt,
+    mod_portal::{PortalMod, Release},
+    Config, ModPortal,
+};
+use anyhow::anyhow;
+use bytesize::ByteSize;
 use fact_mod::Mod;
 use futures::stream::StreamExt;
 use glob::glob;
@@ -13,43 +18,54 @@ use std::{
     sync::Mutex,
 };
 use tokio::{fs, stream};
-use update::ModUpdate;
 use util::HumanVersion;
 
 const MOD_LOAD_BUFFER_SIZE: usize = 8;
 
-pub enum ModSource<'a> {
-    Portal {
-        mod_portal: &'a ModPortal,
-        name: &'a str,
-        version: Option<HumanVersion>,
-    },
-    Zip {
-        path: &'a (dyn AsRef<Path>),
-    },
+pub struct ModsBuilder<P>
+where
+    P: AsRef<Path>,
+{
+    directory: P,
 }
 
 #[derive(Debug)]
-pub struct Mods<P>
+pub struct Mods<'a, P>
 where
     P: AsRef<Path>,
 {
     directory: P,
     mods: HashMap<String, Mod>,
+    config: &'a Config,
+    portal: &'a ModPortal,
 }
 
-impl<P> Mods<P>
+#[derive(Debug)]
+pub struct ModVersionPair {
+    portal_mod: PortalMod,
+    version: HumanVersion,
+}
+
+impl<'a, P> ModsBuilder<P>
 where
     P: AsRef<Path>,
 {
-    pub async fn from_directory(path: P) -> anyhow::Result<Self> {
-        let zips = path.as_ref().join("*.zip");
+    pub fn root(directory: P) -> Self {
+        ModsBuilder { directory }
+    }
+
+    pub async fn build(
+        self,
+        config: &'a Config,
+        portal: &'a ModPortal,
+    ) -> anyhow::Result<Mods<'a, P>> {
+        let zips = self.directory.as_ref().join("*.zip");
         let mods = Mutex::new(HashMap::new());
 
         let load_results = stream::iter(glob(zips.get_str()?)?.map(|entry| async {
             let entry = entry?;
             let m = Mod::from_zip(entry).await?;
-            debug!("Loaded mod '{}' from zip {}", m.info.name, "");
+            debug!("Loaded mod '{}' (\"{}\") ver. {}", m.info.name, m.info.title, m.info.version);
 
             let name = m.info.name.clone();
             match mods.lock().unwrap().entry(name) {
@@ -84,13 +100,15 @@ where
         }
 
         Ok(Mods {
-            directory: path,
+            directory: self.directory,
             mods: mods.into_inner()?,
+            config,
+            portal,
         })
     }
 }
 
-impl<P> Mods<P>
+impl<P> Mods<'_, P>
 where
     P: AsRef<Path>,
 {
@@ -98,26 +116,34 @@ where
         self.mods.len()
     }
 
-    pub async fn add<'a>(&mut self, source: ModSource<'_>) -> anyhow::Result<()> {
-        let zipfile = match source {
-            ModSource::Portal {
-                mod_portal,
-                name,
-                version,
-            } => {
-                debug!("Retrieve mod '{}' (ver. {:?}) from portal", name, version);
+    pub async fn install<'a>(
+        &self,
+        name: &str,
+        version: Option<HumanVersion>,
+    ) -> anyhow::Result<ModVersionPair> {
+        if let Some(version) = version {
+            info!("Fetch '{}' ver. {:?}", name, version);
+        } else {
+            info!("Fetch latest '{}'", name);
+        }
 
-                let (path, written_bytes) = mod_portal
-                    .download_mod(&name, version, &self.directory)
-                    .await?;
+        self.fetch_mod(name, version).await
+    }
 
-                debug!("Downloaded {} bytes to {}", written_bytes, path.display());
-                path
-            }
-            ModSource::Zip { path: _ } => unimplemented!(),
-        };
+    pub async fn apply_install<'a>(&mut self, install: &ModVersionPair) -> anyhow::Result<()> {
+        let (path, written_bytes) = self
+            .portal
+            .download_mod(&install.portal_mod, &self.directory)
+            .await?;
 
-        let new_mod = Mod::from_zip(zipfile).await?;
+        debug!(
+            "Downloaded {} ({} bytes) to {}",
+            ByteSize::b(written_bytes as u64),
+            written_bytes,
+            path.display()
+        );
+
+        let new_mod = Mod::from_zip(path).await?;
         debug!("{:?}", new_mod);
 
         match self.mods.entry(new_mod.info.name.clone()) {
@@ -127,14 +153,14 @@ where
                 self.remove_mod_zip(&old_mod).await?;
 
                 info!(
-                    "Replaced '{}' ver. {} with {}",
-                    old_mod.info.name, old_mod.info.version, new_version
+                    "Replaced '{}' ('{}') ver. {} with {}",
+                    old_mod.info.title, old_mod.info.name, old_mod.info.version, new_version
                 );
             }
             Entry::Vacant(entry) => {
                 info!(
-                    "Added '{}' ver. {}",
-                    new_mod.info.title, new_mod.info.version
+                    "Added '{}' ('{}') ver. {}",
+                    new_mod.info.title, new_mod.info.name, new_mod.info.version
                 );
                 entry.insert(new_mod);
             }
@@ -143,73 +169,54 @@ where
         Ok(())
     }
 
-    pub async fn check_updates(&self, portal: &ModPortal) -> anyhow::Result<Vec<ModUpdate>> {
-        info!("Checking for mod updates");
+    pub async fn check_updates(&self) -> anyhow::Result<Vec<ModVersionPair>> {
+        info!("Checking for mod updates...");
 
-        let updates = stream::iter(self.mods.values().map(|m| async move {
-            match portal.latest_release(&m.info.name).await {
-                Ok(latest) => {
-                    debug!("Latest version for '{}': {}", m.info.name, latest.version);
+        let mut updates = Vec::new();
+        for m in self.mods.values() {
+            let install = self.fetch_mod(&m.info.name, None).await?;
+            let release = install.get_release()?;
+            debug!("Latest version for '{}': {}", m.info.name, install.version);
 
-                    if m.info.version < latest.version {
-                        info!(
-                            "Found newer version of '{}': {} (over {}) released on {}",
-                            m.info.title, latest.version, m.info.version, latest.released_on
-                        );
+            if m.info.version < install.version {
+                debug!(
+                    "Found newer version of '{}': {} (over {}) released on {}",
+                    m.info.title, install.version, m.info.version, release.released_on
+                );
 
-                        Some(ModUpdate {
-                            name: m.info.name.clone(),
-                            title: m.info.title.clone(),
-                            current_version: m.info.version,
-                            new_version: latest.version,
-                            released_on: latest.released_on,
-                        })
-                    } else {
-                        None
-                    }
-                }
-                Err(e) => {
-                    warn!("Failed to get latest release of '{}': {}", m.info.name, e);
-                    None
-                }
+                updates.push(install);
             }
-        }))
-        .buffer_unordered(MOD_LOAD_BUFFER_SIZE)
-        .collect::<Vec<Option<ModUpdate>>>()
-        .await
-        .into_iter()
-        .filter_map(|u| u)
-        .collect::<Vec<ModUpdate>>();
+        }
 
-        debug!("Mod updates: {:?}", updates);
-
+        info!("Found {} updates", updates.len());
         Ok(updates)
     }
 
-    pub async fn apply_updates(
-        &mut self,
-        updates: &[ModUpdate],
-        portal: &ModPortal,
-    ) -> anyhow::Result<()> {
-        for update in updates {
-            info!(
-                "Applying update for '{}' ver. {} (over {}) released on {}",
-                update.title, update.new_version, update.current_version, update.released_on
-            );
+    pub async fn apply_updates(&mut self, updates: &[ModVersionPair]) -> anyhow::Result<()> {
+        if updates.is_empty() {
+            info!("No updates to apply");
+        } else {
+            for update in updates {
+                let release = update.get_release()?;
+                let current = self.get_mod(&update.portal_mod.name)?.info.version;
+                info!(
+                    "Applying update for '{}' ('{}') ver. {} (over {}) released on {}",
+                    update.portal_mod.title,
+                    update.portal_mod.name,
+                    update.version,
+                    current,
+                    release.released_on
+                );
 
-            self.add(ModSource::Portal {
-                mod_portal: portal,
-                name: &update.name,
-                version: Some(update.new_version),
-            })
-            .await?;
+                self.apply_install(update).await?;
+            }
         }
 
         Ok(())
     }
 }
 
-impl<P> Mods<P>
+impl<P> Mods<'_, P>
 where
     P: AsRef<Path>,
 {
@@ -220,5 +227,31 @@ where
             .join(fact_mod.get_archive_filename());
         debug!("Removing mod zip {}", path.display());
         Ok(fs::remove_file(path).await?)
+    }
+
+    fn get_mod(&self, name: &str) -> anyhow::Result<&Mod> {
+        Ok(self
+            .mods
+            .get(name)
+            .ok_or_else(|| anyhow!("No such mod: {}", name))?)
+    }
+
+    async fn fetch_mod(
+        &self,
+        name: &str,
+        version: Option<HumanVersion>,
+    ) -> anyhow::Result<ModVersionPair> {
+        let portal_mod = self.portal.fetch_mod(name).await?;
+        let version = portal_mod.get_release(version)?.version;
+        Ok(ModVersionPair {
+            portal_mod,
+            version,
+        })
+    }
+}
+
+impl ModVersionPair {
+    pub fn get_release(&self) -> anyhow::Result<&Release> {
+        self.portal_mod.get_release(Some(self.version))
     }
 }

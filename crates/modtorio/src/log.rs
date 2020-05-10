@@ -1,3 +1,4 @@
+use crate::config::Config;
 use fern::{
     colors::{Color, ColoredLevelConfig},
     Dispatch,
@@ -5,7 +6,7 @@ use fern::{
 pub use log::{debug, error, info, trace, warn};
 use std::time::Instant;
 
-pub fn setup_logging() -> anyhow::Result<()> {
+pub fn setup_logging(config: &Config) -> anyhow::Result<()> {
     let colors = ColoredLevelConfig::new()
         .info(Color::Green)
         .debug(Color::Magenta)
@@ -26,8 +27,9 @@ pub fn setup_logging() -> anyhow::Result<()> {
                 msg
             ))
         })
-        .level(log::LevelFilter::Debug)
+        .level(config.log_level.to_level_filter())
         .level_for("hyper", log::LevelFilter::Info)
+        .level_for("reqwest", log::LevelFilter::Info)
         .chain(std::io::stdout())
         .apply()?;
     Ok(())

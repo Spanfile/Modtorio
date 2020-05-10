@@ -1,8 +1,8 @@
 mod mods;
 mod settings;
 
-pub use mods::ModSource;
-use mods::Mods;
+use crate::{Config, ModPortal};
+use mods::{Mods, ModsBuilder};
 use settings::ServerSettings;
 use std::{
     fs,
@@ -10,9 +10,9 @@ use std::{
 };
 
 #[derive(Debug)]
-pub struct Factorio {
+pub struct Factorio<'a> {
     pub settings: ServerSettings,
-    pub mods: Mods<PathBuf>,
+    pub mods: Mods<'a, PathBuf>,
 }
 
 pub struct Importer {
@@ -42,7 +42,11 @@ impl Importer {
         }
     }
 
-    pub async fn import(self) -> anyhow::Result<Factorio> {
+    pub async fn import<'a>(
+        self,
+        config: &'a Config,
+        portal: &'a ModPortal,
+    ) -> anyhow::Result<Factorio<'a>> {
         let mut settings_path = self.root.clone();
         settings_path.push(self.settings);
 
@@ -51,7 +55,7 @@ impl Importer {
 
         Ok(Factorio {
             settings: ServerSettings::from_game_json(&fs::read_to_string(settings_path)?)?,
-            mods: Mods::from_directory(mods_path).await?,
+            mods: ModsBuilder::root(mods_path).build(config, portal).await?,
         })
     }
 }
