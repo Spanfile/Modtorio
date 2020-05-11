@@ -74,19 +74,23 @@ impl FromStr for Dependency {
     }
 }
 
-// impl fmt::Display for Dependency {
-//     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-//         match self.requirement {
-//             Requirement::Optional => f.write_str("? ")?,
-//             Requirement::Incompatible => f.write_str("! ")?,
-//             Requirement::OptionalHidden => f.write_str("(?) ")?,
-//             _ => {}
-//         }
+impl fmt::Display for Dependency {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self.requirement {
+            Requirement::Optional => f.write_str("? ")?,
+            Requirement::Incompatible => f.write_str("! ")?,
+            Requirement::OptionalHidden => f.write_str("(?) ")?,
+            _ => {}
+        }
 
-//         f.write_fmt(format_args!("{} ", &self.name))?;
-//         f.write_str(&self.version.to_string())
-//     }
-// }
+        f.write_fmt(format_args!("{} ", &self.name))?;
+        if let Some(version) = self.version {
+            f.write_fmt(format_args!("{}", version))?;
+        }
+
+        Ok(())
+    }
+}
 
 impl<'de> Deserialize<'de> for Dependency {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>

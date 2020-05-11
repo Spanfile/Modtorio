@@ -233,17 +233,29 @@ where
             }
 
             match dep.requirement() {
-                Requirement::Mandatory => match self.get_mod(dep.name()) {
-                    Ok(_) => {
-                        debug!("Dependency '{:?}' of '{}' met", dep, target_mod.name());
-                    }
-                    Err(_) => {
-                        debug!("Dependency '{:?}' of '{}' not met", dep, target_mod.name());
+                Requirement::Mandatory => {
+                    match self.get_mod(dep.name()) {
+                        Ok(required_mod) => match dep.version() {
+                            Some(version_req)
+                                if !required_mod.own_version()?.meets(version_req) =>
+                            {
+                                debug!("Dependency {} of '{}' not met: version requirement mismatch ({})", dep, required_mod.name(), dep);
+                                missing.push(dep.name());
+                            }
+                            _ => debug!("Dependency {} of '{}' met", dep, required_mod.name()),
+                        },
+                        Err(_) => {
+                            debug!(
+                                "Dependency '{:?}' of '{}' not met: required mod not found",
+                                dep,
+                                target_mod.name()
+                            );
 
-                        // TODO: resolve version
-                        missing.push(dep.name());
+                            // TODO: resolve version
+                            missing.push(dep.name());
+                        }
                     }
-                },
+                }
                 Requirement::Incompatible => match self.get_mod(dep.name()) {
                     Ok(_) => {
                         return Err(anyhow::anyhow!(
@@ -252,11 +264,9 @@ where
                             target_mod.name()
                         ));
                     }
-                    Err(_) => {
-                        debug!("Dependency '{:?}' of '{}' met", dep, target_mod.name());
-                    }
+                    Err(_) => debug!("Dependency '{:?}' of '{}' met", dep, target_mod.name()),
                 },
-                _ => {}
+                _ => (),
             }
         }
 

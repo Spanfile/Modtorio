@@ -26,6 +26,18 @@ pub struct HumanVersionReq {
     pub version: HumanVersion,
 }
 
+impl HumanVersion {
+    pub fn meets(self, requirement: HumanVersionReq) -> bool {
+        match requirement.comparator {
+            Comparator::GreaterOrEqual => self >= requirement.version,
+            Comparator::Greater => self > requirement.version,
+            Comparator::Equal => self == requirement.version,
+            Comparator::Less => self < requirement.version,
+            Comparator::LessOrEqual => self <= requirement.version,
+        }
+    }
+}
+
 impl FromStr for HumanVersion {
     type Err = anyhow::Error;
 
@@ -51,6 +63,24 @@ impl FromStr for HumanVersion {
 impl Display for HumanVersion {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_fmt(format_args!("{}.{}.{}", self.major, self.minor, self.patch))
+    }
+}
+
+impl Display for Comparator {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Comparator::GreaterOrEqual => f.write_str(">="),
+            Comparator::Greater => f.write_str(">"),
+            Comparator::Equal => f.write_str("=="),
+            Comparator::Less => f.write_str("<"),
+            Comparator::LessOrEqual => f.write_str("<="),
+        }
+    }
+}
+
+impl Display for HumanVersionReq {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!("{} {}", self.comparator, self.version))
     }
 }
 
