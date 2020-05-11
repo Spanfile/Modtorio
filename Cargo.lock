@@ -1416,8 +1416,8 @@ dependencies = [
 
 [[package]]
 name = "zip"
-version = "0.5.6"
-source = "git+https://github.com/Spanfile/zip-rs.git#43117a3f56b8db638b7ea5f14fded388f371ebe2"
+version = "0.5.7"
+source = "git+https://github.com/Spanfile/zip-rs.git#1e38eed5e80a640e9e6d91624edad31642da5e40"
 dependencies = [
  "bzip2",
  "crc32fast",
