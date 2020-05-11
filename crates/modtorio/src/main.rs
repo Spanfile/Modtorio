@@ -28,7 +28,12 @@ async fn main() -> anyhow::Result<()> {
     info!("Factorio imported. {} mods", factorio.mods.count());
 
     let install = factorio.mods.install("angelsindustries", None).await?;
+    let additional = factorio.mods.ensure_dependencies(&install).await?;
+
     factorio.mods.apply_install(&install).await?;
+    for addit in &additional {
+        factorio.mods.apply_install(addit).await?;
+    }
 
     // let updates = factorio.mods.check_updates().await?;
     // factorio.mods.apply_updates(&updates).await?;

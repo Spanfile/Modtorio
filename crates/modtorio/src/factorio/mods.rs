@@ -1,6 +1,6 @@
 use crate::{
     ext::PathExt,
-    mod_common::{Mod, PortalMod, Release},
+    mod_common::{Mod, PortalMod, Release, Requirement},
     Config, ModPortal,
 };
 use anyhow::anyhow;
@@ -213,6 +213,59 @@ where
         }
 
         Ok(())
+    }
+
+    pub async fn ensure_dependencies(
+        &self,
+        install: &ModVersionPair,
+    ) -> anyhow::Result<Vec<ModVersionPair>> {
+        info!("Ensuring dependencies for '{}'", install.portal_mod.name);
+
+        let mut additional_installs = Vec::new();
+        let release = install.get_release()?;
+
+        for dep in &release.info.dependencies {
+            if dep.name == "base" {
+                continue;
+            }
+
+            match dep.requirement {
+                Requirement::Mandatory => match self.get_mod(&dep.name) {
+                    Ok(_) => {
+                        debug!(
+                            "Dependency '{:?}' of '{}' met",
+                            dep, install.portal_mod.name
+                        );
+                    }
+                    Err(_) => {
+                        debug!(
+                            "Dependency '{:?}' of '{}' not met, installing",
+                            dep, install.portal_mod.name
+                        );
+                        // TODO: resolve version
+                        additional_installs.push(self.fetch_mod(&dep.name, None).await?);
+                    }
+                },
+                Requirement::Incompatible => match self.get_mod(&dep.name) {
+                    Ok(_) => {
+                        return Err(anyhow::anyhow!(
+                            "Cannot ensure dependency '{:?}' of '{}'",
+                            dep,
+                            install.portal_mod.name
+                        ));
+                    }
+                    Err(_) => {
+                        debug!(
+                            "Dependency '{:?}' of '{}' met",
+                            dep, install.portal_mod.name
+                        );
+                    }
+                },
+                _ => {}
+            }
+        }
+
+        Ok(additional_installs)
     }
 }
 

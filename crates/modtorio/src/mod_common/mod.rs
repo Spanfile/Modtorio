@@ -2,10 +2,10 @@ mod dependency;
 mod fact_mod;
 mod portal_mod;
 
-use dependency::Dependency;
 use serde::Deserialize;
 use util::HumanVersion;
 
+pub use dependency::{Dependency, Requirement};
 pub use fact_mod::Mod;
 pub use portal_mod::{PortalMod, Release};
 

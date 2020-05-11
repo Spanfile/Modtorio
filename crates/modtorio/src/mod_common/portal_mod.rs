@@ -18,9 +18,10 @@ pub struct PortalMod {
     pub description: String,
     pub github_path: String,
     pub homepage: String,
-    // the API docs don't explicitly state that empty tags are 'null' in the response instead of an
-    // empty array
-    pub tag: Option<Vec<Tag>>,
+    /* the API docs don't explicitly state that empty tags are 'null' in the response instead of
+     * an empty array. the response for these is also super fucky, and they're not really used
+     * for anything here
+     * pub tag: Option<Vec<Tag>>, */
 }
 
 #[derive(Debug, Deserialize)]

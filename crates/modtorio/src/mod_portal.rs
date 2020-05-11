@@ -74,20 +74,10 @@ impl ModPortal {
             anyhow!("download returned non-OK status code {}", status)
         );
 
-        let dest_path = {
-            let fname = response
-                .url()
-                .path_segments()
-                .and_then(|segments| segments.last())
-                .and_then(|name| if name.is_empty() { None } else { Some(name) })
-                .ok_or_else(|| anyhow!(""))?;
-
-            directory.as_ref().join(fname)
-        };
-
         let mut temp = fs::File::from_std(tempfile()?);
         let written = response.to_writer(&mut temp).await?;
 
+        let dest_path = directory.as_ref().join(response.url_file_name()?);
         debug!(
             "'{}' downloaded to tempfile, copying to destination ({})...",
             portal_mod.title,
