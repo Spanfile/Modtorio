@@ -1,4 +1,5 @@
 #![feature(drain_filter)]
+#![feature(async_closure)]
 
 mod config;
 mod ext;
@@ -32,6 +33,7 @@ async fn main() -> anyhow::Result<()> {
         .mods
         .add_from_portal("angelsindustries", None)
         .await?;
+    factorio.mods.ensure_dependencies().await?;
 
     factorio.mods.update().await?;
 

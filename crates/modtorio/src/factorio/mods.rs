@@ -1,4 +1,9 @@
-use crate::{ext::PathExt, mod_common::Mod, util::HumanVersion, Config, ModPortal};
+use crate::{
+    ext::PathExt,
+    mod_common::{Mod, Requirement},
+    util::HumanVersion,
+    Config, ModPortal,
+};
 use anyhow::anyhow;
 use glob::glob;
 use log::*;
@@ -100,9 +105,9 @@ where
         version: Option<HumanVersion>,
     ) -> anyhow::Result<()> {
         if let Some(version) = version {
-            info!("Add '{}' ver. {:?}", name, version);
+            info!("Adding '{}' ver. {:?}", name, version);
         } else {
-            info!("Add latest '{}'", name);
+            info!("Adding latest '{}'", name);
         }
 
         let mut new_mod = Mod::from_portal(name, self.portal).await?;
@@ -171,59 +176,35 @@ where
         Ok(())
     }
 
-    // pub async fn ensure_dependencies(
-    //     &self,
-    //     install: &ModVersionPair,
-    // ) -> anyhow::Result<Vec<ModVersionPair>> {
-    //     info!("Ensuring dependencies for '{}'", install.portal_mod.name);
+    pub async fn ensure_dependencies(&mut self) -> anyhow::Result<()> {
+        info!("Ensuring dependencies are met...");
 
-    //     let mut additional_installs = Vec::new();
-    //     let release = install.get_release()?;
+        let mut missing: Vec<String> = Vec::new();
 
-    //     for dep in &release.info.dependencies {
-    //         if dep.name == "base" {
-    //             continue;
-    //         }
+        for m in self.mods.values() {
+            missing.extend(
+                self.ensure_single_dependencies(m)
+                    .await?
+                    .into_iter()
+                    .map(|m| m.to_owned()),
+            );
+        }
 
-    //         match dep.requirement {
-    //             Requirement::Mandatory => match self.get_mod(&dep.name) {
-    //                 Ok(_) => {
-    //                     debug!(
-    //                         "Dependency '{:?}' of '{}' met",
-    //                         dep, install.portal_mod.name
-    //                     );
-    //                 }
-    //                 Err(_) => {
-    //                     debug!(
-    //                         "Dependency '{:?}' of '{}' not met, installing",
-    //                         dep, install.portal_mod.name
-    //                     );
-    //                     // TODO: resolve version
-    //                     additional_installs.push(self.fetch_mod(&dep.name, None).await?);
-    //                 }
-    //             },
-    //             Requirement::Incompatible => match self.get_mod(&dep.name) {
-    //                 Ok(_) => {
-    //                     return Err(anyhow::anyhow!(
-    //                         "Cannot ensure dependency '{:?}' of '{}'",
-    //                         dep,
-    //                         install.portal_mod.name
-    //                     ));
-    //                 }
-    //                 Err(_) => {
-    //                     debug!(
-    //                         "Dependency '{:?}' of '{}' met",
-    //                         dep, install.portal_mod.name
-    //                     );
-    //                 }
-    //             },
-    //             _ => {}
-    //         }
-    //     }
+        if !missing.is_empty() {
+            info!("Found {} missing dependencies, installing", missing.len());
+            for miss in &missing {
+                self.add_from_portal(&miss, None).await?;
+            }
+        }
 
-    //     Ok(additional_installs)
-    // }
+        Ok(())
+    }
+}
 
+impl<'a, P> Mods<'a, P>
+where
+    P: AsRef<Path>,
+{
     fn get_mod(&self, name: &str) -> anyhow::Result<&Mod> {
         Ok(self
             .mods
@@ -238,5 +219,47 @@ where
             .join(fact_mod.get_archive_filename()?);
         debug!("Removing mod zip {}", path.display());
         Ok(fs::remove_file(path).await?)
+    }
+
+    async fn ensure_single_dependencies(
+        &self,
+        target_mod: &'a Mod<'_>,
+    ) -> anyhow::Result<Vec<&str>> {
+        let mut missing = Vec::new();
+
+        for dep in target_mod.dependencies()? {
+            if dep.name() == "base" {
+                continue;
+            }
+
+            match dep.requirement() {
+                Requirement::Mandatory => match self.get_mod(dep.name()) {
+                    Ok(_) => {
+                        debug!("Dependency '{:?}' of '{}' met", dep, target_mod.name());
+                    }
+                    Err(_) => {
+                        debug!("Dependency '{:?}' of '{}' not met", dep, target_mod.name());
+
+                        // TODO: resolve version
+                        missing.push(dep.name());
+                    }
+                },
+                Requirement::Incompatible => match self.get_mod(dep.name()) {
+                    Ok(_) => {
+                        return Err(anyhow::anyhow!(
+                            "Cannot ensure dependency '{:?}' of '{}'",
+                            dep,
+                            target_mod.name()
+                        ));
+                    }
+                    Err(_) => {
+                        debug!("Dependency '{:?}' of '{}' met", dep, target_mod.name());
+                    }
+                },
+                _ => {}
+            }
+        }
+
+        Ok(missing)
     }
 }

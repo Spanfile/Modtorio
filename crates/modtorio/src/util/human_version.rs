@@ -4,7 +4,7 @@ use regex::Regex;
 use serde::{de, de::Visitor, Deserialize};
 use std::{fmt, fmt::Display, str::FromStr};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Comparator {
     GreaterOrEqual,
     Greater,
@@ -20,7 +20,7 @@ pub struct HumanVersion {
     pub patch: u64,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub struct HumanVersionReq {
     pub comparator: Comparator,
     pub version: HumanVersion,

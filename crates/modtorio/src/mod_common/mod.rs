@@ -96,4 +96,8 @@ impl Mod<'_> {
     pub fn latest_release(&self) -> anyhow::Result<&Release> {
         self.info.get_release(None)
     }
+
+    pub fn dependencies(&self) -> anyhow::Result<&[Dependency]> {
+        self.info.dependencies()
+    }
 }

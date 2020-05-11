@@ -250,6 +250,12 @@ impl Info {
                 .ok_or_else(|| anyhow!("Mod '{}' has no releases", self.name)),
         }
     }
+
+    pub fn dependencies(&self) -> anyhow::Result<&[Dependency]> {
+        self.dependencies
+            .as_deref()
+            .ok_or_else(|| anyhow!("Missing dependencies (has the mod been fetched from portal?)"))
+    }
 }
 
 impl Release {

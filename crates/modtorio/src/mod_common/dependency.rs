@@ -5,7 +5,7 @@ use regex::Regex;
 use serde::{de, de::Visitor, Deserialize};
 use std::{fmt, str::FromStr};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Requirement {
     Mandatory,
     Optional,
@@ -15,9 +15,23 @@ pub enum Requirement {
 
 #[derive(Debug, PartialEq)]
 pub struct Dependency {
-    pub requirement: Requirement,
-    pub name: String,
-    pub version: Option<HumanVersionReq>,
+    requirement: Requirement,
+    name: String,
+    version: Option<HumanVersionReq>,
+}
+
+impl Dependency {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    pub fn requirement(&self) -> Requirement {
+        self.requirement
+    }
+
+    pub fn version(&self) -> Option<HumanVersionReq> {
+        self.version
+    }
 }
 
 impl FromStr for Dependency {
