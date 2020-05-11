@@ -94,10 +94,6 @@ impl Mod<'_> {
         self.info.own_version()
     }
 
-    pub fn factorio_version(&self) -> anyhow::Result<HumanVersion> {
-        self.info.factorio_version()
-    }
-
     pub fn latest_release(&self) -> anyhow::Result<&Release> {
         self.info.get_release(None)
     }

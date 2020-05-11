@@ -26,7 +26,7 @@ pub struct Info {
 pub struct Author {
     name: String,
     contact: Option<String>,
-    homepage: String,
+    homepage: Option<String>,
 }
 
 #[derive(Debug)]
@@ -68,9 +68,10 @@ struct ZipInfo {
     factorio_version: HumanVersion,
     title: String,
     author: String,
-    contact: String,
-    homepage: String,
+    contact: Option<String>,
+    homepage: Option<String>,
     description: String,
+    #[serde(default = "default_dependencies")]
     dependencies: Vec<Dependency>,
 }
 
@@ -94,6 +95,10 @@ struct PortalInfo {
 //     description: String,
 //     r#type: String,
 // }
+
+fn default_dependencies() -> Vec<Dependency> {
+    vec!["base".parse().unwrap()]
+}
 
 async fn read_object_from_zip<P, T>(path: P, name: &'static str) -> anyhow::Result<T>
 where
@@ -135,7 +140,7 @@ impl Info {
             }),
             author: Author {
                 name: info.author,
-                contact: Some(info.contact),
+                contact: info.contact,
                 homepage: info.homepage,
             },
             display: Display {
@@ -156,7 +161,7 @@ impl Info {
             author: Author {
                 name: info.owner,
                 contact: None,
-                homepage: info.homepage,
+                homepage: Some(info.homepage),
             },
             display: Display {
                 title: info.title,
@@ -187,7 +192,7 @@ impl Info {
             own: info.version,
             factorio: info.factorio_version,
         });
-        self.author.contact = Some(info.contact);
+        self.author.contact = info.contact;
         self.dependencies = Some(info.dependencies);
 
         Ok(())
@@ -218,20 +223,8 @@ impl Info {
         &self.display.title
     }
 
-    pub fn description(&self) -> &str {
-        &self.display.description
-    }
-
-    pub fn changelog(&self) -> Option<&str> {
-        self.display.changelog.as_deref()
-    }
-
     pub fn own_version(&self) -> anyhow::Result<HumanVersion> {
         Ok(self.versions()?.own)
-    }
-
-    pub fn factorio_version(&self) -> anyhow::Result<HumanVersion> {
-        Ok(self.versions()?.factorio)
     }
 
     pub fn get_release(&self, version: Option<HumanVersion>) -> anyhow::Result<&Release> {

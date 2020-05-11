@@ -1,7 +1,4 @@
-use crate::{
-    config::Config,
-    ext::{PathExt, ResponseExt},
-};
+use crate::{config::Config, ext::ResponseExt};
 use anyhow::{anyhow, ensure};
 use log::*;
 use reqwest::{Client, StatusCode};
