@@ -6,10 +6,7 @@ use crate::{
 use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
-use std::{
-    io::Read,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 use tokio::task;
 use util::HumanVersion;
 
@@ -37,7 +34,7 @@ pub struct Display {
     title: String,
     summary: Option<String>,
     description: String,
-    changelog: String,
+    changelog: Option<String>,
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -84,7 +81,7 @@ struct PortalInfo {
     releases: Vec<Release>,
     summary: String,
     title: String,
-    changelog: String,
+    changelog: Option<String>,
     description: String,
     homepage: String,
 }
@@ -113,27 +110,13 @@ where
     .await?
 }
 
-async fn read_file_from_zip<P>(path: P, name: &'static str) -> anyhow::Result<String>
-where
-    P: 'static + AsRef<Path> + Send,
-{
-    task::spawn_blocking(move || -> anyhow::Result<String> {
-        let zipfile = std::fs::File::open(path)?;
-        let mut archive = zip::ZipArchive::new(zipfile)?;
-
-        let mut out = String::new();
-        archive.find_file(name)?.read_to_string(&mut out)?;
-        Ok(out)
-    })
-    .await?
-}
-
 impl Info {
     pub async fn from_zip<P>(path: P) -> anyhow::Result<Info>
     where
         P: 'static + AsRef<Path> + Send,
     {
         let info = read_object_from_zip(path, "info.json").await?;
+        // TODO: read changelog
         Ok(Self::from_zip_info(info, String::new()))
     }
 
@@ -159,7 +142,7 @@ impl Info {
                 title: info.title,
                 summary: None,
                 description: info.description,
-                changelog,
+                changelog: Some(changelog),
             },
             dependencies: Some(info.dependencies),
             releases: None,
@@ -210,8 +193,13 @@ impl Info {
         Ok(())
     }
 
-    async fn populate_from_portal(&mut self) -> anyhow::Result<()> {
-        unimplemented!()
+    pub async fn populate_from_portal(&mut self, portal: &ModPortal) -> anyhow::Result<()> {
+        let info: PortalInfo = portal.fetch_mod(&self.name).await?;
+
+        self.display.summary = Some(info.summary);
+        self.releases = Some(info.releases);
+
+        Ok(())
     }
 }
 
@@ -234,8 +222,8 @@ impl Info {
         &self.display.description
     }
 
-    pub fn changelog(&self) -> &str {
-        &self.display.changelog
+    pub fn changelog(&self) -> Option<&str> {
+        self.display.changelog.as_deref()
     }
 
     pub fn own_version(&self) -> anyhow::Result<HumanVersion> {
@@ -274,5 +262,13 @@ impl Info {
 impl Release {
     pub fn url(&self) -> anyhow::Result<&str> {
         self.download_url.get_str()
+    }
+
+    pub fn version(&self) -> HumanVersion {
+        self.version
+    }
+
+    pub fn released_on(&self) -> DateTime<Utc> {
+        self.released_on
     }
 }

@@ -5,7 +5,7 @@ use crate::ModPortal;
 use bytesize::ByteSize;
 use info::Info;
 use log::*;
-use std::{cell::RefCell, path::Path};
+use std::path::Path;
 use util::HumanVersion;
 
 pub use dependency::{Dependency, Requirement};
@@ -13,7 +13,7 @@ pub use info::Release;
 
 #[derive(Debug)]
 pub struct Mod<'a> {
-    info: RefCell<Info>,
+    info: Info,
     portal: &'a ModPortal,
 }
 
@@ -25,25 +25,23 @@ impl<'a> Mod<'a> {
         debug!("Creating mod from zip {}", path.as_ref().display());
         let info = Info::from_zip(path).await?;
 
-        Ok(Mod {
-            info: RefCell::new(info),
-            portal,
-        })
+        Ok(Mod { info, portal })
     }
 
     pub async fn from_portal(name: &str, portal: &'a ModPortal) -> anyhow::Result<Mod<'a>> {
         let info = Info::from_portal(name, portal).await?;
 
-        Ok(Self {
-            info: RefCell::new(info),
-            portal,
-        })
+        Ok(Self { info, portal })
     }
 }
 
 impl<'a> Mod<'a> {
+    pub async fn fetch_portal_info(&mut self, portal: &'a ModPortal) -> anyhow::Result<()> {
+        self.info.populate_from_portal(portal).await
+    }
+
     pub async fn download<P>(
-        &self,
+        &mut self,
         version: Option<HumanVersion>,
         destination: P,
         portal: &'a ModPortal,
@@ -51,8 +49,7 @@ impl<'a> Mod<'a> {
     where
         P: AsRef<Path>,
     {
-        let mut info = self.info.borrow_mut();
-        let release = info.get_release(version)?;
+        let release = self.info.get_release(version)?;
         let (path, download_size) = portal.download_mod(release.url()?, destination).await?;
 
         debug!(
@@ -61,7 +58,7 @@ impl<'a> Mod<'a> {
             download_size,
             path.display()
         );
-        info.populate_from_zip(path).await?;
+        self.info.populate_from_zip(path).await?;
 
         Ok(download_size)
     }
@@ -78,27 +75,30 @@ impl Mod<'_> {
     }
 
     pub fn get_archive_filename(&self) -> anyhow::Result<String> {
-        let info = self.info.borrow();
-        Ok(format!("{}_{}.zip", info.name(), info.own_version()?))
+        Ok(format!(
+            "{}_{}.zip",
+            self.info.name(),
+            self.info.own_version()?
+        ))
     }
 
-    pub fn name(&self) -> String {
-        let info = self.info.borrow();
-        info.name().to_owned()
+    pub fn name(&self) -> &str {
+        self.info.name()
     }
 
-    pub fn title(&self) -> String {
-        let info = self.info.borrow();
-        info.title().to_owned()
+    pub fn title(&self) -> &str {
+        self.info.title()
     }
 
     pub fn own_version(&self) -> anyhow::Result<HumanVersion> {
-        let info = self.info.borrow();
-        info.own_version()
+        self.info.own_version()
     }
 
     pub fn factorio_version(&self) -> anyhow::Result<HumanVersion> {
-        let info = self.info.borrow();
-        info.factorio_version()
+        self.info.factorio_version()
+    }
+
+    pub fn latest_release(&self) -> anyhow::Result<&Release> {
+        self.info.get_release(None)
     }
 }

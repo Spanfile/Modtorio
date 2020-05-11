@@ -87,7 +87,7 @@ where
     }
 }
 
-impl<P> Mods<'_, P>
+impl<'a, P> Mods<'a, P>
 where
     P: AsRef<Path>,
 {
@@ -106,7 +106,7 @@ where
             info!("Add latest '{}'", name);
         }
 
-        let new_mod = Mod::from_portal(name, self.portal).await?;
+        let mut new_mod = Mod::from_portal(name, self.portal).await?;
         new_mod
             .download(version, &self.directory, self.portal)
             .await?;
@@ -175,31 +175,49 @@ where
     //     Ok(())
     // }
 
-    // pub async fn check_updates(&self) -> anyhow::Result<Vec<ModVersionPair>> {
-    //     info!("Checking for mod updates...");
+    pub async fn update(&mut self) -> anyhow::Result<()> {
+        info!("Checking for mod updates...");
 
-    //     let mut updates = Vec::new();
-    //     for m in self.mods.values() {
-    //         let install = self.fetch_mod(&m.name(), None).await?;
-    //         let release = install.get_release()?;
-    //         debug!("Latest version for '{}': {}", m.name(), install.version);
+        let mut updates = Vec::new();
+        for m in self.mods.values_mut() {
+            m.fetch_portal_info(self.portal).await?;
+            let release = m.latest_release()?;
+            debug!("Latest version for '{}': {}", m.name(), release.version());
 
-    //         if m.own_version() < install.version {
-    //             debug!(
-    //                 "Found newer version of '{}': {} (over {}) released on {}",
-    //                 m.title(),
-    //                 install.version,
-    //                 m.own_version(),
-    //                 release.released_on
-    //             );
+            if m.own_version()? < release.version() {
+                debug!(
+                    "Found newer version of '{}': {} (over {}) released on {}",
+                    m.title(),
+                    release.version(),
+                    m.own_version()?,
+                    release.released_on()
+                );
 
-    //             updates.push(install);
-    //         }
-    //     }
+                updates.push(m.name().to_owned());
+            }
+        }
 
-    //     info!("Found {} updates", updates.len());
-    //     Ok(updates)
-    // }
+        info!("Found {} updates", updates.len());
+        if !updates.is_empty() {
+            debug!("{:?}", updates)
+        };
+
+        for update in &updates {
+            let m = self
+                .mods
+                .get_mut(update)
+                .ok_or_else(|| anyhow!("No such mod: {}", update))?;
+            info!(
+                "Updating {} to {}",
+                m.display()?,
+                m.latest_release()?.version()
+            );
+
+            m.download(None, &self.directory, self.portal).await?;
+        }
+
+        Ok(())
+    }
 
     // pub async fn apply_updates(&mut self, updates: &[ModVersionPair]) -> anyhow::Result<()> {
     //     if updates.is_empty() {
@@ -276,12 +294,14 @@ where
 
     //     Ok(additional_installs)
     // }
-}
 
-impl<P> Mods<'_, P>
-where
-    P: AsRef<Path>,
-{
+    fn get_mod(&self, name: &str) -> anyhow::Result<&Mod> {
+        Ok(self
+            .mods
+            .get(name)
+            .ok_or_else(|| anyhow!("No such mod: {}", name))?)
+    }
+
     async fn remove_mod_zip(&self, fact_mod: &Mod<'_>) -> anyhow::Result<()> {
         let path = self
             .directory
@@ -289,12 +309,5 @@ where
             .join(fact_mod.get_archive_filename()?);
         debug!("Removing mod zip {}", path.display());
         Ok(fs::remove_file(path).await?)
-    }
-
-    fn get_mod(&self, name: &str) -> anyhow::Result<&Mod> {
-        Ok(self
-            .mods
-            .get(name)
-            .ok_or_else(|| anyhow!("No such mod: {}", name))?)
     }
 }

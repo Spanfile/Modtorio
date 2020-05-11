@@ -27,13 +27,12 @@ async fn main() -> anyhow::Result<()> {
 
     info!("Factorio imported. {} mods", factorio.mods.count());
 
-    factorio
-        .mods
-        .add_from_portal("angelsindustries", None)
-        .await?;
+    // factorio
+    //     .mods
+    //     .add_from_portal("angelsindustries", None)
+    //     .await?;
 
-    // let updates = factorio.mods.check_updates().await?;
-    // factorio.mods.apply_updates(&updates).await?;
+    factorio.mods.update().await?;
 
     Ok(())
 }
