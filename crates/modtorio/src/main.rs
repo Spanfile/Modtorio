@@ -6,6 +6,7 @@ mod factorio;
 mod log;
 mod mod_common;
 mod mod_portal;
+mod util;
 
 use ::log::*;
 use config::Config;

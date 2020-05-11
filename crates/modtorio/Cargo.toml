@@ -28,4 +28,3 @@ chrono = { version = "0.4.11", features = ["serde"] }
 bytesize = "1.0.0"
 
 macros = { path = "../macros" }
-util = { path = "../util" }

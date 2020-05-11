@@ -1,4 +1,4 @@
-use crate::{ext::PathExt, mod_common::Mod, Config, ModPortal};
+use crate::{ext::PathExt, mod_common::Mod, util::HumanVersion, Config, ModPortal};
 use anyhow::anyhow;
 use glob::glob;
 use log::*;
@@ -8,7 +8,6 @@ use std::{
     path::Path,
 };
 use tokio::fs;
-use util::HumanVersion;
 
 pub struct ModsBuilder<P>
 where

@@ -1,9 +1,9 @@
+use crate::util::HumanVersionReq;
 use anyhow::anyhow;
 use lazy_static::lazy_static;
 use regex::Regex;
 use serde::{de, de::Visitor, Deserialize};
 use std::{fmt, str::FromStr};
-use util::HumanVersionReq;
 
 #[derive(Debug, PartialEq)]
 pub enum Requirement {

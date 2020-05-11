@@ -1,12 +1,11 @@
 mod dependency;
 mod info;
 
-use crate::ModPortal;
+use crate::{util::HumanVersion, ModPortal};
 use bytesize::ByteSize;
 use info::Info;
 use log::*;
 use std::path::Path;
-use util::HumanVersion;
 
 pub use dependency::{Dependency, Requirement};
 pub use info::Release;

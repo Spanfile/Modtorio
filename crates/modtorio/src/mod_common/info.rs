@@ -2,13 +2,13 @@ use super::Dependency;
 use crate::{
     ext::{PathExt, ZipExt},
     mod_portal::ModPortal,
+    util::HumanVersion,
 };
 use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use tokio::task;
-use util::HumanVersion;
 
 #[derive(Debug)]
 pub struct Info {

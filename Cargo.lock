@@ -663,7 +663,6 @@ dependencies = [
  "tempfile",
  "tokio",
  "url",
- "util",
  "zip",
 ]
 
@@ -1254,16 +1253,6 @@ dependencies = [
  "idna",
  "matches",
  "percent-encoding",
-]
-
-[[package]]
-name = "util"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "lazy_static",
- "regex",
- "serde",
 ]
 
 [[package]]
