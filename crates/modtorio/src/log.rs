@@ -1,10 +1,10 @@
 use crate::config::Config;
+use chrono::Utc;
 use fern::{
     colors::{Color, ColoredLevelConfig},
     Dispatch,
 };
 pub use log::{debug, error, info, trace, warn};
-use std::time::Instant;
 
 pub fn setup_logging(config: &Config) -> anyhow::Result<()> {
     let colors = ColoredLevelConfig::new()
@@ -12,16 +12,14 @@ pub fn setup_logging(config: &Config) -> anyhow::Result<()> {
         .debug(Color::Magenta)
         .warn(Color::Yellow)
         .error(Color::Red);
-    let start = Instant::now();
-    // let time_format = "%Y-%m-%d %H:%M:%S";
+    let time_format = "%y/%m/%d %H:%M:%S";
 
     Dispatch::new()
         .format(move |out, msg, record| {
             out.finish(format_args!(
-                "[{: >11.3}] [{: >5}] {}",
+                "[{}] [{: ^6}] {}",
                 // "[{} UTC] [{}] {}",
-                // chrono::Utc::now().format(time_format),
-                start.elapsed().as_secs_f32(),
+                Utc::now().format(time_format),
                 colors.color(record.level()),
                 msg
             ))
