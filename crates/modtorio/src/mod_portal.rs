@@ -1,7 +1,6 @@
 use crate::{
     config::Config,
     ext::{PathExt, ResponseExt},
-    mod_common::PortalMod,
 };
 use anyhow::{anyhow, ensure};
 use log::*;
@@ -41,30 +40,29 @@ impl ModPortal {
         })
     }
 
-    pub async fn fetch_mod(&self, name: &str) -> anyhow::Result<PortalMod> {
+    pub async fn fetch_mod<T>(&self, name: &str) -> anyhow::Result<T>
+    where
+        T: serde::de::DeserializeOwned,
+    {
         let url = Url::parse(SITE_ROOT)?
             .join(API_ROOT)?
             .join(&format!("{}/", name))?
             .join(FULL_ENDPOINT)?;
-        let portal_mod: PortalMod = self.get_json(url).await?;
+        debug!("Fetching mod info from {}", url);
 
-        Ok(portal_mod)
+        Ok(self.get_json(url).await?)
     }
 
     pub async fn download_mod<P>(
         &self,
-        portal_mod: &PortalMod,
+        url_path: &str,
         directory: P,
     ) -> anyhow::Result<(PathBuf, usize)>
     where
         P: AsRef<Path>,
     {
-        let release = portal_mod.get_release(None)?;
-        let download_url = Url::parse(SITE_ROOT)?.join(release.download_url.get_str()?)?;
-        debug!(
-            "Download mod '{}' ver. {} from URL {}",
-            portal_mod.name, release.version, download_url
-        );
+        let download_url = Url::parse(SITE_ROOT)?.join(url_path)?;
+        debug!("Downloading mod from {}", download_url);
 
         let mut response = self.get(download_url).await?;
         let status = response.status();
@@ -77,10 +75,11 @@ impl ModPortal {
         let mut temp = fs::File::from_std(tempfile()?);
         let written = response.to_writer(&mut temp).await?;
 
-        let dest_path = directory.as_ref().join(response.url_file_name()?);
+        let filename = response.url_file_name()?;
+        let dest_path = directory.as_ref().join(filename);
         debug!(
             "'{}' downloaded to tempfile, copying to destination ({})...",
-            portal_mod.title,
+            filename,
             dest_path.display()
         );
 
