@@ -1,6 +1,6 @@
 use crate::{
     ext::PathExt,
-    mod_common::{Mod, Requirement},
+    mod_common::{DownloadResult, Mod, Requirement},
     util::HumanVersion,
     Config, ModPortal,
 };
@@ -110,25 +110,8 @@ where
             info!("Adding latest '{}'", name);
         }
 
-        let mut new_mod = Mod::from_portal(name, self.portal).await?;
-        new_mod
-            .download(version, &self.directory, self.portal)
-            .await?;
-
-        match self.mods.entry(new_mod.name().to_owned()) {
-            Entry::Occupied(mut entry) => {
-                let new_version = new_mod.own_version()?;
-                let old_mod = entry.insert(new_mod);
-                self.remove_mod_zip(&old_mod).await?;
-
-                info!("Replaced {} with {}", old_mod.display()?, new_version);
-            }
-            Entry::Vacant(entry) => {
-                info!("Added {}", new_mod.display()?);
-                entry.insert(new_mod);
-            }
-        }
-
+        let new_mod = self.add_or_update_in_place(name, version).await?;
+        info!("Added {}", new_mod.display()?);
         Ok(())
     }
 
@@ -161,17 +144,7 @@ where
         };
 
         for update in &updates {
-            let m = self
-                .mods
-                .get_mut(update)
-                .ok_or_else(|| anyhow!("No such mod: {}", update))?;
-            info!(
-                "Updating {} to {}",
-                m.display()?,
-                m.latest_release()?.version()
-            );
-
-            m.download(None, &self.directory, self.portal).await?;
+            let updated = self.add_or_update_in_place(update, None).await?;
         }
 
         Ok(())
@@ -213,13 +186,44 @@ where
             .ok_or_else(|| anyhow!("No such mod: {}", name))?)
     }
 
-    async fn remove_mod_zip(&self, fact_mod: &Mod<'_>) -> anyhow::Result<()> {
-        let path = self
-            .directory
-            .as_ref()
-            .join(fact_mod.get_archive_filename()?);
-        debug!("Removing mod zip {}", path.display());
-        Ok(fs::remove_file(path).await?)
+    async fn add_or_update_in_place(
+        &mut self,
+        name: &str,
+        version: Option<HumanVersion>,
+    ) -> anyhow::Result<&Mod<'a>> {
+        match self.mods.entry(name.to_owned()) {
+            Entry::Occupied(entry) => {
+                let existing_mod = entry.into_mut();
+
+                match existing_mod
+                    .download(version, &self.directory, self.portal)
+                    .await?
+                {
+                    DownloadResult::New => info!("{} added", existing_mod.display()?),
+                    DownloadResult::Unchanged => info!("{} unchanged", existing_mod.display()?,),
+                    DownloadResult::Replaced {
+                        old_version,
+                        old_archive,
+                    } => {
+                        debug!("Removing old mod archive {}", old_archive);
+                        let path = self.directory.as_ref().join(old_archive);
+                        fs::remove_file(path).await?;
+
+                        info!(
+                            "{} replaced from ver. {}",
+                            existing_mod.display()?,
+                            old_version
+                        );
+                    }
+                }
+
+                Ok(existing_mod)
+            }
+            Entry::Vacant(entry) => {
+                let new_mod = Mod::from_portal(name, self.portal).await?;
+                Ok(entry.insert(new_mod))
+            }
+        }
     }
 
     async fn ensure_single_dependencies(

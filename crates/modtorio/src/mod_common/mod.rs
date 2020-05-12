@@ -16,6 +16,16 @@ pub struct Mod<'a> {
     portal: &'a ModPortal,
 }
 
+#[derive(Debug)]
+pub enum DownloadResult {
+    New,
+    Unchanged,
+    Replaced {
+        old_version: HumanVersion,
+        old_archive: String,
+    },
+}
+
 impl<'a> Mod<'a> {
     pub async fn from_zip<P>(path: P, portal: &'a ModPortal) -> anyhow::Result<Mod<'a>>
     where
@@ -44,7 +54,7 @@ impl<'a> Mod<'a> {
         version: Option<HumanVersion>,
         destination: P,
         portal: &'a ModPortal,
-    ) -> anyhow::Result<usize>
+    ) -> anyhow::Result<DownloadResult>
     where
         P: AsRef<Path>,
     {
@@ -57,9 +67,26 @@ impl<'a> Mod<'a> {
             download_size,
             path.display()
         );
+
+        let old_version = self.own_version().ok();
+        let old_archive = self.get_archive_filename()?;
         self.info.populate_from_zip(path).await?;
 
-        Ok(download_size)
+        if let Some(old_version) = old_version {
+            if old_version == self.own_version()? {
+                debug!("'{}' unchaged after download", self.name());
+                Ok(DownloadResult::Unchanged)
+            } else {
+                debug!("'{}' changed from ver. {}", self.name(), old_version);
+                Ok(DownloadResult::Replaced {
+                    old_version,
+                    old_archive,
+                })
+            }
+        } else {
+            debug!("'{}' newly downloaded", self.name());
+            Ok(DownloadResult::New)
+        }
     }
 }
 
