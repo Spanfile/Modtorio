@@ -10,19 +10,26 @@ use serde_with::with_prefix;
 const APP_PREFIX: &str = "MODTORIO_";
 
 with_prefix!(prefix_portal "portal_");
+with_prefix!(prefix_log "log_");
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
     #[serde(flatten, with = "prefix_portal")]
     pub portal: PortalConfig,
-    #[serde(default)]
-    pub log_level: LogLevel,
+    #[serde(flatten, with = "prefix_log")]
+    pub log: LogConfig,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct PortalConfig {
     pub username: String,
     pub token: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct LogConfig {
+    #[serde(default)]
+    pub level: LogLevel,
 }
 
 impl Config {

@@ -139,7 +139,6 @@ where
         for m in self.mods.values_mut() {
             m.fetch_portal_info(self.portal).await?;
             let release = m.latest_release()?;
-            debug!("Latest version for '{}': {}", m.name(), release.version());
 
             if m.own_version()? < release.version() {
                 debug!(
@@ -151,6 +150,8 @@ where
                 );
 
                 updates.push(m.name().to_owned());
+            } else {
+                debug!("{} is up to date", m.display()?);
             }
         }
 
@@ -239,14 +240,19 @@ where
                             Some(version_req)
                                 if !required_mod.own_version()?.meets(version_req) =>
                             {
-                                debug!("Dependency {} of '{}' not met: version requirement mismatch ({})", dep, required_mod.name(), dep);
+                                debug!("Dependency {} of '{}' not met: version requirement mismatch (found {})", dep, target_mod.name(), required_mod.own_version()?);
                                 missing.push(dep.name());
                             }
-                            _ => debug!("Dependency {} of '{}' met", dep, required_mod.name()),
+                            _ => debug!(
+                                "Dependency {} of '{}' met (found {})",
+                                dep,
+                                target_mod.name(),
+                                required_mod.own_version()?
+                            ),
                         },
                         Err(_) => {
                             debug!(
-                                "Dependency '{:?}' of '{}' not met: required mod not found",
+                                "Dependency {} of '{}' not met: required mod not found",
                                 dep,
                                 target_mod.name()
                             );
@@ -259,12 +265,12 @@ where
                 Requirement::Incompatible => match self.get_mod(dep.name()) {
                     Ok(_) => {
                         return Err(anyhow::anyhow!(
-                            "Cannot ensure dependency '{:?}' of '{}'",
+                            "Cannot ensure dependency {} of '{}'",
                             dep,
                             target_mod.name()
                         ));
                     }
-                    Err(_) => debug!("Dependency '{:?}' of '{}' met", dep, target_mod.name()),
+                    Err(_) => debug!("Dependency {} of '{}' met", dep, target_mod.name()),
                 },
                 _ => (),
             }
