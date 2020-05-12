@@ -7,7 +7,10 @@ use crate::{
 use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
 use serde::Deserialize;
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tokio::task;
 
 #[derive(Debug)]
@@ -125,7 +128,7 @@ impl Info {
         Ok(Self::from_zip_info(info, String::new()))
     }
 
-    pub async fn from_portal(name: &str, portal: &ModPortal) -> anyhow::Result<Info> {
+    pub async fn from_portal(name: &str, portal: Arc<ModPortal>) -> anyhow::Result<Info> {
         let portal_info: PortalInfo = portal.fetch_mod(name).await?;
 
         Ok(Self::from_portal_info(portal_info))
@@ -198,7 +201,7 @@ impl Info {
         Ok(())
     }
 
-    pub async fn populate_from_portal(&mut self, portal: &ModPortal) -> anyhow::Result<()> {
+    pub async fn populate_from_portal(&mut self, portal: Arc<ModPortal>) -> anyhow::Result<()> {
         let info: PortalInfo = portal.fetch_mod(&self.name).await?;
 
         self.display.summary = Some(info.summary);

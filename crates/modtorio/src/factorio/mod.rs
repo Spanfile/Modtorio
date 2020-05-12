@@ -7,12 +7,13 @@ use settings::ServerSettings;
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 #[derive(Debug)]
-pub struct Factorio<'a> {
+pub struct Factorio {
     pub settings: ServerSettings,
-    pub mods: Mods<'a, PathBuf>,
+    pub mods: Mods<PathBuf>,
 }
 
 pub struct Importer {
@@ -44,9 +45,9 @@ impl Importer {
 
     pub async fn import<'a>(
         self,
-        config: &'a Config,
-        portal: &'a ModPortal,
-    ) -> anyhow::Result<Factorio<'a>> {
+        config: Arc<Config>,
+        portal: Arc<ModPortal>,
+    ) -> anyhow::Result<Factorio> {
         let mut settings_path = self.root.clone();
         settings_path.push(self.settings);
 
