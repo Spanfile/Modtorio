@@ -9,7 +9,10 @@ use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
 use log::*;
 use serde::Deserialize;
-use std::path::{Path, PathBuf};
+use std::{
+    convert::TryFrom,
+    path::{Path, PathBuf},
+};
 use tokio::task;
 
 #[derive(Debug)]
@@ -212,24 +215,24 @@ impl Info {
     pub fn populate_from_cache(&mut self, cache: &'_ Cache) -> anyhow::Result<()> {
         match cache.get_mod(&self.name)? {
             Some(cache_mod) => {
-                self.display.summary = Some(cache_mod.summary);
+                self.display.summary = cache_mod.summary;
 
                 let mut releases = Vec::new();
                 for release in cache.get_releases_of_mod(&self.name)? {
                     let mut dependencies = Vec::new();
 
                     for cache_dep in cache.get_dependencies_of_release(release.id)? {
-                        dependencies.push(Dependency::from(cache_dep));
+                        dependencies.push(Dependency::try_from(cache_dep)?);
                     }
 
                     releases.push(Release {
                         download_url: PathBuf::from(release.download_url),
                         file_name: release.file_name,
-                        released_on: release.released_on,
-                        version: release.version,
+                        released_on: release.released_on.parse()?,
+                        version: release.version.parse()?,
                         sha1: release.sha1,
                         info_object: ReleaseInfoObject {
-                            factorio_version: release.factorio_version,
+                            factorio_version: release.factorio_version.parse()?,
                             dependencies,
                         },
                     });

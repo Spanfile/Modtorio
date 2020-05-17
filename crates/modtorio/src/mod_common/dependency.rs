@@ -1,13 +1,11 @@
 use crate::{cache, util::HumanVersionReq};
 use anyhow::anyhow;
 use lazy_static::lazy_static;
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
 use regex::Regex;
 use serde::{de, de::Visitor, Deserialize};
-use std::{fmt, str::FromStr};
+use std::{convert::TryFrom, fmt, str::FromStr};
 
-#[derive(Debug, PartialEq, Copy, Clone, FromPrimitive)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Requirement {
     Mandatory = 0,
     Optional,
@@ -39,7 +37,7 @@ impl Dependency {
 impl FromStr for Dependency {
     type Err = anyhow::Error;
 
-    fn from_str(s: &std::primitive::str) -> Result<Self, Self::Err> {
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
         lazy_static! {
             static ref RE: Regex =
                 Regex::new(r"(\?|!|\(\?\))? ?([^>=<]+)( ?[>=<]{1,2} ?[\d\.]*)?$").unwrap();
@@ -49,13 +47,10 @@ impl FromStr for Dependency {
             .captures(s)
             .ok_or_else(|| anyhow!("dependency regex returned no captures"))?;
 
-        let requirement = match captures.get(1).map(|c| c.as_str()) {
-            Some("?") => Requirement::Optional,
-            Some("!") => Requirement::Incompatible,
-            Some("(?)") => Requirement::OptionalHidden,
-            Some(_) => panic!("impossible case"),
-            None => Requirement::Mandatory,
-        };
+        let requirement = captures
+            .get(1)
+            .map(|c| c.as_str())
+            .map_or(Ok(Requirement::Mandatory), |s| s.parse::<Requirement>())?;
 
         let name = captures
             .get(2)
@@ -73,6 +68,20 @@ impl FromStr for Dependency {
             name,
             version,
         })
+    }
+}
+
+impl FromStr for Requirement {
+    type Err = anyhow::Error;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "?" => Ok(Requirement::Optional),
+            "!" => Ok(Requirement::Incompatible),
+            "(?)" => Ok(Requirement::OptionalHidden),
+            "" => Ok(Requirement::Mandatory),
+            _ => Err(anyhow!("invalid string for requirement: {}", s)),
+        }
     }
 }
 
@@ -94,13 +103,21 @@ impl fmt::Display for Dependency {
     }
 }
 
-impl From<cache::entities::ReleaseDependency> for Dependency {
-    fn from(dep: cache::entities::ReleaseDependency) -> Self {
-        Self {
-            requirement: dep.requirement,
+impl TryFrom<cache::models::ReleaseDependency> for Dependency {
+    type Error = anyhow::Error;
+
+    fn try_from(dep: cache::models::ReleaseDependency) -> anyhow::Result<Self> {
+        let version = if let Some(vers) = dep.version_req {
+            Some(vers.parse()?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            requirement: dep.requirement.parse()?,
             name: dep.name,
-            version: dep.version_req,
-        }
+            version,
+        })
     }
 }
 
@@ -128,27 +145,6 @@ impl<'de> Deserialize<'de> for Dependency {
         }
 
         deserializer.deserialize_str(DependencyVisitor)
-    }
-}
-
-impl rustorm::FromValue for Requirement {
-    fn from_value(v: &rustorm_dao::Value) -> std::result::Result<Self, rustorm_dao::ConvertError> {
-        if let Ok(v) = match v {
-            rustorm_dao::Value::Tinyint(v) => Some(i64::from(*v)),
-            _ => None,
-        }
-        .ok_or_else(|| anyhow!("invalid value type"))
-        .and_then(|v| {
-            FromPrimitive::from_i64(v)
-                .ok_or_else(|| anyhow!("couldn't convert value into requirement"))
-        }) {
-            Ok(v)
-        } else {
-            Err(rustorm_dao::ConvertError::NotSupported(
-                format!("{:?}", v),
-                String::from("HumanVersion"),
-            ))
-        }
     }
 }
 

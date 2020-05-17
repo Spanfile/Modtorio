@@ -1,29 +1,28 @@
-pub mod entities;
+pub mod models;
+mod schema;
 
-use log::*;
-use rustorm::{EntityManager, Pool};
+use crate::ext::PathExt;
+use diesel::prelude::*;
 use std::{
-    cell::RefCell,
+    env,
     path::{Path, PathBuf},
 };
 
-const CACHE_DB_SCHEMA: &str = include_str!("schema.sql");
-
 pub struct Cache {
-    em: RefCell<EntityManager>,
+    conn: SqliteConnection,
 }
 
 #[derive(Debug)]
 pub struct CacheBuilder {
     db_path: PathBuf,
-    schema: String,
 }
 
 impl CacheBuilder {
     pub fn new() -> Self {
         Self {
-            db_path: PathBuf::from("modtorio.db"),
-            schema: String::from(CACHE_DB_SCHEMA),
+            db_path: PathBuf::from(
+                env::var("DATABASE_URL").expect("couldn't read DATABASE_URL env variable"),
+            ),
         }
     }
 
@@ -37,82 +36,32 @@ impl CacheBuilder {
         }
     }
 
-    pub fn with_db_schema(self, schema: &str) -> Self {
-        Self {
-            schema: String::from(schema),
-            ..self
-        }
-    }
-
     pub fn build(self) -> anyhow::Result<Cache> {
-        let exists = self.db_path.exists();
-        let db_url = format!("sqlite://{}", self.db_path.display());
-        let mut pool = Pool::new();
-        let em = pool.em(&db_url)?;
+        let conn = SqliteConnection::establish(self.db_path.get_str()?)?;
 
-        if !exists {
-            debug!("New database {} created, applying schema", db_url);
-            em.execute_sql_with_return(self.schema);
-        }
-
-        Ok(Cache {
-            em: RefCell::new(em),
-        })
+        Ok(Cache { conn })
     }
 }
 
 impl Cache {
-    fn one<'a, T>(&self, sql: &str, params: &[&'a dyn rustorm::ToValue]) -> anyhow::Result<T>
-    where
-        T: rustorm::dao::FromDao,
-    {
-        Ok(self
-            .em
-            .borrow_mut()
-            .execute_sql_with_one_return(sql, params)?)
+    pub fn get_game(&self, game_id: i32) -> anyhow::Result<models::Game> {
+        use schema::game::dsl::*;
+        Ok(game.filter(id.eq(game_id)).first(&self.conn)?)
     }
 
-    fn maybe_one<'a, T>(
-        &self,
-        sql: &str,
-        params: &[&'a dyn rustorm::ToValue],
-    ) -> anyhow::Result<Option<T>>
-    where
-        T: rustorm::dao::FromDao,
-    {
-        Ok(self
-            .em
-            .borrow_mut()
-            .execute_sql_with_maybe_one_return(sql, params)?)
+    pub fn get_mod(&self, n: &str) -> anyhow::Result<Option<models::GameMod>> {
+        use schema::game_mod::dsl::*;
+        Ok(game_mod.filter(name.eq(n)).first(&self.conn).optional()?)
     }
 
-    fn many<'a, T>(&self, sql: &str, params: &[&'a dyn rustorm::ToValue]) -> anyhow::Result<Vec<T>>
-    where
-        T: rustorm::dao::FromDao,
-    {
-        Ok(self.em.borrow_mut().execute_sql_with_return(sql, params)?)
-    }
-
-    pub fn get_game(&self, game_id: i32) -> anyhow::Result<entities::Game> {
-        let sql = "SELECT * FROM game WHERE game.id = ?";
-        self.one(sql, &[&game_id])
-    }
-
-    pub fn get_mod(&self, name: &str) -> anyhow::Result<Option<entities::Mod>> {
-        let sql = "SELECT * FROM mod WHERE mod.name = ?";
-        self.maybe_one(sql, &[&name.to_owned()])
-    }
-
-    pub fn get_releases_of_mod(&self, name: &str) -> anyhow::Result<Vec<entities::ModRelease>> {
-        let sql = "SELECT * FROM mod_release WHERE mod_release.mod_name = ?";
-        self.many(sql, &[&name.to_owned()])
+    pub fn get_releases_of_mod(&self, name: &str) -> anyhow::Result<Vec<models::ModRelease>> {
+        unimplemented!()
     }
 
     pub fn get_dependencies_of_release(
         &self,
         release: i32,
-    ) -> anyhow::Result<Vec<entities::ReleaseDependency>> {
-        let sql = "SELECT * FROM release_dependency WHERE release_dependency.release = ?";
-        self.many(sql, &[&release])
+    ) -> anyhow::Result<Vec<models::ReleaseDependency>> {
+        unimplemented!()
     }
 }

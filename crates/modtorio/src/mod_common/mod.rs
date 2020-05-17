@@ -60,14 +60,21 @@ impl<'a> Mod<'a> {
 }
 
 impl<'a> Mod<'a> {
-    pub async fn update_portal_info(&mut self) -> anyhow::Result<()> {
+    /// Fetch the latest info from portal
+    pub async fn fetch_portal_info(&mut self) -> anyhow::Result<()> {
+        self.info.populate_from_portal(self.portal).await
+    }
+
+    /// Load the potentially missing portal info by first reading it from cache, and then fetching
+    /// from the mod portal if the cache has expired
+    pub async fn load_portal_info(&mut self) -> anyhow::Result<()> {
         if let Some(_cache_mod) = self.cache.get_mod(&self.info.name())? {
             // TODO: check expiry
             self.info.populate_from_cache(self.cache)?;
             return Ok(());
         }
 
-        self.info.populate_from_portal(self.portal).await
+        self.fetch_portal_info().await
     }
 
     pub async fn download<P>(

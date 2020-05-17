@@ -1,6 +1,10 @@
 #![feature(drain_filter)]
 #![feature(async_closure)]
 
+// diesel still requires this even if Rust 2018 has moved away from it
+#[macro_use]
+extern crate diesel;
+
 mod cache;
 mod config;
 mod ext;
@@ -26,12 +30,12 @@ async fn main() -> anyhow::Result<()> {
     let cache = cache::CacheBuilder::new().build()?;
     let portal = ModPortal::new(&config)?;
 
-    // let mut factorio = factorio::FsImporter::from("./sample")
-    //     .import(&config, &portal, &cache)
-    //     .await?;
-    let mut factorio = factorio::Importer::from_cache(0)
+    let mut factorio = factorio::Importer::from_root("./sample")
         .import(&config, &portal, &cache)
         .await?;
+    // let mut factorio = factorio::Importer::from_cache(0)
+    //     .import(&config, &portal, &cache)
+    //     .await?;
 
     info!("Factorio imported. {} mods", factorio.mods.count());
 

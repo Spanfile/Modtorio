@@ -9,7 +9,6 @@ use glob::glob;
 use log::*;
 use std::{
     collections::{hash_map::Entry, HashMap},
-    fmt::Debug,
     path::Path,
 };
 use tokio::fs;
@@ -126,7 +125,7 @@ where
         for m in self.mods.values_mut() {
             info!("Checking for updates to {}...", m);
 
-            m.update_portal_info().await?;
+            m.fetch_portal_info().await?;
             let release = m.latest_release()?;
 
             if m.own_version()? < release.version() {
