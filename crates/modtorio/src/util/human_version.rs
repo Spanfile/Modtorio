@@ -38,6 +38,45 @@ impl HumanVersion {
     }
 }
 
+// TODO: macroize these two
+impl rustorm::FromValue for HumanVersion {
+    fn from_value(v: &rustorm_dao::Value) -> std::result::Result<Self, rustorm_dao::ConvertError> {
+        if let Ok(v) = match v {
+            rustorm_dao::Value::Text(s) => Some(s.to_owned()),
+            _ => None,
+        }
+        .ok_or_else(|| anyhow!("invalid value type"))
+        .and_then(|v| v.parse::<HumanVersion>())
+        {
+            Ok(v)
+        } else {
+            Err(rustorm_dao::ConvertError::NotSupported(
+                format!("{:?}", v),
+                String::from("HumanVersion"),
+            ))
+        }
+    }
+}
+
+impl rustorm::FromValue for HumanVersionReq {
+    fn from_value(v: &rustorm_dao::Value) -> std::result::Result<Self, rustorm_dao::ConvertError> {
+        if let Ok(v) = match v {
+            rustorm_dao::Value::Text(s) => Some(s.to_owned()),
+            _ => None,
+        }
+        .ok_or_else(|| anyhow!("invalid value type"))
+        .and_then(|v| v.parse::<HumanVersionReq>())
+        {
+            Ok(v)
+        } else {
+            Err(rustorm_dao::ConvertError::NotSupported(
+                format!("{:?}", v),
+                String::from("HumanVersion"),
+            ))
+        }
+    }
+}
+
 impl FromStr for HumanVersion {
     type Err = anyhow::Error;
 

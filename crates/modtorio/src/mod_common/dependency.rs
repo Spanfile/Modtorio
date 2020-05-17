@@ -1,13 +1,15 @@
-use crate::util::HumanVersionReq;
+use crate::{cache, util::HumanVersionReq};
 use anyhow::anyhow;
 use lazy_static::lazy_static;
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 use regex::Regex;
 use serde::{de, de::Visitor, Deserialize};
 use std::{fmt, str::FromStr};
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone, FromPrimitive)]
 pub enum Requirement {
-    Mandatory,
+    Mandatory = 0,
     Optional,
     OptionalHidden,
     Incompatible,
@@ -92,6 +94,16 @@ impl fmt::Display for Dependency {
     }
 }
 
+impl From<cache::entities::ReleaseDependency> for Dependency {
+    fn from(dep: cache::entities::ReleaseDependency) -> Self {
+        Self {
+            requirement: dep.requirement,
+            name: dep.name,
+            version: dep.version_req,
+        }
+    }
+}
+
 impl<'de> Deserialize<'de> for Dependency {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
@@ -116,6 +128,27 @@ impl<'de> Deserialize<'de> for Dependency {
         }
 
         deserializer.deserialize_str(DependencyVisitor)
+    }
+}
+
+impl rustorm::FromValue for Requirement {
+    fn from_value(v: &rustorm_dao::Value) -> std::result::Result<Self, rustorm_dao::ConvertError> {
+        if let Ok(v) = match v {
+            rustorm_dao::Value::Tinyint(v) => Some(i64::from(*v)),
+            _ => None,
+        }
+        .ok_or_else(|| anyhow!("invalid value type"))
+        .and_then(|v| {
+            FromPrimitive::from_i64(v)
+                .ok_or_else(|| anyhow!("couldn't convert value into requirement"))
+        }) {
+            Ok(v)
+        } else {
+            Err(rustorm_dao::ConvertError::NotSupported(
+                format!("{:?}", v),
+                String::from("HumanVersion"),
+            ))
+        }
     }
 }
 

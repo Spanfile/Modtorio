@@ -1,6 +1,7 @@
 #![feature(drain_filter)]
 #![feature(async_closure)]
 
+mod cache;
 mod config;
 mod ext;
 mod factorio;
@@ -10,6 +11,7 @@ mod mod_portal;
 mod util;
 
 use ::log::*;
+use cache::Cache;
 use config::Config;
 use mod_portal::ModPortal;
 
@@ -21,10 +23,14 @@ async fn main() -> anyhow::Result<()> {
     log::setup_logging(&config)?;
     config.debug_values();
 
+    let cache = cache::CacheBuilder::new().build()?;
     let portal = ModPortal::new(&config)?;
 
-    let mut factorio = factorio::Importer::from("./sample")
-        .import(&config, &portal)
+    // let mut factorio = factorio::FsImporter::from("./sample")
+    //     .import(&config, &portal, &cache)
+    //     .await?;
+    let mut factorio = factorio::Importer::from_cache(0)
+        .import(&config, &portal, &cache)
         .await?;
 
     info!("Factorio imported. {} mods", factorio.mods.count());

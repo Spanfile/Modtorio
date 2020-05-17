@@ -1,7 +1,7 @@
 mod dependency;
 mod info;
 
-use crate::{util::HumanVersion, ModPortal};
+use crate::{util::HumanVersion, Cache, ModPortal};
 use bytesize::ByteSize;
 use info::Info;
 use log::*;
@@ -10,10 +10,10 @@ use std::{fmt, path::Path};
 pub use dependency::{Dependency, Requirement};
 pub use info::Release;
 
-#[derive(Debug)]
 pub struct Mod<'a> {
     info: Info,
     portal: &'a ModPortal,
+    cache: &'a Cache,
 }
 
 #[derive(Debug)]
@@ -27,38 +27,62 @@ pub enum DownloadResult {
 }
 
 impl<'a> Mod<'a> {
-    pub async fn from_zip<P>(path: P, portal: &'a ModPortal) -> anyhow::Result<Mod<'a>>
+    pub async fn from_zip<P>(
+        path: P,
+        portal: &'a ModPortal,
+        cache: &'a Cache,
+    ) -> anyhow::Result<Mod<'a>>
     where
         P: 'static + AsRef<Path> + Send,
     {
         let info = Info::from_zip(path).await?;
 
-        Ok(Mod { info, portal })
+        Ok(Self {
+            info,
+            portal,
+            cache,
+        })
     }
 
-    pub async fn from_portal(name: &str, portal: &'a ModPortal) -> anyhow::Result<Mod<'a>> {
+    pub async fn from_portal(
+        name: &str,
+        portal: &'a ModPortal,
+        cache: &'a Cache,
+    ) -> anyhow::Result<Mod<'a>> {
         let info = Info::from_portal(name, portal).await?;
 
-        Ok(Self { info, portal })
+        Ok(Self {
+            info,
+            portal,
+            cache,
+        })
     }
 }
 
 impl<'a> Mod<'a> {
-    pub async fn fetch_portal_info(&mut self, portal: &'a ModPortal) -> anyhow::Result<()> {
-        self.info.populate_from_portal(portal).await
+    pub async fn update_portal_info(&mut self) -> anyhow::Result<()> {
+        if let Some(_cache_mod) = self.cache.get_mod(&self.info.name())? {
+            // TODO: check expiry
+            self.info.populate_from_cache(self.cache)?;
+            return Ok(());
+        }
+
+        self.info.populate_from_portal(self.portal).await
     }
 
     pub async fn download<P>(
         &mut self,
         version: Option<HumanVersion>,
         destination: P,
-        portal: &'a ModPortal,
     ) -> anyhow::Result<DownloadResult>
     where
         P: AsRef<Path>,
     {
         let release = self.info.get_release(version)?;
-        let (path, download_size) = portal.download_mod(release.url()?, destination).await?;
+        let (path, download_size) = self
+            .portal
+            .download_mod(release.url()?, destination)
+            .await?;
 
         debug!(
             "{} ({} bytes) downloaded, populating info from {}",

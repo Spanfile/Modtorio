@@ -26,5 +26,9 @@ async-trait = "0.1.30"
 tempfile = "3.1.0"
 chrono = { version = "0.4.11", features = ["serde"] }
 bytesize = "1.0.0"
+rustorm = { version = "0.17.0", features = ["with-sqlite"] }
+rustorm_dao = "0.5.0"
+num-traits = "0.2.11"
+num-derive = "0.3.0"
 
 macros = { path = "../macros" }

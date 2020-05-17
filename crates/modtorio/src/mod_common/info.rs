@@ -3,9 +3,11 @@ use crate::{
     ext::{PathExt, ZipExt},
     mod_portal::ModPortal,
     util::HumanVersion,
+    Cache,
 };
 use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
+use log::*;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use tokio::task;
@@ -205,6 +207,43 @@ impl Info {
         self.releases = Some(info.releases);
 
         Ok(())
+    }
+
+    pub fn populate_from_cache(&mut self, cache: &'_ Cache) -> anyhow::Result<()> {
+        match cache.get_mod(&self.name)? {
+            Some(cache_mod) => {
+                self.display.summary = Some(cache_mod.summary);
+
+                let mut releases = Vec::new();
+                for release in cache.get_releases_of_mod(&self.name)? {
+                    let mut dependencies = Vec::new();
+
+                    for cache_dep in cache.get_dependencies_of_release(release.id)? {
+                        dependencies.push(Dependency::from(cache_dep));
+                    }
+
+                    releases.push(Release {
+                        download_url: PathBuf::from(release.download_url),
+                        file_name: release.file_name,
+                        released_on: release.released_on,
+                        version: release.version,
+                        sha1: release.sha1,
+                        info_object: ReleaseInfoObject {
+                            factorio_version: release.factorio_version,
+                            dependencies,
+                        },
+                    });
+                }
+            }
+            None => {
+                warn!(
+                    "Mod '{}' not in cache while trying to load it from cache",
+                    self.name
+                );
+            }
+        }
+
+        unimplemented!()
     }
 }
 

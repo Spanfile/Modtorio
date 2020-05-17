@@ -11,6 +11,7 @@ const APP_PREFIX: &str = "MODTORIO_";
 
 with_prefix!(prefix_portal "portal_");
 with_prefix!(prefix_log "log_");
+with_prefix!(prefix_cache "cache_");
 
 #[derive(Debug, Deserialize)]
 pub struct Config {
@@ -18,6 +19,8 @@ pub struct Config {
     pub portal: PortalConfig,
     #[serde(flatten, with = "prefix_log")]
     pub log: LogConfig,
+    #[serde(flatten, with = "prefix_cache")]
+    pub cache: CacheConfig,
 }
 
 #[derive(Debug, Deserialize)]
@@ -30,6 +33,12 @@ pub struct PortalConfig {
 pub struct LogConfig {
     #[serde(default)]
     pub level: LogLevel,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CacheConfig {
+    #[serde(default = "default_cache_expiry")]
+    pub expiry: String,
 }
 
 impl Config {
@@ -48,4 +57,8 @@ impl Config {
         debug!("{:?}", util::dump_env_lines(APP_PREFIX));
         debug!("{:?}", self);
     }
+}
+
+fn default_cache_expiry() -> String {
+    String::from("3600")
 }

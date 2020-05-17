@@ -2,7 +2,7 @@ use crate::{
     ext::PathExt,
     mod_common::{DownloadResult, Mod, Requirement},
     util::HumanVersion,
-    Config, ModPortal,
+    Cache, Config, ModPortal,
 };
 use anyhow::anyhow;
 use glob::glob;
@@ -21,7 +21,6 @@ where
     directory: P,
 }
 
-#[derive(Debug)]
 pub struct Mods<'a, P>
 where
     P: AsRef<Path>,
@@ -30,6 +29,7 @@ where
     mods: HashMap<String, Mod<'a>>,
     config: &'a Config,
     portal: &'a ModPortal,
+    cache: &'a Cache,
 }
 
 impl<'a, P> ModsBuilder<P>
@@ -44,6 +44,7 @@ where
         self,
         config: &'a Config,
         portal: &'a ModPortal,
+        cache: &'a Cache,
     ) -> anyhow::Result<Mods<'a, P>> {
         let zips = self.directory.as_ref().join("*.zip");
         let mut mods = HashMap::new();
@@ -52,7 +53,7 @@ where
             let entry = entry?;
             info!("Creating mod from zip {}", entry.display());
 
-            let m = match Mod::from_zip(entry, portal).await {
+            let m = match Mod::from_zip(entry, portal, cache).await {
                 Ok(m) => m,
                 Err(e) => {
                     warn!("Mod failed to load: {}", e);
@@ -89,6 +90,7 @@ where
             mods,
             config,
             portal,
+            cache,
         })
     }
 }
@@ -124,7 +126,7 @@ where
         for m in self.mods.values_mut() {
             info!("Checking for updates to {}...", m);
 
-            m.fetch_portal_info(self.portal).await?;
+            m.update_portal_info().await?;
             let release = m.latest_release()?;
 
             if m.own_version()? < release.version() {
@@ -148,7 +150,7 @@ where
         };
 
         for update in &updates {
-            let updated = self.add_or_update_in_place(update, None).await?;
+            let _ = self.add_or_update_in_place(update, None).await?;
         }
 
         Ok(())
@@ -199,10 +201,7 @@ where
             Entry::Occupied(entry) => {
                 let existing_mod = entry.into_mut();
 
-                match existing_mod
-                    .download(version, &self.directory, self.portal)
-                    .await?
-                {
+                match existing_mod.download(version, &self.directory).await? {
                     DownloadResult::New => info!("{} added", existing_mod),
                     DownloadResult::Unchanged => info!("{} unchanged", existing_mod),
                     DownloadResult::Replaced {
@@ -220,7 +219,7 @@ where
                 Ok(existing_mod)
             }
             Entry::Vacant(entry) => {
-                let new_mod = Mod::from_portal(name, self.portal).await?;
+                let new_mod = Mod::from_portal(name, self.portal, self.cache).await?;
                 Ok(entry.insert(new_mod))
             }
         }
