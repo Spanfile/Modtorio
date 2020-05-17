@@ -50,6 +50,8 @@ where
 
         for entry in glob(zips.get_str()?)? {
             let entry = entry?;
+            info!("Creating mod from zip {}", entry.display());
+
             let m = match Mod::from_zip(entry, portal).await {
                 Ok(m) => m,
                 Err(e) => {
@@ -58,7 +60,7 @@ where
                 }
             };
 
-            debug!("Loaded mod {}", m.display()?);
+            debug!("Loaded mod {}", m);
 
             let name = m.name().to_owned();
             match mods.entry(name) {
@@ -111,7 +113,7 @@ where
         }
 
         let new_mod = self.add_or_update_in_place(name, version).await?;
-        info!("Added {}", new_mod.display()?);
+        info!("Added {}", new_mod);
         Ok(())
     }
 
@@ -120,6 +122,8 @@ where
 
         let mut updates = Vec::new();
         for m in self.mods.values_mut() {
+            info!("Checking for updates to {}...", m);
+
             m.fetch_portal_info(self.portal).await?;
             let release = m.latest_release()?;
 
@@ -134,7 +138,7 @@ where
 
                 updates.push(m.name().to_owned());
             } else {
-                debug!("{} is up to date", m.display()?);
+                debug!("{} is up to date", m);
             }
         }
 
@@ -199,8 +203,8 @@ where
                     .download(version, &self.directory, self.portal)
                     .await?
                 {
-                    DownloadResult::New => info!("{} added", existing_mod.display()?),
-                    DownloadResult::Unchanged => info!("{} unchanged", existing_mod.display()?,),
+                    DownloadResult::New => info!("{} added", existing_mod),
+                    DownloadResult::Unchanged => info!("{} unchanged", existing_mod),
                     DownloadResult::Replaced {
                         old_version,
                         old_archive,
@@ -209,11 +213,7 @@ where
                         let path = self.directory.as_ref().join(old_archive);
                         fs::remove_file(path).await?;
 
-                        info!(
-                            "{} replaced from ver. {}",
-                            existing_mod.display()?,
-                            old_version
-                        );
+                        info!("{} replaced from ver. {}", existing_mod, old_version);
                     }
                 }
 

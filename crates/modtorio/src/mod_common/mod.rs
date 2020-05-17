@@ -5,7 +5,7 @@ use crate::{util::HumanVersion, ModPortal};
 use bytesize::ByteSize;
 use info::Info;
 use log::*;
-use std::path::Path;
+use std::{fmt, path::Path};
 
 pub use dependency::{Dependency, Requirement};
 pub use info::Release;
@@ -31,7 +31,6 @@ impl<'a> Mod<'a> {
     where
         P: 'static + AsRef<Path> + Send,
     {
-        debug!("Creating mod from zip {}", path.as_ref().display());
         let info = Info::from_zip(path).await?;
 
         Ok(Mod { info, portal })
@@ -90,16 +89,19 @@ impl<'a> Mod<'a> {
     }
 }
 
-impl Mod<'_> {
-    pub fn display(&self) -> anyhow::Result<String> {
-        Ok(format!(
+impl fmt::Display for Mod<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_fmt(format_args!(
             "'{}' ('{}') ver. {}",
             self.title(),
             self.name(),
-            self.own_version()?
+            self.own_version()
+                .map_or_else(|_| String::from("unknown"), |v| v.to_string())
         ))
     }
+}
 
+impl Mod<'_> {
     pub fn get_archive_filename(&self) -> anyhow::Result<String> {
         Ok(format!(
             "{}_{}.zip",
