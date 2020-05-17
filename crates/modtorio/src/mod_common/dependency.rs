@@ -103,10 +103,10 @@ impl fmt::Display for Dependency {
     }
 }
 
-impl TryFrom<cache::models::ReleaseDependency> for Dependency {
+impl TryFrom<cache::ReleaseDependency> for Dependency {
     type Error = anyhow::Error;
 
-    fn try_from(dep: cache::models::ReleaseDependency) -> anyhow::Result<Self> {
+    fn try_from(dep: cache::ReleaseDependency) -> anyhow::Result<Self> {
         let version = if let Some(vers) = dep.version_req {
             Some(vers.parse()?)
         } else {

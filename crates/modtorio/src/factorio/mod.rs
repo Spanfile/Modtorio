@@ -1,8 +1,9 @@
 mod mods;
 mod settings;
 
-use crate::{Cache, Config, ModPortal};
+use crate::{ext::PathExt, Cache, Config, ModPortal};
 use anyhow::anyhow;
+use log::*;
 use mods::{Mods, ModsBuilder};
 use settings::ServerSettings;
 use std::{
@@ -13,12 +14,32 @@ use std::{
 pub struct Factorio<'a> {
     pub settings: ServerSettings,
     pub mods: Mods<'a, PathBuf>,
+    root: PathBuf,
+    cache_id: Option<i32>,
+    cache: &'a Cache,
 }
 
 pub struct Importer {
     root: Option<PathBuf>,
     settings: PathBuf,
     game_cache_id: Option<i32>,
+}
+
+impl Factorio<'_> {
+    pub fn update_cache(&mut self) -> anyhow::Result<()> {
+        if let Some(cache_id) = self.cache_id {
+            self.cache.update_game(cache_id, self.root.get_str()?)?;
+
+            debug!("Updated existing game cache (id {})", cache_id);
+        } else {
+            let new_id = self.cache.insert_game(self.root.get_str()?)?;
+            self.cache_id = Some(new_id);
+
+            debug!("Inserted new game cache (id {})", new_id);
+        }
+
+        Ok(())
+    }
 }
 
 impl Importer {
@@ -58,15 +79,15 @@ impl Importer {
         portal: &'a ModPortal,
         cache: &'a Cache,
     ) -> anyhow::Result<Factorio<'a>> {
-        let root_path = self.root;
-        let cached_path = self
-            .game_cache_id
-            .and_then(|id| cache.get_game(id).ok())
-            .map(|game| PathBuf::from(game.path));
+        let (root, cache_id) = match self.game_cache_id {
+            Some(id) => {
+                let cached_game = cache.get_game(id)?;
+                (Some(PathBuf::from(cached_game.path)), Some(cached_game.id))
+            }
+            None => (self.root, None),
+        };
 
-        let root = root_path.or(cached_path).ok_or_else(|| {
-            anyhow!("cannot determine game root: root not set and game_cache_id is invalid")
-        })?;
+        let root = root.ok_or_else(|| anyhow!("no valid game root"))?;
 
         let mut settings_path = root.clone();
         settings_path.push(self.settings);
@@ -79,6 +100,9 @@ impl Importer {
             mods: ModsBuilder::root(mods_path)
                 .build(config, portal, cache)
                 .await?,
+            root,
+            cache_id,
+            cache,
         })
     }
 }

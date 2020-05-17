@@ -1,9 +1,16 @@
-use diesel::Queryable;
+use super::schema::game;
+use diesel::{Insertable, Queryable};
 
 #[derive(Debug, Queryable)]
 pub struct Game {
     pub id: i32,
     pub path: String,
+}
+
+#[derive(Debug, Insertable)]
+#[table_name = "game"]
+pub struct NewGame<'a> {
+    pub path: &'a str,
 }
 
 #[derive(Debug, Queryable)]

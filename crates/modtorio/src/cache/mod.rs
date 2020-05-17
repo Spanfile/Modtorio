@@ -1,8 +1,9 @@
-pub mod models;
+mod models;
 mod schema;
 
 use crate::ext::PathExt;
 use diesel::prelude::*;
+pub use models::{Game, ReleaseDependency};
 use std::{
     env,
     path::{Path, PathBuf},
@@ -32,7 +33,6 @@ impl CacheBuilder {
     {
         Self {
             db_path: PathBuf::from(path.as_ref()),
-            ..self
         }
     }
 
@@ -44,9 +44,33 @@ impl CacheBuilder {
 }
 
 impl Cache {
-    pub fn get_game(&self, game_id: i32) -> anyhow::Result<models::Game> {
-        use schema::game::dsl::*;
-        Ok(game.filter(id.eq(game_id)).first(&self.conn)?)
+    pub fn get_game(&self, id: i32) -> anyhow::Result<Game> {
+        use schema::game::dsl;
+        Ok(dsl::game.filter(dsl::id.eq(id)).first(&self.conn)?)
+    }
+
+    pub fn insert_game(&self, path: &str) -> anyhow::Result<i32> {
+        use schema::{game, game::dsl};
+
+        let new_game = models::NewGame { path };
+
+        diesel::insert_into(game::table)
+            .values(&new_game)
+            .execute(&self.conn)?;
+
+        Ok(dsl::game
+            .order(dsl::id.desc())
+            .first::<Game>(&self.conn)?
+            .id)
+    }
+
+    pub fn update_game(&self, id: i32, path: &str) -> anyhow::Result<()> {
+        use schema::game::dsl;
+
+        diesel::update(dsl::game.find(id))
+            .set(dsl::path.eq(path))
+            .execute(&self.conn)?;
+        Ok(())
     }
 
     pub fn get_mod(&self, n: &str) -> anyhow::Result<Option<models::GameMod>> {
