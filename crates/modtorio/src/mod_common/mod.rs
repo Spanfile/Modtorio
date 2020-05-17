@@ -5,15 +5,15 @@ use crate::{util::HumanVersion, ModPortal};
 use bytesize::ByteSize;
 use info::Info;
 use log::*;
-use std::{path::Path, sync::Arc};
+use std::path::Path;
 
 pub use dependency::{Dependency, Requirement};
 pub use info::Release;
 
 #[derive(Debug)]
-pub struct Mod {
+pub struct Mod<'a> {
     info: Info,
-    portal: Arc<ModPortal>,
+    portal: &'a ModPortal,
 }
 
 #[derive(Debug)]
@@ -26,8 +26,8 @@ pub enum DownloadResult {
     },
 }
 
-impl<'a> Mod {
-    pub async fn from_zip<P>(path: P, portal: Arc<ModPortal>) -> anyhow::Result<Mod>
+impl<'a> Mod<'a> {
+    pub async fn from_zip<P>(path: P, portal: &'a ModPortal) -> anyhow::Result<Mod<'a>>
     where
         P: 'static + AsRef<Path> + Send,
     {
@@ -37,15 +37,15 @@ impl<'a> Mod {
         Ok(Mod { info, portal })
     }
 
-    pub async fn from_portal(name: &str, portal: Arc<ModPortal>) -> anyhow::Result<Mod> {
-        let info = Info::from_portal(name, Arc::clone(&portal)).await?;
+    pub async fn from_portal(name: &str, portal: &'a ModPortal) -> anyhow::Result<Mod<'a>> {
+        let info = Info::from_portal(name, portal).await?;
 
         Ok(Self { info, portal })
     }
 }
 
-impl<'a> Mod {
-    pub async fn fetch_portal_info(&mut self, portal: Arc<ModPortal>) -> anyhow::Result<()> {
+impl<'a> Mod<'a> {
+    pub async fn fetch_portal_info(&mut self, portal: &'a ModPortal) -> anyhow::Result<()> {
         self.info.populate_from_portal(portal).await
     }
 
@@ -53,7 +53,7 @@ impl<'a> Mod {
         &mut self,
         version: Option<HumanVersion>,
         destination: P,
-        portal: Arc<ModPortal>,
+        portal: &'a ModPortal,
     ) -> anyhow::Result<DownloadResult>
     where
         P: AsRef<Path>,
@@ -90,7 +90,7 @@ impl<'a> Mod {
     }
 }
 
-impl Mod {
+impl Mod<'_> {
     pub fn display(&self) -> anyhow::Result<String> {
         Ok(format!(
             "'{}' ('{}') ver. {}",

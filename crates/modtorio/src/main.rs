@@ -12,20 +12,19 @@ mod util;
 use ::log::*;
 use config::Config;
 use mod_portal::ModPortal;
-use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv()?;
-    let config = Arc::new(Config::from_env()?);
+    let config = Config::from_env()?;
 
     log::setup_logging(&config)?;
     config.debug_values();
 
-    let portal = Arc::new(ModPortal::new(&config)?);
+    let portal = ModPortal::new(&config)?;
 
     let mut factorio = factorio::Importer::from("./sample")
-        .import(Arc::clone(&config), Arc::clone(&portal))
+        .import(&config, &portal)
         .await?;
 
     info!("Factorio imported. {} mods", factorio.mods.count());
