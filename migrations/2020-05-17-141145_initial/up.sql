@@ -19,9 +19,14 @@ CREATE TABLE IF NOT EXISTS "release_dependency" (
 	"requirement"	INTEGER NOT NULL,
 	"version_req"	TEXT
 );
-CREATE TABLE IF NOT EXISTS "game_mod" (
+CREATE TABLE IF NOT EXISTS "factorio_mod" (
 	"name"	TEXT NOT NULL,
 	"summary"	TEXT,
 	"last_updated"	TEXT NOT NULL,
 	PRIMARY KEY("name")
+);
+CREATE TABLE IF NOT EXISTS "game_mod" (
+	"id"	INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+	"mod_name"	TEXT NOT NULL,
+	"game"	INTEGER NOT NULL
 );

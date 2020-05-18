@@ -1,4 +1,12 @@
 table! {
+    factorio_mod (name) {
+        name -> Text,
+        summary -> Nullable<Text>,
+        last_updated -> Text,
+    }
+}
+
+table! {
     game (id) {
         id -> Integer,
         path -> Text,
@@ -6,10 +14,10 @@ table! {
 }
 
 table! {
-    game_mod (name) {
-        name -> Text,
-        summary -> Nullable<Text>,
-        last_updated -> Text,
+    game_mod (id) {
+        id -> Integer,
+        mod_name -> Text,
+        game -> Integer,
     }
 }
 
@@ -37,6 +45,7 @@ table! {
 }
 
 allow_tables_to_appear_in_same_query!(
+    factorio_mod,
     game,
     game_mod,
     mod_release,

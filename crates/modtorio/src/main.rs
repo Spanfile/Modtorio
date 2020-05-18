@@ -30,12 +30,12 @@ async fn main() -> anyhow::Result<()> {
     let cache = cache::CacheBuilder::new().build()?;
     let portal = ModPortal::new(&config)?;
 
-    // let mut factorio = factorio::Importer::from_root("./sample")
-    //     .import(&config, &portal, &cache)
-    //     .await?;
-    let mut factorio = factorio::Importer::from_cache(1)
+    let mut factorio = factorio::Importer::from_root("./sample")
         .import(&config, &portal, &cache)
         .await?;
+    // let mut factorio = factorio::Importer::from_cache(1)
+    //     .import(&config, &portal, &cache)
+    //     .await?;
 
     info!("Factorio imported. {} mods", factorio.mods.count());
 
@@ -44,8 +44,8 @@ async fn main() -> anyhow::Result<()> {
     //     .add_from_portal("angelsindustries", None)
     //     .await?;
 
-    factorio.mods.update().await?;
-    factorio.mods.ensure_dependencies().await?;
+    // factorio.mods.update().await?;
+    // factorio.mods.ensure_dependencies().await?;
     factorio.update_cache()?;
 
     Ok(())

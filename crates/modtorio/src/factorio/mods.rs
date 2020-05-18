@@ -102,6 +102,14 @@ where
         self.mods.len()
     }
 
+    pub fn update_cache(&mut self, game_id: i32) -> anyhow::Result<()> {
+        for game_mod in self.mods.values_mut() {
+            let mod_id = game_mod.update_cache()?;
+        }
+
+        Ok(())
+    }
+
     pub async fn add_from_portal(
         &mut self,
         name: &str,

@@ -14,6 +14,7 @@ pub struct Mod<'a> {
     info: Info,
     portal: &'a ModPortal,
     cache: &'a Cache,
+    cache_id: Option<i32>,
 }
 
 #[derive(Debug)]
@@ -41,6 +42,7 @@ impl<'a> Mod<'a> {
             info,
             portal,
             cache,
+            cache_id: None,
         })
     }
 
@@ -55,11 +57,22 @@ impl<'a> Mod<'a> {
             info,
             portal,
             cache,
+            cache_id: None,
         })
     }
 }
 
 impl<'a> Mod<'a> {
+    pub fn update_cache(&mut self) -> anyhow::Result<i32> {
+        let id = if let Some(cache_id) = self.cache_id {
+            0
+        } else {
+            0
+        };
+
+        Ok(id)
+    }
+
     /// Fetch the latest info from portal
     pub async fn fetch_portal_info(&mut self) -> anyhow::Result<()> {
         self.info.populate_from_portal(self.portal).await

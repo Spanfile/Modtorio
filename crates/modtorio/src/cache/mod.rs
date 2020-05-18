@@ -3,7 +3,7 @@ mod schema;
 
 use crate::ext::PathExt;
 use diesel::prelude::*;
-pub use models::{Game, ReleaseDependency};
+pub use models::{Game, GameMod, ReleaseDependency};
 use std::{
     env,
     path::{Path, PathBuf},
@@ -73,19 +73,11 @@ impl Cache {
         Ok(())
     }
 
-    pub fn get_mod(&self, n: &str) -> anyhow::Result<Option<models::GameMod>> {
-        use schema::game_mod::dsl::*;
-        Ok(game_mod.filter(name.eq(n)).first(&self.conn).optional()?)
-    }
+    pub fn get_game_mod_of_game(&self, id: i32) -> anyhow::Result<Vec<GameMod>> {
+        use schema::game_mod::dsl;
 
-    pub fn get_releases_of_mod(&self, name: &str) -> anyhow::Result<Vec<models::ModRelease>> {
-        unimplemented!()
-    }
-
-    pub fn get_dependencies_of_release(
-        &self,
-        release: i32,
-    ) -> anyhow::Result<Vec<models::ReleaseDependency>> {
-        unimplemented!()
+        Ok(dsl::game_mod
+            .filter(dsl::game.eq(id))
+            .get_results(&self.conn)?)
     }
 }

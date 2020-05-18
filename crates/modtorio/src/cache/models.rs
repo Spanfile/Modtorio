@@ -14,10 +14,17 @@ pub struct NewGame<'a> {
 }
 
 #[derive(Debug, Queryable)]
-pub struct GameMod {
+pub struct FactorioMod {
     pub name: String,
     pub summary: Option<String>,
     pub last_updated: String,
+}
+
+#[derive(Debug, Queryable)]
+pub struct GameMod {
+    pub id: i32,
+    pub mod_name: String,
+    pub game: i32,
 }
 
 #[derive(Debug, Queryable)]
