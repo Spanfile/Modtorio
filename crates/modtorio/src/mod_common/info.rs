@@ -44,7 +44,7 @@ pub struct Versions {
     factorio: HumanVersion,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct Release {
     download_url: PathBuf,
     file_name: String,
@@ -56,7 +56,7 @@ pub struct Release {
     info_object: ReleaseInfoObject,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 struct ReleaseInfoObject {
     factorio_version: HumanVersion,
     dependencies: Vec<Dependency>,
@@ -276,20 +276,22 @@ impl Info {
         Ok(self.versions()?.own)
     }
 
-    pub fn releases(&self) -> anyhow::Result<&Vec<Release>> {
+    pub fn releases(&self) -> anyhow::Result<Vec<Release>> {
         Ok(self
             .releases
             .as_ref()
+            .map(|v| v.clone())
             .ok_or_else(|| anyhow!("Missing releases (has the mod been fetched from portal?)"))?)
     }
 
-    pub fn get_release(&self, version: Option<HumanVersion>) -> anyhow::Result<&Release> {
+    pub fn get_release(&self, version: Option<HumanVersion>) -> anyhow::Result<Release> {
         let releases = self.releases()?;
 
         match version {
             Some(version) => releases
                 .iter()
                 .find(|r| r.version == version)
+                .map(|r| r.clone())
                 .ok_or_else(|| {
                     anyhow!(
                         "Mod '{}' doesn't have a release version {}",
@@ -300,13 +302,15 @@ impl Info {
             None => releases
                 .iter()
                 .last()
+                .map(|r| r.clone())
                 .ok_or_else(|| anyhow!("Mod '{}' has no releases", self.name)),
         }
     }
 
-    pub fn dependencies(&self) -> anyhow::Result<&[Dependency]> {
+    pub fn dependencies(&self) -> anyhow::Result<Vec<Dependency>> {
         self.dependencies
-            .as_deref()
+            .as_ref()
+            .map(|d| d.clone())
             .ok_or_else(|| anyhow!("Missing dependencies (has the mod been fetched from portal?)"))
     }
 }

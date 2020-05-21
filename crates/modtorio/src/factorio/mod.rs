@@ -9,14 +9,16 @@ use settings::ServerSettings;
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::Arc,
 };
+use tokio::sync::Mutex;
 
-pub struct Factorio<'a> {
+pub struct Factorio {
     pub settings: ServerSettings,
-    pub mods: Mods<'a, PathBuf>,
+    pub mods: Mods<PathBuf>,
     root: PathBuf,
-    cache_id: Option<i32>,
-    cache: &'a Cache,
+    cache_id: Mutex<Option<i32>>,
+    cache: Arc<Cache>,
 }
 
 pub struct Importer {
@@ -25,20 +27,22 @@ pub struct Importer {
     game_cache_id: Option<i32>,
 }
 
-impl Factorio<'_> {
-    pub async fn update_cache(&mut self) -> anyhow::Result<()> {
-        let id = if let Some(cache_id) = self.cache_id {
+impl Factorio {
+    pub async fn update_cache(&self) -> anyhow::Result<()> {
+        let mut cache_id = self.cache_id.lock().await;
+
+        let id = if let Some(c) = *cache_id {
             self.cache
                 .update_game(
-                    cache_id,
+                    c,
                     models::NewGame {
                         path: self.root.get_str()?.to_string(),
                     },
                 )
                 .await?;
 
-            debug!("Updating existing game cache (id {})", cache_id);
-            cache_id
+            debug!("Updating existing game cache (id {})", c);
+            c
         } else {
             let new_id = self
                 .cache
@@ -46,7 +50,7 @@ impl Factorio<'_> {
                     path: self.root.get_str()?.to_string(),
                 })
                 .await?;
-            self.cache_id = Some(new_id);
+            *cache_id = Some(new_id);
 
             debug!("Inserting new game cache (id {})", new_id);
             new_id
@@ -91,10 +95,10 @@ impl Importer {
 
     pub async fn import<'a>(
         self,
-        config: &'a Config,
-        portal: &'a ModPortal,
-        cache: &'a Cache,
-    ) -> anyhow::Result<Factorio<'a>> {
+        config: Arc<Config>,
+        portal: Arc<ModPortal>,
+        cache: Arc<Cache>,
+    ) -> anyhow::Result<Factorio> {
         let (root, cache_id) = match self.game_cache_id {
             Some(id) => {
                 let cached_game = cache.get_game(id).await?;
@@ -114,10 +118,10 @@ impl Importer {
         Ok(Factorio {
             settings: ServerSettings::from_game_json(&fs::read_to_string(settings_path)?)?,
             mods: ModsBuilder::root(mods_path)
-                .build(config, portal, cache)
+                .build(config, portal, Arc::clone(&cache))
                 .await?,
             root,
-            cache_id,
+            cache_id: Mutex::new(cache_id),
             cache,
         })
     }

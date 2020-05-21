@@ -6,15 +6,16 @@ use bytesize::ByteSize;
 use chrono::Utc;
 use info::Info;
 use log::*;
-use std::{fmt, path::Path};
+use std::{path::Path, sync::Arc};
+use tokio::sync::Mutex;
 
 pub use dependency::{Dependency, Requirement};
 pub use info::Release;
 
-pub struct Mod<'a> {
-    info: Info,
-    portal: &'a ModPortal,
-    cache: &'a Cache,
+pub struct Mod {
+    info: Mutex<Info>,
+    portal: Arc<ModPortal>,
+    cache: Arc<Cache>,
 }
 
 #[derive(Debug)]
@@ -27,16 +28,16 @@ pub enum DownloadResult {
     },
 }
 
-impl<'a> Mod<'a> {
+impl Mod {
     pub async fn from_zip<P>(
         path: P,
-        portal: &'a ModPortal,
-        cache: &'a Cache,
-    ) -> anyhow::Result<Mod<'a>>
+        portal: Arc<ModPortal>,
+        cache: Arc<Cache>,
+    ) -> anyhow::Result<Mod>
     where
         P: 'static + AsRef<Path> + Send,
     {
-        let info = Info::from_zip(path).await?;
+        let info = Mutex::new(Info::from_zip(path).await?);
 
         Ok(Self {
             info,
@@ -47,10 +48,10 @@ impl<'a> Mod<'a> {
 
     pub async fn from_portal(
         name: &str,
-        portal: &'a ModPortal,
-        cache: &'a Cache,
-    ) -> anyhow::Result<Mod<'a>> {
-        let info = Info::from_portal(name, portal).await?;
+        portal: Arc<ModPortal>,
+        cache: Arc<Cache>,
+    ) -> anyhow::Result<Mod> {
+        let info = Mutex::new(Info::from_portal(name, portal.as_ref()).await?);
 
         Ok(Self {
             info,
@@ -60,12 +61,14 @@ impl<'a> Mod<'a> {
     }
 }
 
-impl<'a> Mod<'a> {
-    pub async fn update_cache(&mut self) -> anyhow::Result<()> {
-        if !self.info.is_portal_populated() {
+impl Mod {
+    pub async fn update_cache(&self) -> anyhow::Result<()> {
+        let info = self.info.lock().await;
+
+        if !info.is_portal_populated() {
             debug!(
                 "Info not populated from portal before updating cache for '{}', populating...",
-                self
+                self.display().await?
             );
 
             self.fetch_portal_info().await?;
@@ -73,16 +76,16 @@ impl<'a> Mod<'a> {
 
         self.cache
             .set_factorio_mod(models::NewFactorioMod {
-                name: self.info.name().to_string(),
-                summary: self.info.summary().map(|s| s.to_string()),
+                name: info.name().to_string(),
+                summary: info.summary().map(|s| s.to_string()),
                 last_updated: Utc::now().to_string(),
             })
             .await?;
 
-        for release in self.releases()? {
+        for release in self.releases().await? {
             self.cache
                 .set_mod_release(models::NewModRelease {
-                    factorio_mod: self.info.name().to_string(),
+                    factorio_mod: info.name().to_string(),
                     download_url: release.url()?.to_string(),
                     file_name: release.file_name().to_string(),
                     released_on: release.released_on().to_string(),
@@ -98,7 +101,7 @@ impl<'a> Mod<'a> {
                         .dependencies()
                         .into_iter()
                         .map(|dependency| models::NewReleaseDependency {
-                            release_mod_name: self.info.name().to_string(),
+                            release_mod_name: info.name().to_string(),
                             release_version: release.version().to_string(),
                             name: dependency.name().to_string(),
                             requirement: dependency.requirement() as i32,
@@ -113,8 +116,9 @@ impl<'a> Mod<'a> {
     }
 
     /// Fetch the latest info from portal
-    pub async fn fetch_portal_info(&mut self) -> anyhow::Result<()> {
-        self.info.populate_from_portal(self.portal).await
+    pub async fn fetch_portal_info(&self) -> anyhow::Result<()> {
+        let mut info = self.info.lock().await;
+        info.populate_from_portal(self.portal.as_ref()).await
     }
 
     /// Load the potentially missing portal info by first reading it from cache, and then fetching
@@ -130,14 +134,16 @@ impl<'a> Mod<'a> {
     }
 
     pub async fn download<P>(
-        &mut self,
+        &self,
         version: Option<HumanVersion>,
         destination: P,
     ) -> anyhow::Result<DownloadResult>
     where
         P: AsRef<Path>,
     {
-        let release = self.info.get_release(version)?;
+        let mut info = self.info.lock().await;
+
+        let release = info.get_release(version)?;
         let (path, download_size) = self
             .portal
             .download_mod(release.url()?, destination)
@@ -150,70 +156,74 @@ impl<'a> Mod<'a> {
             path.display()
         );
 
-        let old_version = self.own_version().ok();
-        let old_archive = self.get_archive_filename()?;
-        self.info.populate_from_zip(path).await?;
+        let old_version = self.own_version().await.ok();
+        let old_archive = self.get_archive_filename().await?;
+        info.populate_from_zip(path).await?;
 
         if let Some(old_version) = old_version {
-            if old_version == self.own_version()? {
-                debug!("'{}' unchaged after download", self.name());
+            if old_version == self.own_version().await? {
+                debug!("'{}' unchaged after download", self.name().await);
                 Ok(DownloadResult::Unchanged)
             } else {
-                debug!("'{}' changed from ver. {}", self.name(), old_version);
+                debug!("'{}' changed from ver. {}", self.name().await, old_version);
                 Ok(DownloadResult::Replaced {
                     old_version,
                     old_archive,
                 })
             }
         } else {
-            debug!("'{}' newly downloaded", self.name());
+            debug!("'{}' newly downloaded", self.name().await);
             Ok(DownloadResult::New)
         }
     }
 }
 
-impl fmt::Display for Mod<'_> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_fmt(format_args!(
+impl Mod {
+    pub async fn display(&self) -> anyhow::Result<String> {
+        Ok(format!(
             "'{}' ('{}') ver. {}",
-            self.title(),
-            self.name(),
+            self.title().await,
+            self.name().await,
             self.own_version()
+                .await
                 .map_or_else(|_| String::from("unknown"), |v| v.to_string())
         ))
     }
 }
 
-impl Mod<'_> {
-    pub fn get_archive_filename(&self) -> anyhow::Result<String> {
-        Ok(format!(
-            "{}_{}.zip",
-            self.info.name(),
-            self.info.own_version()?
-        ))
+impl Mod {
+    pub async fn get_archive_filename(&self) -> anyhow::Result<String> {
+        let info = self.info.lock().await;
+        Ok(format!("{}_{}.zip", info.name(), info.own_version()?))
     }
 
-    pub fn name(&self) -> &str {
-        self.info.name()
+    pub async fn name(&self) -> String {
+        let info = self.info.lock().await;
+        info.name().to_string()
     }
 
-    pub fn title(&self) -> &str {
-        self.info.title()
+    pub async fn title(&self) -> String {
+        let info = self.info.lock().await;
+        info.title().to_string()
     }
 
-    pub fn own_version(&self) -> anyhow::Result<HumanVersion> {
-        self.info.own_version()
+    pub async fn own_version(&self) -> anyhow::Result<HumanVersion> {
+        let info = self.info.lock().await;
+        info.own_version()
     }
 
-    pub fn releases(&self) -> anyhow::Result<&Vec<Release>> {
-        self.info.releases()
+    pub async fn releases(&self) -> anyhow::Result<Vec<Release>> {
+        let info = self.info.lock().await;
+        info.releases()
     }
 
-    pub fn latest_release(&self) -> anyhow::Result<&Release> {
-        self.info.get_release(None)
+    pub async fn latest_release(&self) -> anyhow::Result<Release> {
+        let info = self.info.lock().await;
+        info.get_release(None)
     }
 
-    pub fn dependencies(&self) -> anyhow::Result<&[Dependency]> {
-        self.info.dependencies()
+    pub async fn dependencies(&self) -> anyhow::Result<Vec<Dependency>> {
+        let info = self.info.lock().await;
+        info.dependencies()
     }
 }

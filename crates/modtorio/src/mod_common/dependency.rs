@@ -13,7 +13,7 @@ pub enum Requirement {
     Incompatible,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Dependency {
     requirement: Requirement,
     name: String,

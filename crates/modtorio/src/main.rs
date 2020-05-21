@@ -18,21 +18,24 @@ use ::log::*;
 use cache::Cache;
 use config::Config;
 use mod_portal::ModPortal;
+use std::sync::Arc;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv()?;
-    let config = Config::from_env()?;
+    let config = Arc::new(Config::from_env()?);
 
     log::setup_logging(&config)?;
     config.debug_values();
 
-    let cache = cache::CacheBuilder::new().build()?;
-    let portal = ModPortal::new(&config)?;
+    let cache = Arc::new(cache::CacheBuilder::new().build()?);
+    let portal = Arc::new(ModPortal::new(&config)?);
 
-    let mut factorio = factorio::Importer::from_root("./sample")
-        .import(&config, &portal, &cache)
-        .await?;
+    let factorio = Arc::new(
+        factorio::Importer::from_root("./sample")
+            .import(config, portal, cache)
+            .await?,
+    );
     // let mut factorio = factorio::Importer::from_cache(1)
     //     .import(&config, &portal, &cache)
     //     .await?;
