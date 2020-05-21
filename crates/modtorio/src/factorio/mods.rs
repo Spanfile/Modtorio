@@ -62,7 +62,7 @@ where
                 }
             };
 
-            debug!("Loaded mod {}", m.display().await?);
+            debug!("Loaded mod {}", m.display().await);
 
             let name = m.name().await.to_owned();
             match mods.entry(name) {
@@ -108,7 +108,7 @@ where
 
     pub async fn update_cache(&self, game_id: i32) -> anyhow::Result<()> {
         for game_mod in self.mods.values() {
-            debug!("Updating cache for {}", game_mod.display().await?);
+            debug!("Updating cache for {}", game_mod.display().await);
             game_mod.update_cache().await?;
         }
 
@@ -141,7 +141,7 @@ where
         }
 
         let new_mod = self.add_or_update_in_place(name, version).await?;
-        info!("Added {}", new_mod.display().await?);
+        info!("Added {}", new_mod.display().await);
         Ok(())
     }
 
@@ -150,7 +150,7 @@ where
 
         let mut updates = Vec::new();
         for m in self.mods.values_mut() {
-            info!("Checking for updates to {}...", m.display().await?);
+            info!("Checking for updates to {}...", m.display().await);
 
             m.fetch_portal_info().await?;
             let release = m.latest_release().await?;
@@ -166,7 +166,7 @@ where
 
                 updates.push(m.name().await.to_owned());
             } else {
-                debug!("{} is up to date", m.display().await?);
+                debug!("{} is up to date", m.display().await);
             }
         }
 
@@ -228,9 +228,9 @@ where
                 let existing_mod = entry.into_mut();
 
                 match existing_mod.download(version, &self.directory).await? {
-                    DownloadResult::New => info!("{} added", existing_mod.display().await?),
+                    DownloadResult::New => info!("{} added", existing_mod.display().await),
                     DownloadResult::Unchanged => {
-                        info!("{} unchanged", existing_mod.display().await?)
+                        info!("{} unchanged", existing_mod.display().await)
                     }
                     DownloadResult::Replaced {
                         old_version,
@@ -242,7 +242,7 @@ where
 
                         info!(
                             "{} replaced from ver. {}",
-                            existing_mod.display().await?,
+                            existing_mod.display().await,
                             old_version
                         );
                     }

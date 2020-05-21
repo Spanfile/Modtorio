@@ -63,52 +63,60 @@ impl Mod {
 
 impl Mod {
     pub async fn update_cache(&self) -> anyhow::Result<()> {
-        let info = self.info.lock().await;
-
-        if !info.is_portal_populated() {
+        if !self.is_portal_populated().await {
             debug!(
-                "Info not populated from portal before updating cache for '{}', populating...",
-                self.display().await?
+                "Info not populated from portal before updating cache for {}, populating...",
+                self.display().await
             );
 
             self.fetch_portal_info().await?;
         }
 
-        self.cache
-            .set_factorio_mod(models::NewFactorioMod {
-                name: info.name().to_string(),
-                summary: info.summary().map(|s| s.to_string()),
-                last_updated: Utc::now().to_string(),
-            })
-            .await?;
+        let new_factorio_mod = models::NewFactorioMod {
+            name: self.name().await,
+            summary: self.summary().await,
+            last_updated: Utc::now().to_string(),
+        };
+        trace!("'{}' cached mod: {:?}", self.name().await, new_factorio_mod);
+        self.cache.set_factorio_mod(new_factorio_mod).await?;
 
         for release in self.releases().await? {
-            self.cache
-                .set_mod_release(models::NewModRelease {
-                    factorio_mod: info.name().to_string(),
-                    download_url: release.url()?.to_string(),
-                    file_name: release.file_name().to_string(),
-                    released_on: release.released_on().to_string(),
-                    version: release.version().to_string(),
-                    sha1: release.sha1().to_string(),
-                    factorio_version: release.factorio_version().to_string(),
-                })
-                .await?;
+            let new_mod_release = models::NewModRelease {
+                factorio_mod: self.name().await,
+                download_url: release.url()?.to_string(),
+                file_name: release.file_name().to_string(),
+                released_on: release.released_on().to_string(),
+                version: release.version().to_string(),
+                sha1: release.sha1().to_string(),
+                factorio_version: release.factorio_version().to_string(),
+            };
+            trace!(
+                "'{}'s cached release {}: {:?}",
+                self.name().await,
+                release.version(),
+                new_mod_release
+            );
+            self.cache.set_mod_release(new_mod_release).await?;
 
+            let mut new_release_dependencies = Vec::new();
+            for dependency in release.dependencies().into_iter() {
+                new_release_dependencies.push(models::NewReleaseDependency {
+                    release_mod_name: self.name().await,
+                    release_version: release.version().to_string(),
+                    name: dependency.name().to_string(),
+                    requirement: dependency.requirement() as i32,
+                    version_req: dependency.version().map(|v| v.to_string()),
+                });
+            }
+
+            trace!(
+                "'{}'s release {}'s cached dependencies: {:?}",
+                self.name().await,
+                release.version(),
+                new_release_dependencies
+            );
             self.cache
-                .set_release_dependencies(
-                    release
-                        .dependencies()
-                        .into_iter()
-                        .map(|dependency| models::NewReleaseDependency {
-                            release_mod_name: info.name().to_string(),
-                            release_version: release.version().to_string(),
-                            name: dependency.name().to_string(),
-                            requirement: dependency.requirement() as i32,
-                            version_req: dependency.version().map(|v| v.to_string()),
-                        })
-                        .collect::<Vec<models::NewReleaseDependency>>(),
-                )
+                .set_release_dependencies(new_release_dependencies)
                 .await?;
         }
 
@@ -179,19 +187,14 @@ impl Mod {
 }
 
 impl Mod {
-    pub async fn display(&self) -> anyhow::Result<String> {
-        Ok(format!(
-            "'{}' ('{}') ver. {}",
-            self.title().await,
-            self.name().await,
-            self.own_version()
-                .await
-                .map_or_else(|_| String::from("unknown"), |v| v.to_string())
-        ))
+    async fn is_portal_populated(&self) -> bool {
+        self.info.lock().await.is_portal_populated()
     }
-}
 
-impl Mod {
+    pub async fn display(&self) -> String {
+        self.info.lock().await.display()
+    }
+
     pub async fn get_archive_filename(&self) -> anyhow::Result<String> {
         let info = self.info.lock().await;
         Ok(format!("{}_{}.zip", info.name(), info.own_version()?))
@@ -205,6 +208,11 @@ impl Mod {
     pub async fn title(&self) -> String {
         let info = self.info.lock().await;
         info.title().to_string()
+    }
+
+    pub async fn summary(&self) -> Option<String> {
+        let info = self.info.lock().await;
+        info.summary().map(|s| s.to_string())
     }
 
     pub async fn own_version(&self) -> anyhow::Result<HumanVersion> {

@@ -7,6 +7,7 @@ use crate::{
 };
 use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
+use log::*;
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 use tokio::task;
@@ -200,8 +201,10 @@ impl Info {
     }
 
     pub async fn populate_from_portal(&mut self, portal: &ModPortal) -> anyhow::Result<()> {
+        trace!("Populating '{}' from portal", self.name);
         let info: PortalInfo = portal.fetch_mod(&self.name).await?;
 
+        trace!("'{}' got PortalInfo: {:?}", self.name, info);
         self.display.summary = Some(info.summary);
         self.releases = Some(info.releases);
 
@@ -247,6 +250,16 @@ impl Info {
 }
 
 impl Info {
+    pub fn display(&self) -> String {
+        format!(
+            "'{}' ('{}') ver. {}",
+            self.display.title,
+            self.name,
+            self.versions
+                .map_or_else(|| String::from("unknown"), |v| v.own.to_string())
+        )
+    }
+
     // TODO this is a bad method
     /// Determines if the info has been populated from the mod portal, based on if there are
     /// existing releases
