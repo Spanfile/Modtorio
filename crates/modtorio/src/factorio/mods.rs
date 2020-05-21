@@ -1,4 +1,5 @@
 use crate::{
+    cache::models,
     ext::PathExt,
     mod_common::{DownloadResult, Mod, Requirement},
     util::HumanVersion,
@@ -102,10 +103,22 @@ where
         self.mods.len()
     }
 
-    pub fn update_cache(&mut self, game_id: i32) -> anyhow::Result<()> {
+    pub async fn update_cache(&mut self, game_id: i32) -> anyhow::Result<()> {
         for game_mod in self.mods.values_mut() {
-            let mod_id = game_mod.update_cache()?;
+            debug!("Updating cache for {}", game_mod);
+            game_mod.update_cache().await?;
         }
+
+        let cache_mods = self
+            .mods
+            .values()
+            .map(|m| models::NewGameMod {
+                game: game_id,
+                factorio_mod: m.name(),
+            })
+            .collect::<Vec<models::NewGameMod>>();
+
+        self.cache.set_mods_of_game(&cache_mods)?;
 
         Ok(())
     }

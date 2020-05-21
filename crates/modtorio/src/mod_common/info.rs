@@ -7,12 +7,8 @@ use crate::{
 };
 use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
-use log::*;
 use serde::Deserialize;
-use std::{
-    convert::TryFrom,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 use tokio::task;
 
 #[derive(Debug)]
@@ -213,44 +209,51 @@ impl Info {
     }
 
     pub fn populate_from_cache(&mut self, cache: &'_ Cache) -> anyhow::Result<()> {
-        match cache.get_mod(&self.name)? {
-            Some(cache_mod) => {
-                self.display.summary = cache_mod.summary;
+        // match cache.get_mod(&self.name)? {
+        //     Some(cache_mod) => {
+        //         self.display.summary = cache_mod.summary;
 
-                let mut releases = Vec::new();
-                for release in cache.get_releases_of_mod(&self.name)? {
-                    let mut dependencies = Vec::new();
+        //         let mut releases = Vec::new();
+        //         for release in cache.get_releases_of_mod(&self.name)? {
+        //             let mut dependencies = Vec::new();
 
-                    for cache_dep in cache.get_dependencies_of_release(release.id)? {
-                        dependencies.push(Dependency::try_from(cache_dep)?);
-                    }
+        //             for cache_dep in cache.get_dependencies_of_release(release.id)? {
+        //                 dependencies.push(Dependency::try_from(cache_dep)?);
+        //             }
 
-                    releases.push(Release {
-                        download_url: PathBuf::from(release.download_url),
-                        file_name: release.file_name,
-                        released_on: release.released_on.parse()?,
-                        version: release.version.parse()?,
-                        sha1: release.sha1,
-                        info_object: ReleaseInfoObject {
-                            factorio_version: release.factorio_version.parse()?,
-                            dependencies,
-                        },
-                    });
-                }
-            }
-            None => {
-                warn!(
-                    "Mod '{}' not in cache while trying to load it from cache",
-                    self.name
-                );
-            }
-        }
+        //             releases.push(Release {
+        //                 download_url: PathBuf::from(release.download_url),
+        //                 file_name: release.file_name,
+        //                 released_on: release.released_on.parse()?,
+        //                 version: release.version.parse()?,
+        //                 sha1: release.sha1,
+        //                 info_object: ReleaseInfoObject {
+        //                     factorio_version: release.factorio_version.parse()?,
+        //                     dependencies,
+        //                 },
+        //             });
+        //         }
+        //     }
+        //     None => {
+        //         warn!(
+        //             "Mod '{}' not in cache while trying to load it from cache",
+        //             self.name
+        //         );
+        //     }
+        // }
 
         unimplemented!()
     }
 }
 
 impl Info {
+    // TODO this is a bad method
+    /// Determines if the info has been populated from the mod portal, based on if there are
+    /// existing releases
+    pub fn is_portal_populated(&self) -> bool {
+        self.releases.is_some()
+    }
+
     fn versions(&self) -> anyhow::Result<Versions> {
         Ok(self
             .versions
@@ -265,15 +268,23 @@ impl Info {
         &self.display.title
     }
 
+    pub fn summary(&self) -> Option<&str> {
+        self.display.summary.as_deref()
+    }
+
     pub fn own_version(&self) -> anyhow::Result<HumanVersion> {
         Ok(self.versions()?.own)
     }
 
-    pub fn get_release(&self, version: Option<HumanVersion>) -> anyhow::Result<&Release> {
-        let releases = self
+    pub fn releases(&self) -> anyhow::Result<&Vec<Release>> {
+        Ok(self
             .releases
             .as_ref()
-            .ok_or_else(|| anyhow!("Missing releases (has the mod been fetched from portal?)"))?;
+            .ok_or_else(|| anyhow!("Missing releases (has the mod been fetched from portal?)"))?)
+    }
+
+    pub fn get_release(&self, version: Option<HumanVersion>) -> anyhow::Result<&Release> {
+        let releases = self.releases()?;
 
         match version {
             Some(version) => releases
@@ -309,7 +320,23 @@ impl Release {
         self.version
     }
 
+    pub fn factorio_version(&self) -> HumanVersion {
+        self.info_object.factorio_version
+    }
+
     pub fn released_on(&self) -> DateTime<Utc> {
         self.released_on
+    }
+
+    pub fn file_name(&self) -> &str {
+        &self.file_name
+    }
+
+    pub fn sha1(&self) -> &str {
+        &self.sha1
+    }
+
+    pub fn dependencies(&self) -> Vec<&Dependency> {
+        self.info_object.dependencies.iter().collect()
     }
 }

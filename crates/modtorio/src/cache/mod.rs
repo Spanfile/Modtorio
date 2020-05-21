@@ -1,9 +1,9 @@
-mod models;
+pub mod models;
 mod schema;
 
 use crate::ext::PathExt;
 use diesel::prelude::*;
-pub use models::{Game, GameMod, ReleaseDependency};
+use models::*;
 use std::{
     env,
     path::{Path, PathBuf},
@@ -45,14 +45,34 @@ impl CacheBuilder {
 
 impl Cache {
     pub fn get_game(&self, id: i32) -> anyhow::Result<Game> {
-        use schema::game::dsl;
-        Ok(dsl::game.filter(dsl::id.eq(id)).first(&self.conn)?)
+        use schema::game;
+
+        Ok(game::table
+            .filter(game::id.eq(id))
+            .first::<Game>(&self.conn)?)
     }
 
-    pub fn insert_game(&self, path: &str) -> anyhow::Result<i32> {
-        use schema::{game, game::dsl};
+    pub fn get_mods_of_game(&self, game: &Game) -> anyhow::Result<Vec<FactorioMod>> {
+        use schema::{factorio_mod, game_mod};
 
-        let new_game = models::NewGame { path };
+        let mod_names = GameMod::belonging_to(game).select(game_mod::factorio_mod);
+        Ok(factorio_mod::table
+            .filter(factorio_mod::name.eq_any(mod_names))
+            .load::<FactorioMod>(&self.conn)?)
+    }
+
+    pub fn set_mods_of_game(&self, game_mods: &[NewGameMod]) -> anyhow::Result<()> {
+        use schema::game_mod;
+
+        diesel::replace_into(game_mod::table)
+            .values(game_mods)
+            .execute(&self.conn)?;
+
+        Ok(())
+    }
+
+    pub fn insert_game(&self, new_game: NewGame) -> anyhow::Result<i32> {
+        use schema::{game, game::dsl};
 
         diesel::insert_into(game::table)
             .values(&new_game)
@@ -60,24 +80,46 @@ impl Cache {
 
         Ok(dsl::game
             .order(dsl::id.desc())
-            .first::<Game>(&self.conn)?
+            .first::<models::Game>(&self.conn)?
             .id)
     }
 
-    pub fn update_game(&self, id: i32, path: &str) -> anyhow::Result<()> {
+    pub fn update_game(&self, id: i32, insert: NewGame) -> anyhow::Result<()> {
         use schema::game::dsl;
 
         diesel::update(dsl::game.find(id))
-            .set(dsl::path.eq(path))
+            .set(dsl::path.eq(insert.path))
             .execute(&self.conn)?;
         Ok(())
     }
 
-    pub fn get_game_mod_of_game(&self, id: i32) -> anyhow::Result<Vec<GameMod>> {
-        use schema::game_mod::dsl;
+    pub fn set_factorio_mod(&self, factorio_mod: models::NewFactorioMod) -> anyhow::Result<()> {
+        use schema::factorio_mod;
 
-        Ok(dsl::game_mod
-            .filter(dsl::game.eq(id))
-            .get_results(&self.conn)?)
+        diesel::replace_into(factorio_mod::table)
+            .values(factorio_mod)
+            .execute(&self.conn)?;
+
+        Ok(())
+    }
+
+    pub fn set_mod_release(&self, release: NewModRelease) -> anyhow::Result<()> {
+        use schema::mod_release;
+
+        diesel::replace_into(mod_release::table)
+            .values(release)
+            .execute(&self.conn)?;
+
+        Ok(())
+    }
+
+    pub fn set_release_dependencies(&self, release: &[NewReleaseDependency]) -> anyhow::Result<()> {
+        use schema::release_dependency;
+
+        diesel::replace_into(release_dependency::table)
+            .values(release)
+            .execute(&self.conn)?;
+
+        Ok(())
     }
 }

@@ -1,8 +1,9 @@
 mod dependency;
 mod info;
 
-use crate::{util::HumanVersion, Cache, ModPortal};
+use crate::{cache::models, util::HumanVersion, Cache, ModPortal};
 use bytesize::ByteSize;
+use chrono::Utc;
 use info::Info;
 use log::*;
 use std::{fmt, path::Path};
@@ -14,7 +15,6 @@ pub struct Mod<'a> {
     info: Info,
     portal: &'a ModPortal,
     cache: &'a Cache,
-    cache_id: Option<i32>,
 }
 
 #[derive(Debug)]
@@ -42,7 +42,6 @@ impl<'a> Mod<'a> {
             info,
             portal,
             cache,
-            cache_id: None,
         })
     }
 
@@ -57,20 +56,54 @@ impl<'a> Mod<'a> {
             info,
             portal,
             cache,
-            cache_id: None,
         })
     }
 }
 
 impl<'a> Mod<'a> {
-    pub fn update_cache(&mut self) -> anyhow::Result<i32> {
-        let id = if let Some(cache_id) = self.cache_id {
-            0
-        } else {
-            0
-        };
+    pub async fn update_cache(&mut self) -> anyhow::Result<()> {
+        if !self.info.is_portal_populated() {
+            debug!(
+                "Info not populated from portal before updating cache for '{}', populating...",
+                self
+            );
 
-        Ok(id)
+            self.fetch_portal_info().await?;
+        }
+
+        self.cache.set_factorio_mod(models::NewFactorioMod {
+            name: self.info.name(),
+            summary: self.info.summary(),
+            last_updated: &Utc::now().to_string(),
+        })?;
+
+        for release in self.releases()? {
+            self.cache.set_mod_release(models::NewModRelease {
+                factorio_mod: self.info.name(),
+                download_url: release.url()?,
+                file_name: release.file_name(),
+                released_on: &release.released_on().to_string(),
+                version: &release.version().to_string(),
+                sha1: release.sha1(),
+                factorio_version: &release.factorio_version().to_string(),
+            })?;
+
+            self.cache.set_release_dependencies(
+                &release
+                    .dependencies()
+                    .iter()
+                    .map(|dependency| models::NewReleaseDependency {
+                        release_mod_name: self.info.name(),
+                        release_version: release.version().to_string(),
+                        name: dependency.name(),
+                        requirement: dependency.requirement() as i32,
+                        version_req: dependency.version().map(|v| v.to_string()),
+                    })
+                    .collect::<Vec<models::NewReleaseDependency>>(),
+            )?;
+        }
+
+        Ok(())
     }
 
     /// Fetch the latest info from portal
@@ -81,11 +114,11 @@ impl<'a> Mod<'a> {
     /// Load the potentially missing portal info by first reading it from cache, and then fetching
     /// from the mod portal if the cache has expired
     pub async fn load_portal_info(&mut self) -> anyhow::Result<()> {
-        if let Some(_cache_mod) = self.cache.get_mod(&self.info.name())? {
-            // TODO: check expiry
-            self.info.populate_from_cache(self.cache)?;
-            return Ok(());
-        }
+        // if let Some(_cache_mod) = self.cache.get_mod(&self.info.name())? {
+        //     // TODO: check expiry
+        //     self.info.populate_from_cache(self.cache)?;
+        //     return Ok(());
+        // }
 
         self.fetch_portal_info().await
     }
@@ -164,6 +197,10 @@ impl Mod<'_> {
 
     pub fn own_version(&self) -> anyhow::Result<HumanVersion> {
         self.info.own_version()
+    }
+
+    pub fn releases(&self) -> anyhow::Result<&Vec<Release>> {
+        self.info.releases()
     }
 
     pub fn latest_release(&self) -> anyhow::Result<&Release> {

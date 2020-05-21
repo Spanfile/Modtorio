@@ -1,7 +1,7 @@
 mod mods;
 mod settings;
 
-use crate::{ext::PathExt, Cache, Config, ModPortal};
+use crate::{cache::models, ext::PathExt, Cache, Config, ModPortal};
 use anyhow::anyhow;
 use log::*;
 use mods::{Mods, ModsBuilder};
@@ -26,21 +26,28 @@ pub struct Importer {
 }
 
 impl Factorio<'_> {
-    pub fn update_cache(&mut self) -> anyhow::Result<()> {
+    pub async fn update_cache(&mut self) -> anyhow::Result<()> {
         let id = if let Some(cache_id) = self.cache_id {
-            self.cache.update_game(cache_id, self.root.get_str()?)?;
+            self.cache.update_game(
+                cache_id,
+                models::NewGame {
+                    path: self.root.get_str()?,
+                },
+            )?;
 
-            debug!("Updated existing game cache (id {})", cache_id);
+            debug!("Updating existing game cache (id {})", cache_id);
             cache_id
         } else {
-            let new_id = self.cache.insert_game(self.root.get_str()?)?;
+            let new_id = self.cache.insert_game(models::NewGame {
+                path: self.root.get_str()?,
+            })?;
             self.cache_id = Some(new_id);
 
-            debug!("Inserted new game cache (id {})", new_id);
+            debug!("Inserting new game cache (id {})", new_id);
             new_id
         };
 
-        self.mods.update_cache(id)?;
+        self.mods.update_cache(id).await?;
 
         Ok(())
     }

@@ -14,17 +14,15 @@ table! {
 }
 
 table! {
-    game_mod (id) {
-        id -> Integer,
-        mod_name -> Text,
+    game_mod (game, factorio_mod) {
         game -> Integer,
+        factorio_mod -> Text,
     }
 }
 
 table! {
-    mod_release (id) {
-        id -> Integer,
-        mod_name -> Text,
+    mod_release (factorio_mod, version) {
+        factorio_mod -> Text,
         download_url -> Text,
         file_name -> Text,
         released_on -> Text,
@@ -35,14 +33,18 @@ table! {
 }
 
 table! {
-    release_dependency (id) {
-        id -> Integer,
-        release -> Integer,
+    release_dependency (release_mod_name, release_version, name) {
+        release_mod_name -> Text,
+        release_version -> Text,
         name -> Text,
         requirement -> Integer,
         version_req -> Nullable<Text>,
     }
 }
+
+joinable!(game_mod -> factorio_mod (factorio_mod));
+joinable!(game_mod -> game (game));
+joinable!(mod_release -> factorio_mod (factorio_mod));
 
 allow_tables_to_appear_in_same_query!(
     factorio_mod,
