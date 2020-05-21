@@ -13,7 +13,7 @@ use std::{
     path::Path,
     sync::Arc,
 };
-use tokio::{fs, sync::Mutex};
+use tokio::{fs, sync::Mutex, task};
 
 pub struct ModsBuilder<P>
 where
@@ -48,49 +48,64 @@ where
         cache: Arc<Cache>,
     ) -> anyhow::Result<Mods<P>> {
         let zips = self.directory.as_ref().join("*.zip");
-        let mut mods = HashMap::new();
+        let mods = Arc::new(Mutex::new(HashMap::new()));
 
         for entry in glob(zips.get_str()?)? {
             let entry = entry?;
-            info!("Creating mod from zip {}", entry.display());
+            let mods = Arc::clone(&mods);
+            let (portal, cache) = (Arc::clone(&portal), Arc::clone(&cache));
+            task::spawn(async move || -> anyhow::Result<()> {
+                info!("Creating mod from zip {}", entry.display());
 
-            let m = match Mod::from_zip(entry, Arc::clone(&portal), Arc::clone(&cache)).await {
-                Ok(m) => m,
-                Err(e) => {
-                    warn!("Mod failed to load: {}", e);
-                    continue;
-                }
-            };
+                let m = match Mod::from_zip(entry, Arc::clone(&portal), Arc::clone(&cache)).await {
+                    Ok(m) => Arc::new(m),
+                    Err(e) => {
+                        warn!("Mod failed to load: {}", e);
+                        return Ok(());
+                    }
+                };
 
-            debug!("Loaded mod {}", m.display().await);
+                debug!("Loaded mod {}", m.display().await);
 
-            let name = m.name().await.to_owned();
-            match mods.entry(name) {
-                Entry::Occupied(mut entry) => {
-                    let existing: &Mod = entry.get();
+                let name = m.name().await.to_owned();
+                let mut mods = mods.lock().await;
+                match mods.entry(name) {
+                    Entry::Occupied(mut entry) => {
+                        let existing: &Arc<Mod> = entry.get();
 
-                    warn!(
-                        "Found duplicate '{}' (new {} vs existing {})",
-                        entry.key(),
-                        m.own_version().await?,
-                        existing.own_version().await?
-                    );
+                        warn!(
+                            "Found duplicate '{}' (new {} vs existing {})",
+                            entry.key(),
+                            m.own_version().await?,
+                            existing.own_version().await?
+                        );
 
-                    let own_version = m.own_version().await?;
-                    let existing_version = existing.own_version().await?;
-                    if own_version > existing_version {
+                        let own_version = m.own_version().await?;
+                        let existing_version = existing.own_version().await?;
+                        if own_version > existing_version {
+                            entry.insert(m);
+                        }
+                    }
+                    Entry::Vacant(entry) => {
                         entry.insert(m);
                     }
                 }
-                Entry::Vacant(entry) => {
-                    entry.insert(m);
-                }
-            }
+
+                Ok(())
+            }())
+            .await??;
         }
+
+        let mods = mods
+            .lock()
+            .await
+            .iter()
+            .map(|(k, v)| (k.to_owned(), Arc::clone(v)))
+            .collect();
 
         Ok(Mods {
             directory: self.directory,
-            mods: mods.into_iter().map(|(k, m)| (k, Arc::new(m))).collect(),
+            mods,
             config,
             portal,
             cache,
@@ -108,8 +123,14 @@ where
 
     pub async fn update_cache(&self, game_id: i32) -> anyhow::Result<()> {
         for game_mod in self.mods.values() {
-            debug!("Updating cache for {}", game_mod.display().await);
-            game_mod.update_cache().await?;
+            let game_mod = Arc::clone(game_mod);
+            task::spawn(async move || -> anyhow::Result<()> {
+                debug!("Updating cache for '{}'", game_mod.name().await);
+                game_mod.update_cache().await?;
+
+                info!("Updated cache for {}", game_mod.display().await);
+                Ok(())
+            }());
         }
 
         let new_game_mods = Mutex::new(Vec::new());
