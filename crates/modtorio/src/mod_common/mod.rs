@@ -71,36 +71,42 @@ impl<'a> Mod<'a> {
             self.fetch_portal_info().await?;
         }
 
-        self.cache.set_factorio_mod(models::NewFactorioMod {
-            name: self.info.name(),
-            summary: self.info.summary(),
-            last_updated: &Utc::now().to_string(),
-        })?;
+        self.cache
+            .set_factorio_mod(models::NewFactorioMod {
+                name: self.info.name().to_string(),
+                summary: self.info.summary().map(|s| s.to_string()),
+                last_updated: Utc::now().to_string(),
+            })
+            .await?;
 
         for release in self.releases()? {
-            self.cache.set_mod_release(models::NewModRelease {
-                factorio_mod: self.info.name(),
-                download_url: release.url()?,
-                file_name: release.file_name(),
-                released_on: &release.released_on().to_string(),
-                version: &release.version().to_string(),
-                sha1: release.sha1(),
-                factorio_version: &release.factorio_version().to_string(),
-            })?;
+            self.cache
+                .set_mod_release(models::NewModRelease {
+                    factorio_mod: self.info.name().to_string(),
+                    download_url: release.url()?.to_string(),
+                    file_name: release.file_name().to_string(),
+                    released_on: release.released_on().to_string(),
+                    version: release.version().to_string(),
+                    sha1: release.sha1().to_string(),
+                    factorio_version: release.factorio_version().to_string(),
+                })
+                .await?;
 
-            self.cache.set_release_dependencies(
-                &release
-                    .dependencies()
-                    .iter()
-                    .map(|dependency| models::NewReleaseDependency {
-                        release_mod_name: self.info.name(),
-                        release_version: release.version().to_string(),
-                        name: dependency.name(),
-                        requirement: dependency.requirement() as i32,
-                        version_req: dependency.version().map(|v| v.to_string()),
-                    })
-                    .collect::<Vec<models::NewReleaseDependency>>(),
-            )?;
+            self.cache
+                .set_release_dependencies(
+                    release
+                        .dependencies()
+                        .into_iter()
+                        .map(|dependency| models::NewReleaseDependency {
+                            release_mod_name: self.info.name().to_string(),
+                            release_version: release.version().to_string(),
+                            name: dependency.name().to_string(),
+                            requirement: dependency.requirement() as i32,
+                            version_req: dependency.version().map(|v| v.to_string()),
+                        })
+                        .collect::<Vec<models::NewReleaseDependency>>(),
+                )
+                .await?;
         }
 
         Ok(())

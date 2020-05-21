@@ -114,11 +114,11 @@ where
             .values()
             .map(|m| models::NewGameMod {
                 game: game_id,
-                factorio_mod: m.name(),
+                factorio_mod: m.name().to_string(),
             })
             .collect::<Vec<models::NewGameMod>>();
 
-        self.cache.set_mods_of_game(&cache_mods)?;
+        self.cache.set_mods_of_game(cache_mods).await?;
 
         Ok(())
     }

@@ -6,11 +6,14 @@ use diesel::prelude::*;
 use models::*;
 use std::{
     env,
+    ops::Deref,
     path::{Path, PathBuf},
+    sync::{Arc, Mutex},
 };
+use tokio::task;
 
 pub struct Cache {
-    conn: SqliteConnection,
+    conn: Arc<Mutex<SqliteConnection>>,
 }
 
 #[derive(Debug)]
@@ -39,86 +42,152 @@ impl CacheBuilder {
     pub fn build(self) -> anyhow::Result<Cache> {
         let conn = SqliteConnection::establish(self.db_path.get_str()?)?;
 
-        Ok(Cache { conn })
+        Ok(Cache {
+            conn: Arc::new(Mutex::new(conn)),
+        })
     }
 }
 
 impl Cache {
-    pub fn get_game(&self, id: i32) -> anyhow::Result<Game> {
-        use schema::game;
+    pub async fn get_game(&self, id: i32) -> anyhow::Result<Game> {
+        let conn = Arc::clone(&self.conn);
 
-        Ok(game::table
-            .filter(game::id.eq(id))
-            .first::<Game>(&self.conn)?)
+        let result = task::spawn_blocking(move || -> anyhow::Result<Game> {
+            use schema::game;
+
+            let conn = conn.lock().unwrap();
+            Ok(game::table
+                .filter(game::id.eq(id))
+                .first::<Game>(conn.deref())?)
+        })
+        .await?;
+
+        Ok(result?)
     }
 
-    pub fn get_mods_of_game(&self, game: &Game) -> anyhow::Result<Vec<FactorioMod>> {
-        use schema::{factorio_mod, game_mod};
+    pub async fn get_mods_of_game(&self, game: Game) -> anyhow::Result<Vec<FactorioMod>> {
+        let conn = Arc::clone(&self.conn);
 
-        let mod_names = GameMod::belonging_to(game).select(game_mod::factorio_mod);
-        Ok(factorio_mod::table
-            .filter(factorio_mod::name.eq_any(mod_names))
-            .load::<FactorioMod>(&self.conn)?)
+        let result = task::spawn_blocking(move || -> anyhow::Result<Vec<FactorioMod>> {
+            use schema::{factorio_mod, game_mod};
+
+            let conn = conn.lock().unwrap();
+            let mod_names = GameMod::belonging_to(&game).select(game_mod::factorio_mod);
+            Ok(factorio_mod::table
+                .filter(factorio_mod::name.eq_any(mod_names))
+                .load::<FactorioMod>(conn.deref())?)
+        })
+        .await?;
+
+        Ok(result?)
     }
 
-    pub fn set_mods_of_game(&self, game_mods: &[NewGameMod]) -> anyhow::Result<()> {
-        use schema::game_mod;
+    pub async fn set_mods_of_game(&self, game_mods: Vec<NewGameMod>) -> anyhow::Result<()> {
+        let conn = Arc::clone(&self.conn);
 
-        diesel::replace_into(game_mod::table)
-            .values(game_mods)
-            .execute(&self.conn)?;
+        task::spawn_blocking(move || -> anyhow::Result<()> {
+            use schema::game_mod;
+
+            let conn = conn.lock().unwrap();
+            diesel::replace_into(game_mod::table)
+                .values(&game_mods)
+                .execute(conn.deref())?;
+            Ok(())
+        })
+        .await??;
 
         Ok(())
     }
 
-    pub fn insert_game(&self, new_game: NewGame) -> anyhow::Result<i32> {
-        use schema::{game, game::dsl};
+    pub async fn insert_game(&self, new_game: NewGame) -> anyhow::Result<i32> {
+        let conn = Arc::clone(&self.conn);
 
-        diesel::insert_into(game::table)
-            .values(&new_game)
-            .execute(&self.conn)?;
+        let result = task::spawn_blocking(move || -> anyhow::Result<i32> {
+            use schema::{game, game::dsl};
 
-        Ok(dsl::game
-            .order(dsl::id.desc())
-            .first::<models::Game>(&self.conn)?
-            .id)
+            let conn = conn.lock().unwrap();
+            diesel::insert_into(game::table)
+                .values(&new_game)
+                .execute(conn.deref())?;
+
+            Ok(dsl::game
+                .order(dsl::id.desc())
+                .first::<models::Game>(conn.deref())?
+                .id)
+        })
+        .await?;
+
+        Ok(result?)
     }
 
-    pub fn update_game(&self, id: i32, insert: NewGame) -> anyhow::Result<()> {
-        use schema::game::dsl;
+    pub async fn update_game(&self, id: i32, insert: NewGame) -> anyhow::Result<()> {
+        let conn = Arc::clone(&self.conn);
 
-        diesel::update(dsl::game.find(id))
-            .set(dsl::path.eq(insert.path))
-            .execute(&self.conn)?;
-        Ok(())
-    }
+        task::spawn_blocking(move || -> anyhow::Result<()> {
+            use schema::game::dsl;
 
-    pub fn set_factorio_mod(&self, factorio_mod: models::NewFactorioMod) -> anyhow::Result<()> {
-        use schema::factorio_mod;
-
-        diesel::replace_into(factorio_mod::table)
-            .values(factorio_mod)
-            .execute(&self.conn)?;
-
-        Ok(())
-    }
-
-    pub fn set_mod_release(&self, release: NewModRelease) -> anyhow::Result<()> {
-        use schema::mod_release;
-
-        diesel::replace_into(mod_release::table)
-            .values(release)
-            .execute(&self.conn)?;
+            let conn = conn.lock().unwrap();
+            diesel::update(dsl::game.find(id))
+                .set(dsl::path.eq(insert.path))
+                .execute(conn.deref())?;
+            Ok(())
+        })
+        .await??;
 
         Ok(())
     }
 
-    pub fn set_release_dependencies(&self, release: &[NewReleaseDependency]) -> anyhow::Result<()> {
-        use schema::release_dependency;
+    pub async fn set_factorio_mod(
+        &self,
+        factorio_mod: models::NewFactorioMod,
+    ) -> anyhow::Result<()> {
+        let conn = Arc::clone(&self.conn);
+        task::spawn_blocking(move || -> anyhow::Result<()> {
+            use schema::factorio_mod;
 
-        diesel::replace_into(release_dependency::table)
-            .values(release)
-            .execute(&self.conn)?;
+            let conn = conn.lock().unwrap();
+            diesel::replace_into(factorio_mod::table)
+                .values(factorio_mod)
+                .execute(conn.deref())?;
+            Ok(())
+        })
+        .await??;
+
+        Ok(())
+    }
+
+    pub async fn set_mod_release(&self, release: NewModRelease) -> anyhow::Result<()> {
+        let conn = Arc::clone(&self.conn);
+        task::spawn_blocking(move || -> anyhow::Result<()> {
+            use schema::mod_release;
+
+            let conn = conn.lock().unwrap();
+            diesel::replace_into(mod_release::table)
+                .values(release)
+                .execute(conn.deref())?;
+            Ok(())
+        })
+        .await??;
+
+        Ok(())
+    }
+
+    pub async fn set_release_dependencies(
+        &self,
+        release: Vec<NewReleaseDependency>,
+    ) -> anyhow::Result<()> {
+        let conn = Arc::clone(&self.conn);
+        task::spawn_blocking(move || -> anyhow::Result<()> {
+            use schema::release_dependency;
+
+            let conn = conn.lock().unwrap();
+            diesel::replace_into(release_dependency::table)
+                .values(release)
+                .execute(conn.deref())?;
+
+            Ok(())
+        })
+        .await??;
 
         Ok(())
     }

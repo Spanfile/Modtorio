@@ -28,19 +28,24 @@ pub struct Importer {
 impl Factorio<'_> {
     pub async fn update_cache(&mut self) -> anyhow::Result<()> {
         let id = if let Some(cache_id) = self.cache_id {
-            self.cache.update_game(
-                cache_id,
-                models::NewGame {
-                    path: self.root.get_str()?,
-                },
-            )?;
+            self.cache
+                .update_game(
+                    cache_id,
+                    models::NewGame {
+                        path: self.root.get_str()?.to_string(),
+                    },
+                )
+                .await?;
 
             debug!("Updating existing game cache (id {})", cache_id);
             cache_id
         } else {
-            let new_id = self.cache.insert_game(models::NewGame {
-                path: self.root.get_str()?,
-            })?;
+            let new_id = self
+                .cache
+                .insert_game(models::NewGame {
+                    path: self.root.get_str()?.to_string(),
+                })
+                .await?;
             self.cache_id = Some(new_id);
 
             debug!("Inserting new game cache (id {})", new_id);
@@ -92,7 +97,7 @@ impl Importer {
     ) -> anyhow::Result<Factorio<'a>> {
         let (root, cache_id) = match self.game_cache_id {
             Some(id) => {
-                let cached_game = cache.get_game(id)?;
+                let cached_game = cache.get_game(id).await?;
                 (Some(PathBuf::from(cached_game.path)), Some(cached_game.id))
             }
             None => (self.root, None),
