@@ -123,14 +123,10 @@ where
 
     pub async fn update_cache(&self, game_id: i32) -> anyhow::Result<()> {
         for game_mod in self.mods.values() {
-            let game_mod = Arc::clone(game_mod);
-            task::spawn(async move || -> anyhow::Result<()> {
-                debug!("Updating cache for '{}'", game_mod.name().await);
-                game_mod.update_cache().await?;
+            debug!("Updating cache for '{}'", game_mod.name().await);
+            game_mod.update_cache().await?;
 
-                info!("Updated cache for {}", game_mod.display().await);
-                Ok(())
-            }());
+            info!("Updated cache for {}", game_mod.display().await);
         }
 
         let new_game_mods = Mutex::new(Vec::new());

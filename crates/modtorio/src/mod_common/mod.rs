@@ -6,7 +6,10 @@ use bytesize::ByteSize;
 use chrono::Utc;
 use info::Info;
 use log::*;
-use std::{path::Path, sync::Arc};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tokio::sync::Mutex;
 
 pub use dependency::{Dependency, Requirement};
@@ -65,8 +68,8 @@ impl Mod {
     pub async fn update_cache(&self) -> anyhow::Result<()> {
         if !self.is_portal_populated().await {
             debug!(
-                "Info not populated from portal before updating cache for {}, populating...",
-                self.display().await
+                "Info not populated from portal before updating cache for '{}', populating...",
+                self.name().await
             );
 
             self.fetch_portal_info().await?;
@@ -149,9 +152,7 @@ impl Mod {
     where
         P: AsRef<Path>,
     {
-        let mut info = self.info.lock().await;
-
-        let release = info.get_release(version)?;
+        let release = self.latest_release().await?;
         let (path, download_size) = self
             .portal
             .download_mod(release.url()?, destination)
@@ -166,7 +167,7 @@ impl Mod {
 
         let old_version = self.own_version().await.ok();
         let old_archive = self.get_archive_filename().await?;
-        info.populate_from_zip(path).await?;
+        self.populate_info_from_zip(path).await?;
 
         if let Some(old_version) = old_version {
             if old_version == self.own_version().await? {
@@ -187,6 +188,10 @@ impl Mod {
 }
 
 impl Mod {
+    async fn populate_info_from_zip(&self, path: PathBuf) -> anyhow::Result<()> {
+        self.info.lock().await.populate_from_zip(path).await
+    }
+
     async fn is_portal_populated(&self) -> bool {
         self.info.lock().await.is_portal_populated()
     }

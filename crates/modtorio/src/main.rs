@@ -36,8 +36,8 @@ async fn main() -> anyhow::Result<()> {
             .import(config, portal, cache)
             .await?,
     );
-    // let mut factorio = factorio::Importer::from_cache(1)
-    //     .import(&config, &portal, &cache)
+    // let factorio = factorio::Importer::from_cache(1)
+    //     .import(config, portal, cache)
     //     .await?;
 
     info!("Factorio imported. {} mods", factorio.mods.count());
