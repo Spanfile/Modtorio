@@ -51,7 +51,6 @@ impl CacheBuilder {
 impl Cache {
     pub async fn get_game(&self, id: i32) -> anyhow::Result<Game> {
         let conn = Arc::clone(&self.conn);
-
         let result = task::spawn_blocking(move || -> anyhow::Result<Game> {
             use schema::game;
 
@@ -67,7 +66,6 @@ impl Cache {
 
     pub async fn get_mods_of_game(&self, game: Game) -> anyhow::Result<Vec<FactorioMod>> {
         let conn = Arc::clone(&self.conn);
-
         let result = task::spawn_blocking(move || -> anyhow::Result<Vec<FactorioMod>> {
             use schema::{factorio_mod, game_mod};
 
@@ -84,7 +82,6 @@ impl Cache {
 
     pub async fn set_mods_of_game(&self, game_mods: Vec<NewGameMod>) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
-
         task::spawn_blocking(move || -> anyhow::Result<()> {
             use schema::game_mod;
 
@@ -101,7 +98,6 @@ impl Cache {
 
     pub async fn insert_game(&self, new_game: NewGame) -> anyhow::Result<i32> {
         let conn = Arc::clone(&self.conn);
-
         let result = task::spawn_blocking(move || -> anyhow::Result<i32> {
             use schema::{game, game::dsl};
 
@@ -122,7 +118,6 @@ impl Cache {
 
     pub async fn update_game(&self, id: i32, insert: NewGame) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
-
         task::spawn_blocking(move || -> anyhow::Result<()> {
             use schema::game::dsl;
 
@@ -135,6 +130,26 @@ impl Cache {
         .await??;
 
         Ok(())
+    }
+
+    pub async fn get_factorio_mod(
+        &self,
+        factorio_mod: String,
+    ) -> anyhow::Result<Option<models::FactorioMod>> {
+        let conn = Arc::clone(&self.conn);
+        let result =
+            task::spawn_blocking(move || -> anyhow::Result<Option<models::FactorioMod>> {
+                use schema::factorio_mod;
+
+                let conn = conn.lock().unwrap();
+                Ok(factorio_mod::table
+                    .filter(factorio_mod::name.eq(factorio_mod))
+                    .first::<models::FactorioMod>(conn.deref())
+                    .optional()?)
+            })
+            .await?;
+
+        Ok(result?)
     }
 
     pub async fn set_factorio_mod(
@@ -156,6 +171,24 @@ impl Cache {
         Ok(())
     }
 
+    pub async fn get_mod_releases(
+        &self,
+        factorio_mod: String,
+    ) -> anyhow::Result<Vec<models::ModRelease>> {
+        let conn = Arc::clone(&self.conn);
+        let result = task::spawn_blocking(move || -> anyhow::Result<Vec<models::ModRelease>> {
+            use schema::mod_release;
+
+            let conn = conn.lock().unwrap();
+            Ok(mod_release::table
+                .filter(mod_release::factorio_mod.eq(factorio_mod))
+                .load::<models::ModRelease>(conn.deref())?)
+        })
+        .await?;
+
+        Ok(result?)
+    }
+
     pub async fn set_mod_release(&self, release: NewModRelease) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
         task::spawn_blocking(move || -> anyhow::Result<()> {
@@ -170,6 +203,30 @@ impl Cache {
         .await??;
 
         Ok(())
+    }
+
+    pub async fn get_release_dependencies(
+        &self,
+        release_mod_name: String,
+        release_version: String,
+    ) -> anyhow::Result<Vec<models::ReleaseDependency>> {
+        let conn = Arc::clone(&self.conn);
+        let result =
+            task::spawn_blocking(move || -> anyhow::Result<Vec<models::ReleaseDependency>> {
+                use schema::release_dependency;
+
+                let conn = conn.lock().unwrap();
+                Ok(release_dependency::table
+                    .filter(
+                        release_dependency::release_mod_name
+                            .eq(release_mod_name)
+                            .and(release_dependency::release_version.eq(release_version)),
+                    )
+                    .load::<models::ReleaseDependency>(conn.deref())?)
+            })
+            .await?;
+
+        Ok(result?)
     }
 
     pub async fn set_release_dependencies(

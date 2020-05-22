@@ -132,6 +132,12 @@ impl Mod {
         info.populate_from_portal(self.portal.as_ref()).await
     }
 
+    /// Fetch the latest info from cache
+    pub async fn fetch_cache_info(&self) -> anyhow::Result<()> {
+        let mut info = self.info.lock().await;
+        info.populate_from_cache(self.cache.as_ref()).await
+    }
+
     /// Load the potentially missing portal info by first reading it from cache, and then fetching
     /// from the mod portal if the cache has expired
     pub async fn load_portal_info(&mut self) -> anyhow::Result<()> {

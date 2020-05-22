@@ -10,34 +10,25 @@ use glob::glob;
 use log::*;
 use std::{
     collections::{hash_map::Entry, HashMap},
-    path::Path,
+    path::PathBuf,
     sync::Arc,
 };
 use tokio::{fs, sync::Mutex, task};
 
-pub struct ModsBuilder<P>
-where
-    P: AsRef<Path>,
-{
-    directory: P,
+pub struct ModsBuilder {
+    directory: PathBuf,
 }
 
-pub struct Mods<P>
-where
-    P: AsRef<Path>,
-{
-    directory: P,
+pub struct Mods {
+    directory: PathBuf,
     mods: HashMap<String, Arc<Mod>>,
     config: Arc<Config>,
     portal: Arc<ModPortal>,
     cache: Arc<Cache>,
 }
 
-impl<'a, P> ModsBuilder<P>
-where
-    P: AsRef<Path>,
-{
-    pub fn root(directory: P) -> Self {
+impl<'a> ModsBuilder {
+    pub fn root(directory: PathBuf) -> Self {
         ModsBuilder { directory }
     }
 
@@ -46,8 +37,8 @@ where
         config: Arc<Config>,
         portal: Arc<ModPortal>,
         cache: Arc<Cache>,
-    ) -> anyhow::Result<Mods<P>> {
-        let zips = self.directory.as_ref().join("*.zip");
+    ) -> anyhow::Result<Mods> {
+        let zips = self.directory.join("*.zip");
         let mods = Arc::new(Mutex::new(HashMap::new()));
 
         for entry in glob(zips.get_str()?)? {
@@ -65,7 +56,13 @@ where
                     }
                 };
 
-                debug!("Loaded mod {}", m.display().await);
+                let mod_name = m.name().await.to_string();
+                debug!("Loaded mod {} from zip", mod_name);
+
+                match m.fetch_cache_info().await {
+                    Ok(_) => trace!("Mod '{}' populated from cache", mod_name),
+                    Err(e) => debug!("Mod cache loading failed with: {}", e),
+                }
 
                 let name = m.name().await.to_owned();
                 let mut mods = mods.lock().await;
@@ -113,10 +110,7 @@ where
     }
 }
 
-impl<P> Mods<P>
-where
-    P: AsRef<Path>,
-{
+impl Mods {
     pub fn count(&self) -> usize {
         self.mods.len()
     }
@@ -224,10 +218,7 @@ where
     }
 }
 
-impl<P> Mods<P>
-where
-    P: AsRef<Path>,
-{
+impl Mods {
     fn get_mod(&self, name: &str) -> anyhow::Result<&Mod> {
         Ok(self
             .mods
@@ -254,7 +245,7 @@ where
                         old_archive,
                     } => {
                         debug!("Removing old mod archive {}", old_archive);
-                        let path = self.directory.as_ref().join(old_archive);
+                        let path = self.directory.join(old_archive);
                         fs::remove_file(path).await?;
 
                         info!(

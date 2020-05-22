@@ -1,11 +1,13 @@
 use crate::{cache, util::HumanVersionReq};
 use anyhow::anyhow;
 use lazy_static::lazy_static;
+use num_derive::FromPrimitive;
+use num_traits::FromPrimitive;
 use regex::Regex;
 use serde::{de, de::Visitor, Deserialize};
 use std::{convert::TryFrom, fmt, str::FromStr};
 
-#[derive(Debug, PartialEq, Copy, Clone)]
+#[derive(Debug, PartialEq, Copy, Clone, FromPrimitive)]
 pub enum Requirement {
     Mandatory = 0,
     Optional,
@@ -113,8 +115,10 @@ impl TryFrom<cache::models::ReleaseDependency> for Dependency {
             None
         };
 
+        let req = dep.requirement;
         Ok(Self {
-            requirement: dep.requirement.parse()?,
+            requirement: FromPrimitive::from_i32(req)
+                .ok_or_else(|| anyhow!("Couldn't convert i32 {} to Requirement", req))?,
             name: dep.name,
             version,
         })

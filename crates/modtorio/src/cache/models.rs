@@ -85,7 +85,7 @@ pub struct ReleaseDependency {
     pub release_mod_name: String,
     pub release_version: String,
     pub name: String,
-    pub requirement: String,
+    pub requirement: i32,
     pub version_req: Option<String>,
 }
 

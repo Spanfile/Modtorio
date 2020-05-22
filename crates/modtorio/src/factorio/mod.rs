@@ -15,7 +15,7 @@ use tokio::sync::Mutex;
 
 pub struct Factorio {
     pub settings: ServerSettings,
-    pub mods: Mods<PathBuf>,
+    pub mods: Mods,
     root: PathBuf,
     cache_id: Mutex<Option<i32>>,
     cache: Arc<Cache>,

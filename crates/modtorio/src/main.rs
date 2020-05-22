@@ -31,14 +31,14 @@ async fn main() -> anyhow::Result<()> {
     let cache = Arc::new(cache::CacheBuilder::new().build()?);
     let portal = Arc::new(ModPortal::new(&config)?);
 
-    let factorio = Arc::new(
-        factorio::Importer::from_root("./sample")
-            .import(config, portal, cache)
-            .await?,
-    );
-    // let factorio = factorio::Importer::from_cache(1)
-    //     .import(config, portal, cache)
-    //     .await?;
+    // let factorio = Arc::new(
+    //     factorio::Importer::from_root("./sample")
+    //         .import(config, portal, cache)
+    //         .await?,
+    // );
+    let factorio = factorio::Importer::from_cache(1)
+        .import(config, portal, cache)
+        .await?;
 
     info!("Factorio imported. {} mods", factorio.mods.count());
 
