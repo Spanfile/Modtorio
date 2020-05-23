@@ -171,6 +171,7 @@ impl Mod {
             }
         }
 
+        // TODO: update the cache here?
         self.fetch_portal_info().await
     }
 
