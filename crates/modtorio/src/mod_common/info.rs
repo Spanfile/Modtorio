@@ -2,6 +2,7 @@ use super::Dependency;
 use crate::{
     ext::{PathExt, ZipExt},
     mod_portal::ModPortal,
+    util,
     util::HumanVersion,
     Cache,
 };
@@ -51,7 +52,9 @@ pub struct Versions {
 #[derive(Debug, Deserialize, Clone)]
 pub struct Release {
     download_url: PathBuf,
-    file_name: String,
+    // this field isn't actually useful, since when downloading a mod from the portal, it redirects
+    // to a location where the filename is in the URL and that's used instead
+    // file_name: String,
     #[serde(rename = "released_at")]
     released_on: DateTime<Utc>,
     version: HumanVersion,
@@ -120,6 +123,22 @@ where
     .await?
 }
 
+fn compress_portal_info(info: PortalInfo) -> PortalInfo {
+    let new_releases = info
+        .releases
+        .into_iter()
+        .map(|release| Release {
+            download_url: util::get_last_path_segment(release.download_url),
+            ..release
+        })
+        .collect();
+
+    PortalInfo {
+        releases: new_releases,
+        ..info
+    }
+}
+
 impl Info {
     pub async fn from_zip<P>(path: P) -> anyhow::Result<Info>
     where
@@ -132,6 +151,7 @@ impl Info {
 
     pub async fn from_portal(name: &str, portal: &ModPortal) -> anyhow::Result<Info> {
         let portal_info: PortalInfo = portal.fetch_mod(name).await?;
+        let portal_info = compress_portal_info(portal_info);
 
         Ok(Self::from_portal_info(portal_info))
     }
@@ -206,6 +226,7 @@ impl Info {
     pub async fn populate_from_portal(&mut self, portal: &ModPortal) -> anyhow::Result<()> {
         trace!("Populating '{}' from portal", self.name);
         let info: PortalInfo = portal.fetch_mod(&self.name).await?;
+        let info = compress_portal_info(info);
 
         trace!("'{}' got PortalInfo: {:?}", self.name, info);
         self.display.summary = Some(info.summary);
@@ -233,7 +254,6 @@ impl Info {
 
                     releases.push(Release {
                         download_url: PathBuf::from(release.download_url),
-                        file_name: release.file_name,
                         released_on: release.released_on.parse()?,
                         version: release.version.parse()?,
                         sha1: release.sha1,
@@ -358,10 +378,6 @@ impl Release {
 
     pub fn released_on(&self) -> DateTime<Utc> {
         self.released_on
-    }
-
-    pub fn file_name(&self) -> &str {
-        &self.file_name
     }
 
     pub fn sha1(&self) -> &str {

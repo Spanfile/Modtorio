@@ -89,7 +89,6 @@ impl Mod {
             let new_mod_release = models::NewModRelease {
                 factorio_mod: self.name().await,
                 download_url: release.url()?.to_string(),
-                file_name: release.file_name().to_string(),
                 released_on: release.released_on().to_string(),
                 version: release.version().to_string(),
                 sha1: release.sha1().to_string(),
@@ -168,7 +167,7 @@ impl Mod {
 
         let (path, download_size) = self
             .portal
-            .download_mod(release.url()?, destination)
+            .download_mod(&self.name().await, release.url()?, destination)
             .await?;
 
         debug!(

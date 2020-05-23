@@ -54,7 +54,6 @@ pub struct NewGameMod {
 pub struct ModRelease {
     pub factorio_mod: String,
     pub download_url: String,
-    pub file_name: String,
     pub released_on: String,
     pub version: String,
     pub sha1: String,
@@ -66,7 +65,6 @@ pub struct ModRelease {
 pub struct NewModRelease {
     pub factorio_mod: String,
     pub download_url: String,
-    pub file_name: String,
     pub released_on: String,
     pub version: String,
     pub sha1: String,

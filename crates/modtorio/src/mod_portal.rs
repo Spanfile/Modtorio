@@ -9,6 +9,7 @@ use url::Url;
 
 const USER_AGENT: &str = "modtorio";
 const SITE_ROOT: &str = "https://mods.factorio.com";
+const DOWNLOAD_ROOT: &str = "/download/";
 const API_ROOT: &str = "/api/mods/";
 const FULL_ENDPOINT: &str = "full";
 
@@ -52,13 +53,17 @@ impl ModPortal {
 
     pub async fn download_mod<P>(
         &self,
+        name: &str,
         url_path: &str,
         directory: P,
     ) -> anyhow::Result<(PathBuf, usize)>
     where
         P: AsRef<Path>,
     {
-        let download_url = Url::parse(SITE_ROOT)?.join(url_path)?;
+        let download_url = Url::parse(SITE_ROOT)?
+            .join(DOWNLOAD_ROOT)?
+            .join(&format!("{}/", name))?
+            .join(url_path)?;
         debug!("Downloading mod from {}", download_url);
 
         let mut response = self.get(download_url).await?;

@@ -36,7 +36,7 @@ async fn main() -> anyhow::Result<()> {
     //         .import(config, portal, cache)
     //         .await?,
     // );
-    let factorio = factorio::Importer::from_cache(1)
+    let mut factorio = factorio::Importer::from_cache(1)
         .import(config, portal, cache)
         .await?;
 
@@ -47,7 +47,7 @@ async fn main() -> anyhow::Result<()> {
     //     .add_from_portal("angelsindustries", None)
     //     .await?;
 
-    // factorio.mods.update().await?;
+    factorio.mods.update().await?;
     // factorio.mods.ensure_dependencies().await?;
     factorio.update_cache().await?;
 

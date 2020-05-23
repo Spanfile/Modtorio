@@ -24,7 +24,6 @@ table! {
     mod_release (factorio_mod, version) {
         factorio_mod -> Text,
         download_url -> Text,
-        file_name -> Text,
         released_on -> Text,
         version -> Text,
         sha1 -> Text,
