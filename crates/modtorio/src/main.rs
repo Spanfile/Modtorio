@@ -49,7 +49,7 @@ async fn main() -> anyhow::Result<()> {
 
     factorio.mods.update().await?;
     // factorio.mods.ensure_dependencies().await?;
-    factorio.update_cache().await?;
+    // factorio.update_cache().await?;
 
     Ok(())
 }

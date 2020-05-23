@@ -1,5 +1,6 @@
 use super::Dependency;
 use crate::{
+    cache::models,
     ext::{PathExt, ZipExt},
     mod_portal::ModPortal,
     util,
@@ -235,40 +236,46 @@ impl Info {
         Ok(())
     }
 
+    pub async fn populate_with_cache_object(
+        &mut self,
+        cache: &'_ Cache,
+        cache_mod: models::FactorioMod,
+    ) -> anyhow::Result<()> {
+        trace!("Mod '{}' got cached mod: {:?}", self.name, cache_mod);
+        self.display.summary = cache_mod.summary;
+
+        let mut releases = Vec::new();
+        for release in cache.get_mod_releases(self.name.clone()).await? {
+            let mut dependencies = Vec::new();
+
+            for cache_dep in cache
+                .get_release_dependencies(self.name.clone(), release.version.clone())
+                .await?
+            {
+                dependencies.push(Dependency::try_from(cache_dep)?);
+            }
+
+            releases.push(Release {
+                download_url: PathBuf::from(release.download_url),
+                released_on: release.released_on.parse()?,
+                version: release.version.parse()?,
+                sha1: release.sha1,
+                info_object: ReleaseInfoObject {
+                    factorio_version: release.factorio_version.parse()?,
+                    dependencies,
+                },
+            });
+        }
+
+        trace!("Mod '{}' got cached releases: {:?}", self.name, releases);
+        self.releases = Some(releases);
+
+        Ok(())
+    }
+
     pub async fn populate_from_cache(&mut self, cache: &'_ Cache) -> anyhow::Result<()> {
         match cache.get_factorio_mod(self.name.clone()).await? {
-            Some(cache_mod) => {
-                trace!("Mod '{}' got cached mod: {:?}", self.name, cache_mod);
-                self.display.summary = cache_mod.summary;
-
-                let mut releases = Vec::new();
-                for release in cache.get_mod_releases(self.name.clone()).await? {
-                    let mut dependencies = Vec::new();
-
-                    for cache_dep in cache
-                        .get_release_dependencies(self.name.clone(), release.version.clone())
-                        .await?
-                    {
-                        dependencies.push(Dependency::try_from(cache_dep)?);
-                    }
-
-                    releases.push(Release {
-                        download_url: PathBuf::from(release.download_url),
-                        released_on: release.released_on.parse()?,
-                        version: release.version.parse()?,
-                        sha1: release.sha1,
-                        info_object: ReleaseInfoObject {
-                            factorio_version: release.factorio_version.parse()?,
-                            dependencies,
-                        },
-                    });
-                }
-
-                trace!("Mod '{}' got cached releases: {:?}", self.name, releases);
-                self.releases = Some(releases);
-
-                Ok(())
-            }
+            Some(cache_mod) => self.populate_with_cache_object(cache, cache_mod).await,
             None => {
                 trace!(
                     "Mod '{}' not in cache while trying to load it from cache",

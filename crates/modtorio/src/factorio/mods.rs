@@ -44,11 +44,19 @@ impl<'a> ModsBuilder {
         for entry in glob(zips.get_str()?)? {
             let entry = entry?;
             let mods = Arc::clone(&mods);
-            let (portal, cache) = (Arc::clone(&portal), Arc::clone(&cache));
+            let (config, portal, cache) =
+                (Arc::clone(&config), Arc::clone(&portal), Arc::clone(&cache));
             task::spawn(async move || -> anyhow::Result<()> {
                 info!("Creating mod from zip {}", entry.display());
 
-                let m = match Mod::from_zip(entry, Arc::clone(&portal), Arc::clone(&cache)).await {
+                let m = match Mod::from_zip(
+                    entry,
+                    Arc::clone(&config),
+                    Arc::clone(&portal),
+                    Arc::clone(&cache),
+                )
+                .await
+                {
                     Ok(m) => Arc::new(m),
                     Err(e) => {
                         warn!("Mod failed to load: {}", e);
@@ -163,7 +171,7 @@ impl Mods {
         for m in self.mods.values_mut() {
             info!("Checking for updates to {}...", m.display().await);
 
-            m.fetch_portal_info().await?;
+            m.ensure_portal_info().await?;
             let release = m.latest_release().await?;
 
             if m.own_version().await? < release.version() {
@@ -260,8 +268,13 @@ impl Mods {
             }
             Entry::Vacant(entry) => {
                 let new_mod = Arc::new(
-                    Mod::from_portal(name, Arc::clone(&self.portal), Arc::clone(&self.cache))
-                        .await?,
+                    Mod::from_portal(
+                        name,
+                        Arc::clone(&self.config),
+                        Arc::clone(&self.portal),
+                        Arc::clone(&self.cache),
+                    )
+                    .await?,
                 );
                 Ok(entry.insert(new_mod))
             }

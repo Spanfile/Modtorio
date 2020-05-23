@@ -19,8 +19,12 @@ pub struct Config {
     pub portal: PortalConfig,
     #[serde(flatten, with = "prefix_log")]
     pub log: LogConfig,
-    #[serde(flatten, with = "prefix_cache")]
-    pub cache: CacheConfig,
+    // TODO: these with_prefix things break being able to serialise into anything but strings or
+    // enums..?
+    // #[serde(flatten, with = "prefix_cache")]
+    // pub cache: CacheConfig,
+    #[serde(default = "default_cache_expiry")]
+    pub cache_expiry: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -38,7 +42,7 @@ pub struct LogConfig {
 #[derive(Debug, Deserialize)]
 pub struct CacheConfig {
     #[serde(default = "default_cache_expiry")]
-    pub expiry: String,
+    pub expiry: u64,
 }
 
 impl Config {
@@ -59,6 +63,6 @@ impl Config {
     }
 }
 
-fn default_cache_expiry() -> String {
-    String::from("3600")
+fn default_cache_expiry() -> u64 {
+    3600
 }

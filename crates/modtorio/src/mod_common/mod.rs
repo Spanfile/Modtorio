@@ -1,14 +1,15 @@
 mod dependency;
 mod info;
 
-use crate::{cache::models, util::HumanVersion, Cache, ModPortal};
+use crate::{cache::models, util::HumanVersion, Cache, Config, ModPortal};
 use bytesize::ByteSize;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use info::Info;
 use log::*;
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
+    time::Duration,
 };
 use tokio::sync::Mutex;
 
@@ -17,6 +18,7 @@ pub use info::Release;
 
 pub struct Mod {
     info: Mutex<Info>,
+    config: Arc<Config>,
     portal: Arc<ModPortal>,
     cache: Arc<Cache>,
 }
@@ -34,6 +36,7 @@ pub enum DownloadResult {
 impl Mod {
     pub async fn from_zip<P>(
         path: P,
+        config: Arc<Config>,
         portal: Arc<ModPortal>,
         cache: Arc<Cache>,
     ) -> anyhow::Result<Mod>
@@ -44,6 +47,7 @@ impl Mod {
 
         Ok(Self {
             info,
+            config,
             portal,
             cache,
         })
@@ -51,6 +55,7 @@ impl Mod {
 
     pub async fn from_portal(
         name: &str,
+        config: Arc<Config>,
         portal: Arc<ModPortal>,
         cache: Arc<Cache>,
     ) -> anyhow::Result<Mod> {
@@ -58,6 +63,7 @@ impl Mod {
 
         Ok(Self {
             info,
+            config,
             portal,
             cache,
         })
@@ -141,12 +147,29 @@ impl Mod {
 
     /// Load the potentially missing portal info by first reading it from cache, and then fetching
     /// from the mod portal if the cache has expired
-    pub async fn load_portal_info(&mut self) -> anyhow::Result<()> {
-        // if let Some(_cache_mod) = self.cache.get_mod(&self.info.name())? {
-        //     // TODO: check expiry
-        //     self.info.populate_from_cache(self.cache)?;
-        //     return Ok(());
-        // }
+    pub async fn ensure_portal_info(&self) -> anyhow::Result<()> {
+        if let Some(cache_mod) = self.cache.get_factorio_mod(self.name().await).await? {
+            let last_updated = cache_mod.last_updated.parse::<DateTime<Utc>>()?;
+            let time_since_updated = Utc::now() - last_updated;
+            let expired =
+                time_since_updated.to_std()? > Duration::from_secs(self.config.cache_expiry);
+
+            trace!(
+                "Ensuring mod '{}' has portal info. Got cached mod: {:?}. Expired: {} (configured expiry {} seconds)",
+                self.name().await,
+                cache_mod,
+                expired,
+                self.config.cache_expiry,
+            );
+
+            if !expired {
+                let mut info = self.info.lock().await;
+                info.populate_with_cache_object(self.cache.as_ref(), cache_mod)
+                    .await?;
+
+                return Ok(());
+            }
+        }
 
         self.fetch_portal_info().await
     }
