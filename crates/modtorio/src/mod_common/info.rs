@@ -308,7 +308,7 @@ impl Info {
         Ok(self
             .releases
             .as_ref()
-            .map(|v| v.clone())
+            .cloned()
             .ok_or_else(|| anyhow!("Missing releases (has the mod been fetched from portal?)"))?)
     }
 
@@ -319,7 +319,7 @@ impl Info {
             Some(version) => releases
                 .iter()
                 .find(|r| r.version == version)
-                .map(|r| r.clone())
+                .cloned()
                 .ok_or_else(|| {
                     anyhow!(
                         "Mod '{}' doesn't have a release version {}",
@@ -330,7 +330,7 @@ impl Info {
             None => releases
                 .iter()
                 .last()
-                .map(|r| r.clone())
+                .cloned()
                 .ok_or_else(|| anyhow!("Mod '{}' has no releases", self.name)),
         }
     }
@@ -338,7 +338,7 @@ impl Info {
     pub fn dependencies(&self) -> anyhow::Result<Vec<Dependency>> {
         self.dependencies
             .as_ref()
-            .map(|d| d.clone())
+            .cloned()
             .ok_or_else(|| anyhow!("Missing dependencies (has the mod been fetched from portal?)"))
     }
 }

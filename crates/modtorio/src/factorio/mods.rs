@@ -203,7 +203,7 @@ impl Mods {
                 self.ensure_single_dependencies(m)
                     .await?
                     .into_iter()
-                    .map(|m| m.to_owned()),
+                    .map(|m| m),
             );
         }
 
@@ -268,11 +268,9 @@ impl Mods {
         }
     }
 
-    async fn ensure_single_dependencies<'a>(
-        &self,
-        target_mod: &'a Mod,
-    ) -> anyhow::Result<Vec<String>> {
+    async fn ensure_single_dependencies(&self, target_mod: &Mod) -> anyhow::Result<Vec<String>> {
         let mut missing = Vec::new();
+        let target_name = target_mod.name().await;
 
         for dep in target_mod.dependencies().await? {
             if dep.name() == "base" {
@@ -282,25 +280,29 @@ impl Mods {
             match dep.requirement() {
                 Requirement::Mandatory => {
                     match self.get_mod(dep.name()) {
-                        Ok(required_mod) => match dep.version() {
-                            Some(version_req)
-                                if !required_mod.own_version().await?.meets(version_req) =>
-                            {
-                                debug!("Dependency {} of '{}' not met: version requirement mismatch (found {})", dep, target_mod.name().await, required_mod.own_version().await?);
-                                missing.push(dep.name().to_string());
+                        Ok(required_mod) => {
+                            let required_version = required_mod.own_version().await?;
+
+                            match dep.version() {
+                                Some(version_req) if !required_version.meets(version_req) => {
+                                    debug!(
+                                    "Dependency {} of '{}' not met: version requirement mismatch (found {})",
+                                    dep,
+                                    target_name,
+                                    required_version
+                                );
+                                    missing.push(dep.name().to_string());
+                                }
+                                _ => debug!(
+                                    "Dependency {} of '{}' met (found {})",
+                                    dep, target_name, required_version
+                                ),
                             }
-                            _ => debug!(
-                                "Dependency {} of '{}' met (found {})",
-                                dep,
-                                target_mod.name().await,
-                                required_mod.own_version().await?
-                            ),
-                        },
+                        }
                         Err(_) => {
                             debug!(
                                 "Dependency {} of '{}' not met: required mod not found",
-                                dep,
-                                target_mod.name().await
+                                dep, target_name
                             );
 
                             // TODO: resolve version
@@ -313,10 +315,10 @@ impl Mods {
                         return Err(anyhow::anyhow!(
                             "Cannot ensure dependency {} of '{}'",
                             dep,
-                            target_mod.name().await
+                            target_name
                         ));
                     }
-                    Err(_) => debug!("Dependency {} of '{}' met", dep, target_mod.name().await),
+                    Err(_) => debug!("Dependency {} of '{}' met", dep, target_name),
                 },
                 _ => (),
             }

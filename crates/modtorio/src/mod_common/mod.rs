@@ -75,9 +75,11 @@ impl Mod {
             self.fetch_portal_info().await?;
         }
 
+        let name = self.name().await;
+        let summary = self.summary().await;
         let new_factorio_mod = models::NewFactorioMod {
-            name: self.name().await,
-            summary: self.summary().await,
+            name,
+            summary,
             last_updated: Utc::now().to_string(),
         };
         trace!("'{}' cached mod: {:?}", self.name().await, new_factorio_mod);
@@ -158,7 +160,12 @@ impl Mod {
     where
         P: AsRef<Path>,
     {
-        let release = self.latest_release().await?;
+        let release = if let Some(version) = version {
+            self.get_release(version).await?
+        } else {
+            self.latest_release().await?
+        };
+
         let (path, download_size) = self
             .portal
             .download_mod(release.url()?, destination)
@@ -234,6 +241,11 @@ impl Mod {
     pub async fn releases(&self) -> anyhow::Result<Vec<Release>> {
         let info = self.info.lock().await;
         info.releases()
+    }
+
+    pub async fn get_release(&self, version: HumanVersion) -> anyhow::Result<Release> {
+        let info = self.info.lock().await;
+        info.get_release(Some(version))
     }
 
     pub async fn latest_release(&self) -> anyhow::Result<Release> {
