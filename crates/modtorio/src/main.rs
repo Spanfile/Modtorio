@@ -36,20 +36,39 @@ async fn main() -> anyhow::Result<()> {
     //         .import(config, portal, cache)
     //         .await?,
     // );
-    let mut factorio = factorio::Importer::from_cache(1)
-        .import(config, portal, cache)
-        .await?;
 
-    info!("Factorio imported. {} mods", factorio.mods.count());
+    let cached_games = cache.get_game_ids().await?;
+    let mut games = Vec::new();
+
+    for id in cached_games {
+        let game = factorio::Importer::from_cache(id)
+            .import(Arc::clone(&config), Arc::clone(&portal), Arc::clone(&cache))
+            .await?;
+
+        games.push(game);
+        debug!("Cached game id {} imported", id);
+    }
+
+    if games.is_empty() {
+        info!("No cached games found, importing from /sample...");
+
+        games.push(
+            factorio::Importer::from_root("./sample")
+                .import(Arc::clone(&config), Arc::clone(&portal), Arc::clone(&cache))
+                .await?,
+        );
+    }
 
     // factorio
     //     .mods
     //     .add_from_portal("angelsindustries", None)
     //     .await?;
 
-    factorio.mods.update().await?;
-    // factorio.mods.ensure_dependencies().await?;
-    // factorio.update_cache().await?;
+    for factorio in games.iter_mut() {
+        // factorio.mods.update().await?;
+        factorio.mods.ensure_dependencies().await?;
+        factorio.update_cache().await?;
+    }
 
     Ok(())
 }

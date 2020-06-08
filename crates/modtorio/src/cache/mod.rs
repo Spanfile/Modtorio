@@ -49,6 +49,19 @@ impl CacheBuilder {
 }
 
 impl Cache {
+    pub async fn get_game_ids(&self) -> anyhow::Result<Vec<i32>> {
+        let conn = Arc::clone(&self.conn);
+        let result = task::spawn_blocking(move || -> anyhow::Result<Vec<i32>> {
+            use schema::game;
+
+            let conn = conn.lock().unwrap();
+            Ok(game::table.select(game::id).load::<i32>(conn.deref())?)
+        })
+        .await?;
+
+        Ok(result?)
+    }
+
     pub async fn get_game(&self, id: i32) -> anyhow::Result<Game> {
         let conn = Arc::clone(&self.conn);
         let result = task::spawn_blocking(move || -> anyhow::Result<Game> {
