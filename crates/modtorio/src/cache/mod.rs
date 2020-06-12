@@ -87,23 +87,11 @@ impl Cache {
     pub async fn get_mods_of_game(&self, game: Game) -> anyhow::Result<Vec<FactorioMod>> {
         let conn = Arc::clone(&self.conn);
         let result = task::spawn_blocking(move || -> anyhow::Result<Vec<FactorioMod>> {
-            // use schema::{factorio_mod, game_mod};
-
-            // let conn = conn.lock().unwrap();
-            // let mod_names = GameMod::belonging_to(&game).select(game_mod::factorio_mod);
-            // Ok(factorio_mod::table
-            //     .filter(factorio_mod::name.eq_any(mod_names))
-            //     .load::<FactorioMod>(conn.deref())?)
-
             let conn = conn.lock().unwrap();
             let mut stmt = conn.prepare(
-                r#"SELECT
-    factorio_mod.name,
-    factorio_mod.summary,
-    factorio_mod.last_updated
-FROM game_mod
-INNER JOIN factorio_mod
-WHERE game_mod.game = ?"#,
+                "SELECT factorio_mod.name, factorio_mod.summary, factorio_mod.last_updated FROM \
+                 game_mod INNER JOIN factorio_mod ON factorio_mod.name == game_mod.factorio_mod \
+                 WHERE game_mod.game == 1;",
             )?;
             let mut mods = Vec::new();
 
@@ -124,16 +112,32 @@ WHERE game_mod.game = ?"#,
         Ok(result?)
     }
 
-    pub async fn set_mods_of_game(&self, game_mods: Vec<NewGameMod>) -> anyhow::Result<()> {
+    pub async fn set_mods_of_game(&self, game: i32, mods: Vec<String>) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
         task::spawn_blocking(move || -> anyhow::Result<()> {
-            use schema::game_mod;
+            // use schema::game_mod;
 
-            let conn = conn.lock().unwrap();
-            diesel::replace_into(game_mod::table)
-                .values(&game_mods)
-                .execute(conn.deref())?;
-            Ok(())
+            // let conn = conn.lock().unwrap();
+            // diesel::replace_into(game_mod::table)
+            //     .values(&game_mods)
+            //     .execute(conn.deref())?;
+            // Ok(())
+
+            let mut conn = conn.lock().unwrap();
+            let tx = conn.transaction()?;
+
+            tx.execute(
+                "DELETE FROM game_mod WHERE game_mod.game == ?",
+                params![game],
+            );
+
+            let mut stmt = tx.prepare("INSERT INTO game_mod (game, factorio_mod) VALUES(?, ?)")?;
+
+            for m in &mods {
+                stmt.execute(params![game, m]);
+            }
+
+            panic!()
         })
         .await??;
 
@@ -179,19 +183,18 @@ WHERE game_mod.game = ?"#,
     pub async fn get_factorio_mod(
         &self,
         factorio_mod: String,
-    ) -> anyhow::Result<Option<models::FactorioMod>> {
+    ) -> anyhow::Result<Option<FactorioMod>> {
         let conn = Arc::clone(&self.conn);
-        let result =
-            task::spawn_blocking(move || -> anyhow::Result<Option<models::FactorioMod>> {
-                use schema::factorio_mod;
+        let result = task::spawn_blocking(move || -> anyhow::Result<Option<FactorioMod>> {
+            use schema::factorio_mod;
 
-                let conn = conn.lock().unwrap();
-                Ok(factorio_mod::table
-                    .filter(factorio_mod::name.eq(factorio_mod))
-                    .first::<models::FactorioMod>(conn.deref())
-                    .optional()?)
-            })
-            .await?;
+            let conn = conn.lock().unwrap();
+            Ok(factorio_mod::table
+                .filter(factorio_mod::name.eq(factorio_mod))
+                .first::<models::FactorioMod>(conn.deref())
+                .optional()?)
+        })
+        .await?;
 
         Ok(result?)
     }
@@ -215,12 +218,9 @@ WHERE game_mod.game = ?"#,
         Ok(())
     }
 
-    pub async fn get_mod_releases(
-        &self,
-        factorio_mod: String,
-    ) -> anyhow::Result<Vec<models::ModRelease>> {
+    pub async fn get_mod_releases(&self, factorio_mod: String) -> anyhow::Result<Vec<ModRelease>> {
         let conn = Arc::clone(&self.conn);
-        let result = task::spawn_blocking(move || -> anyhow::Result<Vec<models::ModRelease>> {
+        let result = task::spawn_blocking(move || -> anyhow::Result<Vec<ModRelease>> {
             use schema::mod_release;
 
             let conn = conn.lock().unwrap();
@@ -253,22 +253,21 @@ WHERE game_mod.game = ?"#,
         &self,
         release_mod_name: String,
         release_version: String,
-    ) -> anyhow::Result<Vec<models::ReleaseDependency>> {
+    ) -> anyhow::Result<Vec<ReleaseDependency>> {
         let conn = Arc::clone(&self.conn);
-        let result =
-            task::spawn_blocking(move || -> anyhow::Result<Vec<models::ReleaseDependency>> {
-                use schema::release_dependency;
+        let result = task::spawn_blocking(move || -> anyhow::Result<Vec<ReleaseDependency>> {
+            use schema::release_dependency;
 
-                let conn = conn.lock().unwrap();
-                Ok(release_dependency::table
-                    .filter(
-                        release_dependency::release_mod_name
-                            .eq(release_mod_name)
-                            .and(release_dependency::release_version.eq(release_version)),
-                    )
-                    .load::<models::ReleaseDependency>(conn.deref())?)
-            })
-            .await?;
+            let conn = conn.lock().unwrap();
+            Ok(release_dependency::table
+                .filter(
+                    release_dependency::release_mod_name
+                        .eq(release_mod_name)
+                        .and(release_dependency::release_version.eq(release_version)),
+                )
+                .load::<models::ReleaseDependency>(conn.deref())?)
+        })
+        .await?;
 
         Ok(result?)
     }
