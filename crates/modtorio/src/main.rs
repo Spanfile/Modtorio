@@ -1,10 +1,6 @@
 #![feature(drain_filter)]
 #![feature(async_closure)]
 
-// diesel still requires this even if Rust 2018 has moved away from it
-#[macro_use]
-extern crate diesel;
-
 mod cache;
 mod config;
 mod ext;

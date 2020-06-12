@@ -1,9 +1,8 @@
 pub mod models;
-mod schema;
 
 use crate::ext::PathExt;
-use diesel::prelude::*;
 use models::*;
+use rusqlite::{params, Connection, NO_PARAMS};
 use std::{
     env,
     ops::Deref,
@@ -13,7 +12,7 @@ use std::{
 use tokio::task;
 
 pub struct Cache {
-    conn: Arc<Mutex<SqliteConnection>>,
+    conn: Arc<Mutex<Connection>>,
 }
 
 #[derive(Debug)]
@@ -40,7 +39,7 @@ impl CacheBuilder {
     }
 
     pub fn build(self) -> anyhow::Result<Cache> {
-        let conn = SqliteConnection::establish(self.db_path.get_str()?)?;
+        let conn = Connection::open(self.db_path.get_str()?)?;
 
         Ok(Cache {
             conn: Arc::new(Mutex::new(conn)),
@@ -52,10 +51,15 @@ impl Cache {
     pub async fn get_game_ids(&self) -> anyhow::Result<Vec<i32>> {
         let conn = Arc::clone(&self.conn);
         let result = task::spawn_blocking(move || -> anyhow::Result<Vec<i32>> {
-            use schema::game;
-
             let conn = conn.lock().unwrap();
-            Ok(game::table.select(game::id).load::<i32>(conn.deref())?)
+            let mut stmt = conn.prepare("SELECT id FROM game")?;
+            let mut ids = Vec::new();
+
+            for row in stmt.query_map(NO_PARAMS, |row| row.get(0))? {
+                ids.push(row?);
+            }
+
+            Ok(ids)
         })
         .await?;
 
@@ -65,12 +69,15 @@ impl Cache {
     pub async fn get_game(&self, id: i32) -> anyhow::Result<Game> {
         let conn = Arc::clone(&self.conn);
         let result = task::spawn_blocking(move || -> anyhow::Result<Game> {
-            use schema::game;
-
             let conn = conn.lock().unwrap();
-            Ok(game::table
-                .filter(game::id.eq(id))
-                .first::<Game>(conn.deref())?)
+            let mut stmt = conn.prepare("SELECT * FROM game WHERE game.id = ? LIMIT 1")?;
+
+            Ok(stmt.query_row(params![id], |row| {
+                Ok(Game {
+                    id: row.get(0)?,
+                    path: row.get(1)?,
+                })
+            })?)
         })
         .await?;
 
@@ -80,13 +87,37 @@ impl Cache {
     pub async fn get_mods_of_game(&self, game: Game) -> anyhow::Result<Vec<FactorioMod>> {
         let conn = Arc::clone(&self.conn);
         let result = task::spawn_blocking(move || -> anyhow::Result<Vec<FactorioMod>> {
-            use schema::{factorio_mod, game_mod};
+            // use schema::{factorio_mod, game_mod};
+
+            // let conn = conn.lock().unwrap();
+            // let mod_names = GameMod::belonging_to(&game).select(game_mod::factorio_mod);
+            // Ok(factorio_mod::table
+            //     .filter(factorio_mod::name.eq_any(mod_names))
+            //     .load::<FactorioMod>(conn.deref())?)
 
             let conn = conn.lock().unwrap();
-            let mod_names = GameMod::belonging_to(&game).select(game_mod::factorio_mod);
-            Ok(factorio_mod::table
-                .filter(factorio_mod::name.eq_any(mod_names))
-                .load::<FactorioMod>(conn.deref())?)
+            let mut stmt = conn.prepare(
+                r#"SELECT
+    factorio_mod.name,
+    factorio_mod.summary,
+    factorio_mod.last_updated
+FROM game_mod
+INNER JOIN factorio_mod
+WHERE game_mod.game = ?"#,
+            )?;
+            let mut mods = Vec::new();
+
+            for row in stmt.query_map(params![game.id], |row| {
+                Ok(FactorioMod {
+                    name: row.get(0)?,
+                    summary: row.get(1)?,
+                    last_updated: row.get(2)?,
+                })
+            })? {
+                mods.push(row?);
+            }
+
+            Ok(mods)
         })
         .await?;
 

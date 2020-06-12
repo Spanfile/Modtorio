@@ -26,7 +26,7 @@ async-trait = "0.1.35"
 tempfile = "3.1.0"
 chrono = { version = "0.4.11", features = ["serde"] }
 bytesize = "1.0.1"
-diesel = { version = "1.4.5", features = ["sqlite"] }
+rusqlite = "0.23.1"
 num-traits = "0.2.12"
 num-derive = "0.3.0"
 
