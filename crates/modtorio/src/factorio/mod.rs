@@ -13,18 +13,20 @@ use std::{
 };
 use tokio::sync::Mutex;
 
+pub type GameCacheId = i64;
+
 pub struct Factorio {
     pub settings: ServerSettings,
     pub mods: Mods,
     root: PathBuf,
-    cache_id: Mutex<Option<i32>>,
+    cache_id: Mutex<Option<GameCacheId>>,
     cache: Arc<Cache>,
 }
 
 pub struct Importer {
     root: Option<PathBuf>,
     settings: PathBuf,
-    game_cache_id: Option<i32>,
+    game_cache_id: Option<GameCacheId>,
 }
 
 impl Factorio {
@@ -74,7 +76,7 @@ impl Importer {
         }
     }
 
-    pub fn from_cache(game_cache_id: i32) -> Self {
+    pub fn from_cache(game_cache_id: GameCacheId) -> Self {
         Self {
             root: None,
             settings: PathBuf::from("server-settings.json"),

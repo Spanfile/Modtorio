@@ -1,6 +1,8 @@
+use crate::factorio::GameCacheId;
+
 #[derive(Debug, PartialEq)]
 pub struct Game {
-    pub id: i32,
+    pub id: GameCacheId,
     pub path: String,
 }
 
@@ -31,7 +33,7 @@ pub struct GameMod {
 
 #[derive(Debug, PartialEq)]
 pub struct NewGameMod {
-    pub game: i32,
+    pub game: GameCacheId,
     pub factorio_mod: String,
 }
 

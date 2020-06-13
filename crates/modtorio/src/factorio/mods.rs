@@ -123,7 +123,7 @@ impl Mods {
         self.mods.len()
     }
 
-    pub async fn update_cache(&self, game_id: i32) -> anyhow::Result<()> {
+    pub async fn update_cache(&self, game_id: i64) -> anyhow::Result<()> {
         for game_mod in self.mods.values() {
             debug!("Updating cache for '{}'", game_mod.name().await);
             game_mod.update_cache().await?;
@@ -299,11 +299,10 @@ impl Mods {
                             match dep.version() {
                                 Some(version_req) if !required_version.meets(version_req) => {
                                     debug!(
-                                    "Dependency {} of '{}' not met: version requirement mismatch (found {})",
-                                    dep,
-                                    target_name,
-                                    required_version
-                                );
+                                        "Dependency {} of '{}' not met: version requirement \
+                                         mismatch (found {})",
+                                        dep, target_name, required_version
+                                    );
                                     missing.push(dep.name().to_string());
                                 }
                                 _ => debug!(

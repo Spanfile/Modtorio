@@ -1,11 +1,10 @@
 pub mod models;
 
-use crate::ext::PathExt;
+use crate::{ext::PathExt, factorio::GameCacheId};
 use models::*;
 use rusqlite::{params, Connection, OptionalExtension, NO_PARAMS};
 use std::{
     env,
-    ops::Deref,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
@@ -48,9 +47,9 @@ impl CacheBuilder {
 }
 
 impl Cache {
-    pub async fn get_game_ids(&self) -> anyhow::Result<Vec<i32>> {
+    pub async fn get_game_ids(&self) -> anyhow::Result<Vec<GameCacheId>> {
         let conn = Arc::clone(&self.conn);
-        let result = task::spawn_blocking(move || -> anyhow::Result<Vec<i32>> {
+        let result = task::spawn_blocking(move || -> anyhow::Result<Vec<GameCacheId>> {
             let conn = conn.lock().unwrap();
             let mut stmt = conn.prepare("SELECT id FROM game")?;
             let mut ids = Vec::new();
@@ -66,11 +65,11 @@ impl Cache {
         Ok(result?)
     }
 
-    pub async fn get_game(&self, id: i32) -> anyhow::Result<Game> {
+    pub async fn get_game(&self, id: GameCacheId) -> anyhow::Result<Game> {
         let conn = Arc::clone(&self.conn);
         let result = task::spawn_blocking(move || -> anyhow::Result<Game> {
             let conn = conn.lock().unwrap();
-            let mut stmt = conn.prepare("SELECT * FROM game WHERE game.id = ? LIMIT 1")?;
+            let mut stmt = conn.prepare("SELECT * FROM game WHERE id = ? LIMIT 1")?;
 
             Ok(stmt.query_row(params![id], |row| {
                 Ok(Game {
@@ -89,9 +88,8 @@ impl Cache {
         let result = task::spawn_blocking(move || -> anyhow::Result<Vec<FactorioMod>> {
             let conn = conn.lock().unwrap();
             let mut stmt = conn.prepare(
-                "SELECT factorio_mod.name, factorio_mod.summary, factorio_mod.last_updated FROM \
-                 game_mod INNER JOIN factorio_mod ON factorio_mod.name == game_mod.factorio_mod \
-                 WHERE game_mod.game == 1;",
+                "SELECT * FROM game_mod INNER JOIN factorio_mod ON factorio_mod.name == \
+                 game_mod.factorio_mod WHERE game_mod.game == 1;",
             )?;
             let mut mods = Vec::new();
 
@@ -112,21 +110,15 @@ impl Cache {
         Ok(result?)
     }
 
-    pub async fn set_mods_of_game(&self, game: i32, mods: Vec<String>) -> anyhow::Result<()> {
+    pub async fn set_mods_of_game(&self, mods: Vec<NewGameMod>) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
         task::spawn_blocking(move || -> anyhow::Result<()> {
             let mut conn = conn.lock().unwrap();
             let tx = conn.transaction()?;
-
-            tx.execute(
-                "DELETE FROM game_mod WHERE game_mod.game == ?",
-                params![game],
-            );
-
-            let mut stmt = tx.prepare("INSERT INTO game_mod (game, factorio_mod) VALUES(?, ?)")?;
+            let mut stmt = tx.prepare("REPLACE INTO game_mod (game, factorio_mod) VALUES(?, ?)")?;
 
             for m in &mods {
-                stmt.execute(params![game, m]);
+                stmt.execute(params![m.game, m.factorio_mod])?;
             }
 
             Ok(())
@@ -141,8 +133,10 @@ impl Cache {
         let result = task::spawn_blocking(move || -> anyhow::Result<i64> {
             let mut conn = conn.lock().unwrap();
             let tx = conn.transaction()?;
-            let mut stmt = tx.prepare("INSERT INTO game (path) VALUES (?)")?;
-            let id = stmt.insert(params![new_game.path])?;
+            let id = {
+                let mut stmt = tx.prepare("INSERT INTO game (path) VALUES (?)")?;
+                stmt.insert(params![new_game.path])?
+            };
 
             tx.commit()?;
             Ok(id)
@@ -152,7 +146,7 @@ impl Cache {
         Ok(result?)
     }
 
-    pub async fn update_game(&self, id: i32, insert: NewGame) -> anyhow::Result<()> {
+    pub async fn update_game(&self, id: GameCacheId, insert: NewGame) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
         task::spawn_blocking(move || -> anyhow::Result<()> {
             let mut conn = conn.lock().unwrap();
@@ -186,8 +180,8 @@ impl Cache {
                         summary: row.get(1)?,
                         last_updated: row.get(2)?,
                     })
-                })?
-                .optional())
+                })
+                .optional()?)
         })
         .await?;
 
@@ -200,12 +194,21 @@ impl Cache {
     ) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
         task::spawn_blocking(move || -> anyhow::Result<()> {
-            use schema::factorio_mod;
+            let mut conn = conn.lock().unwrap();
+            let tx = conn.transaction()?;
+            {
+                let mut stmt = tx.prepare(
+                    "REPLACE INTO factorio_mod (name, summary, last_updated) VALUES(?, ?, ?)",
+                )?;
 
-            let conn = conn.lock().unwrap();
-            diesel::replace_into(factorio_mod::table)
-                .values(factorio_mod)
-                .execute(conn.deref())?;
+                stmt.execute(params![
+                    factorio_mod.name,
+                    factorio_mod.summary,
+                    factorio_mod.last_updated,
+                ])?;
+            }
+
+            tx.commit()?;
             Ok(())
         })
         .await??;
@@ -216,12 +219,24 @@ impl Cache {
     pub async fn get_mod_releases(&self, factorio_mod: String) -> anyhow::Result<Vec<ModRelease>> {
         let conn = Arc::clone(&self.conn);
         let result = task::spawn_blocking(move || -> anyhow::Result<Vec<ModRelease>> {
-            use schema::mod_release;
-
             let conn = conn.lock().unwrap();
-            Ok(mod_release::table
-                .filter(mod_release::factorio_mod.eq(factorio_mod))
-                .load::<models::ModRelease>(conn.deref())?)
+            let mut stmt = conn.prepare("SELECT * FROM mod_release WHERE factorio_mod = ?")?;
+            let mut mods = Vec::new();
+
+            for m in stmt.query_map(params![factorio_mod], |row| {
+                Ok(ModRelease {
+                    factorio_mod: row.get(0)?,
+                    download_url: row.get(1)?,
+                    released_on: row.get(2)?,
+                    version: row.get(3)?,
+                    sha1: row.get(4)?,
+                    factorio_version: row.get(5)?,
+                })
+            })? {
+                mods.push(m?);
+            }
+
+            Ok(mods)
         })
         .await?;
 
@@ -231,12 +246,25 @@ impl Cache {
     pub async fn set_mod_release(&self, release: NewModRelease) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
         task::spawn_blocking(move || -> anyhow::Result<()> {
-            use schema::mod_release;
+            let mut conn = conn.lock().unwrap();
+            let tx = conn.transaction()?;
+            {
+                let mut stmt = tx.prepare(
+                    "REPLACE INTO mod_release (factorio_mod, download_url, released_on, version, \
+                     sha1, factorio_version) VALUES(?, ?, ?, ?, ?, ?)",
+                )?;
 
-            let conn = conn.lock().unwrap();
-            diesel::replace_into(mod_release::table)
-                .values(release)
-                .execute(conn.deref())?;
+                stmt.execute(params![
+                    release.factorio_mod,
+                    release.download_url,
+                    release.released_on,
+                    release.version,
+                    release.sha1,
+                    release.factorio_version,
+                ])?;
+            }
+
+            tx.commit()?;
             Ok(())
         })
         .await??;
@@ -251,16 +279,26 @@ impl Cache {
     ) -> anyhow::Result<Vec<ReleaseDependency>> {
         let conn = Arc::clone(&self.conn);
         let result = task::spawn_blocking(move || -> anyhow::Result<Vec<ReleaseDependency>> {
-            use schema::release_dependency;
-
             let conn = conn.lock().unwrap();
-            Ok(release_dependency::table
-                .filter(
-                    release_dependency::release_mod_name
-                        .eq(release_mod_name)
-                        .and(release_dependency::release_version.eq(release_version)),
-                )
-                .load::<models::ReleaseDependency>(conn.deref())?)
+            let mut stmt = conn.prepare(
+                "SELECT * FROM release_dependency WHERE release_mod_name = ? AND release_version \
+                 = ?",
+            )?;
+            let mut dependencies = Vec::new();
+
+            for dep in stmt.query_map(params![release_mod_name, release_version], |row| {
+                Ok(ReleaseDependency {
+                    release_mod_name: row.get(0)?,
+                    release_version: row.get(1)?,
+                    name: row.get(2)?,
+                    requirement: row.get(3)?,
+                    version_req: row.get(4)?,
+                })
+            })? {
+                dependencies.push(dep?);
+            }
+
+            Ok(dependencies)
         })
         .await?;
 
@@ -269,17 +307,30 @@ impl Cache {
 
     pub async fn set_release_dependencies(
         &self,
-        release: Vec<NewReleaseDependency>,
+        dependencies: Vec<NewReleaseDependency>,
     ) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
         task::spawn_blocking(move || -> anyhow::Result<()> {
-            use schema::release_dependency;
+            let mut conn = conn.lock().unwrap();
+            let tx = conn.transaction()?;
+            {
+                let mut stmt = tx.prepare(
+                    "REPLACE INTO release_dependency (release_mod_name, release_version, name, \
+                     requirement, version_req) VALUES(?, ?, ?, ?, ?)",
+                )?;
 
-            let conn = conn.lock().unwrap();
-            diesel::replace_into(release_dependency::table)
-                .values(release)
-                .execute(conn.deref())?;
+                for rel in dependencies {
+                    stmt.execute(params![
+                        rel.release_mod_name,
+                        rel.release_version,
+                        rel.name,
+                        rel.requirement,
+                        rel.version_req,
+                    ])?;
+                }
+            }
 
+            tx.commit()?;
             Ok(())
         })
         .await??;
