@@ -2,7 +2,7 @@ pub mod models;
 
 use crate::ext::PathExt;
 use models::*;
-use rusqlite::{params, Connection, NO_PARAMS};
+use rusqlite::{params, Connection, OptionalExtension, NO_PARAMS};
 use std::{
     env,
     ops::Deref,
@@ -115,14 +115,6 @@ impl Cache {
     pub async fn set_mods_of_game(&self, game: i32, mods: Vec<String>) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
         task::spawn_blocking(move || -> anyhow::Result<()> {
-            // use schema::game_mod;
-
-            // let conn = conn.lock().unwrap();
-            // diesel::replace_into(game_mod::table)
-            //     .values(&game_mods)
-            //     .execute(conn.deref())?;
-            // Ok(())
-
             let mut conn = conn.lock().unwrap();
             let tx = conn.transaction()?;
 
@@ -137,27 +129,23 @@ impl Cache {
                 stmt.execute(params![game, m]);
             }
 
-            panic!()
+            Ok(())
         })
         .await??;
 
         Ok(())
     }
 
-    pub async fn insert_game(&self, new_game: NewGame) -> anyhow::Result<i32> {
+    pub async fn insert_game(&self, new_game: NewGame) -> anyhow::Result<i64> {
         let conn = Arc::clone(&self.conn);
-        let result = task::spawn_blocking(move || -> anyhow::Result<i32> {
-            use schema::{game, game::dsl};
+        let result = task::spawn_blocking(move || -> anyhow::Result<i64> {
+            let mut conn = conn.lock().unwrap();
+            let tx = conn.transaction()?;
+            let mut stmt = tx.prepare("INSERT INTO game (path) VALUES (?)")?;
+            let id = stmt.insert(params![new_game.path])?;
 
-            let conn = conn.lock().unwrap();
-            diesel::insert_into(game::table)
-                .values(&new_game)
-                .execute(conn.deref())?;
-
-            Ok(dsl::game
-                .order(dsl::id.desc())
-                .first::<models::Game>(conn.deref())?
-                .id)
+            tx.commit()?;
+            Ok(id)
         })
         .await?;
 
@@ -167,13 +155,15 @@ impl Cache {
     pub async fn update_game(&self, id: i32, insert: NewGame) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
         task::spawn_blocking(move || -> anyhow::Result<()> {
-            use schema::game::dsl;
+            let mut conn = conn.lock().unwrap();
+            let tx = conn.transaction()?;
 
-            let conn = conn.lock().unwrap();
-            diesel::update(dsl::game.find(id))
-                .set(dsl::path.eq(insert.path))
-                .execute(conn.deref())?;
-            Ok(())
+            tx.execute(
+                "UPDATE game SET path = ? WHERE id = ?",
+                params![insert.path, id],
+            )?;
+
+            Ok(tx.commit()?)
         })
         .await??;
 
@@ -186,13 +176,18 @@ impl Cache {
     ) -> anyhow::Result<Option<FactorioMod>> {
         let conn = Arc::clone(&self.conn);
         let result = task::spawn_blocking(move || -> anyhow::Result<Option<FactorioMod>> {
-            use schema::factorio_mod;
-
             let conn = conn.lock().unwrap();
-            Ok(factorio_mod::table
-                .filter(factorio_mod::name.eq(factorio_mod))
-                .first::<models::FactorioMod>(conn.deref())
-                .optional()?)
+            let mut stmt = conn.prepare("SELECT * FROM factorio_mod WHERE name = ? LIMIT 1")?;
+
+            Ok(stmt
+                .query_row(params![factorio_mod], |row| {
+                    Ok(FactorioMod {
+                        name: row.get(0)?,
+                        summary: row.get(1)?,
+                        last_updated: row.get(2)?,
+                    })
+                })?
+                .optional())
         })
         .await?;
 
