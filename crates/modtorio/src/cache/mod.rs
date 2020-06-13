@@ -1,8 +1,9 @@
 pub mod models;
 
 use crate::{ext::PathExt, factorio::GameCacheId};
+use log::*;
 use models::*;
-use rusqlite::{params, Connection, OptionalExtension, NO_PARAMS};
+use rusqlite::{params, Connection, OptionalExtension, Transaction, NO_PARAMS};
 use std::{
     env,
     path::{Path, PathBuf},
@@ -47,6 +48,20 @@ impl CacheBuilder {
 }
 
 impl Cache {
+    pub fn begin_transaction(&self) -> anyhow::Result<()> {
+        debug!("Beginning new cache transaction");
+        Ok(self
+            .conn
+            .lock()
+            .unwrap()
+            .execute_batch("BEGIN TRANSACTION")?)
+    }
+
+    pub fn commit_transaction(&self) -> anyhow::Result<()> {
+        debug!("Committing cache transaction");
+        Ok(self.conn.lock().unwrap().execute_batch("COMMIT")?)
+    }
+
     pub async fn get_game_ids(&self) -> anyhow::Result<Vec<GameCacheId>> {
         let conn = Arc::clone(&self.conn);
         let result = task::spawn_blocking(move || -> anyhow::Result<Vec<GameCacheId>> {
@@ -113,9 +128,9 @@ impl Cache {
     pub async fn set_mods_of_game(&self, mods: Vec<NewGameMod>) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
         task::spawn_blocking(move || -> anyhow::Result<()> {
-            let mut conn = conn.lock().unwrap();
-            let tx = conn.transaction()?;
-            let mut stmt = tx.prepare("REPLACE INTO game_mod (game, factorio_mod) VALUES(?, ?)")?;
+            let conn = conn.lock().unwrap();
+            let mut stmt =
+                conn.prepare("REPLACE INTO game_mod (game, factorio_mod) VALUES(?, ?)")?;
 
             for m in &mods {
                 stmt.execute(params![m.game, m.factorio_mod])?;
@@ -131,14 +146,10 @@ impl Cache {
     pub async fn insert_game(&self, new_game: NewGame) -> anyhow::Result<i64> {
         let conn = Arc::clone(&self.conn);
         let result = task::spawn_blocking(move || -> anyhow::Result<i64> {
-            let mut conn = conn.lock().unwrap();
-            let tx = conn.transaction()?;
-            let id = {
-                let mut stmt = tx.prepare("INSERT INTO game (path) VALUES (?)")?;
-                stmt.insert(params![new_game.path])?
-            };
+            let conn = conn.lock().unwrap();
+            let mut stmt = conn.prepare("INSERT INTO game (path) VALUES (?)")?;
+            let id = stmt.insert(params![new_game.path])?;
 
-            tx.commit()?;
             Ok(id)
         })
         .await?;
@@ -149,15 +160,13 @@ impl Cache {
     pub async fn update_game(&self, id: GameCacheId, insert: NewGame) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
         task::spawn_blocking(move || -> anyhow::Result<()> {
-            let mut conn = conn.lock().unwrap();
-            let tx = conn.transaction()?;
-
-            tx.execute(
+            let conn = conn.lock().unwrap();
+            conn.execute(
                 "UPDATE game SET path = ? WHERE id = ?",
                 params![insert.path, id],
             )?;
 
-            Ok(tx.commit()?)
+            Ok(())
         })
         .await??;
 
@@ -194,21 +203,17 @@ impl Cache {
     ) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
         task::spawn_blocking(move || -> anyhow::Result<()> {
-            let mut conn = conn.lock().unwrap();
-            let tx = conn.transaction()?;
-            {
-                let mut stmt = tx.prepare(
-                    "REPLACE INTO factorio_mod (name, summary, last_updated) VALUES(?, ?, ?)",
-                )?;
+            let conn = conn.lock().unwrap();
+            let mut stmt = conn.prepare(
+                "REPLACE INTO factorio_mod (name, summary, last_updated) VALUES(?, ?, ?)",
+            )?;
 
-                stmt.execute(params![
-                    factorio_mod.name,
-                    factorio_mod.summary,
-                    factorio_mod.last_updated,
-                ])?;
-            }
+            stmt.execute(params![
+                factorio_mod.name,
+                factorio_mod.summary,
+                factorio_mod.last_updated,
+            ])?;
 
-            tx.commit()?;
             Ok(())
         })
         .await??;
@@ -246,25 +251,21 @@ impl Cache {
     pub async fn set_mod_release(&self, release: NewModRelease) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
         task::spawn_blocking(move || -> anyhow::Result<()> {
-            let mut conn = conn.lock().unwrap();
-            let tx = conn.transaction()?;
-            {
-                let mut stmt = tx.prepare(
-                    "REPLACE INTO mod_release (factorio_mod, download_url, released_on, version, \
-                     sha1, factorio_version) VALUES(?, ?, ?, ?, ?, ?)",
-                )?;
+            let conn = conn.lock().unwrap();
+            let mut stmt = conn.prepare(
+                "REPLACE INTO mod_release (factorio_mod, download_url, released_on, version, \
+                 sha1, factorio_version) VALUES(?, ?, ?, ?, ?, ?)",
+            )?;
 
-                stmt.execute(params![
-                    release.factorio_mod,
-                    release.download_url,
-                    release.released_on,
-                    release.version,
-                    release.sha1,
-                    release.factorio_version,
-                ])?;
-            }
+            stmt.execute(params![
+                release.factorio_mod,
+                release.download_url,
+                release.released_on,
+                release.version,
+                release.sha1,
+                release.factorio_version,
+            ])?;
 
-            tx.commit()?;
             Ok(())
         })
         .await??;
@@ -311,26 +312,22 @@ impl Cache {
     ) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
         task::spawn_blocking(move || -> anyhow::Result<()> {
-            let mut conn = conn.lock().unwrap();
-            let tx = conn.transaction()?;
-            {
-                let mut stmt = tx.prepare(
-                    "REPLACE INTO release_dependency (release_mod_name, release_version, name, \
-                     requirement, version_req) VALUES(?, ?, ?, ?, ?)",
-                )?;
+            let conn = conn.lock().unwrap();
+            let mut stmt = conn.prepare(
+                "REPLACE INTO release_dependency (release_mod_name, release_version, name, \
+                 requirement, version_req) VALUES(?, ?, ?, ?, ?)",
+            )?;
 
-                for rel in dependencies {
-                    stmt.execute(params![
-                        rel.release_mod_name,
-                        rel.release_version,
-                        rel.name,
-                        rel.requirement,
-                        rel.version_req,
-                    ])?;
-                }
+            for rel in dependencies {
+                stmt.execute(params![
+                    rel.release_mod_name,
+                    rel.release_version,
+                    rel.name,
+                    rel.requirement,
+                    rel.version_req,
+                ])?;
             }
 
-            tx.commit()?;
             Ok(())
         })
         .await??;

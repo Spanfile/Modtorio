@@ -33,6 +33,8 @@ impl Factorio {
     pub async fn update_cache(&self) -> anyhow::Result<()> {
         let mut cache_id = self.cache_id.lock().await;
 
+        self.cache.begin_transaction()?;
+
         let id = if let Some(c) = *cache_id {
             self.cache
                 .update_game(
@@ -59,8 +61,7 @@ impl Factorio {
         };
 
         self.mods.update_cache(id).await?;
-
-        Ok(())
+        self.cache.commit_transaction()
     }
 }
 
