@@ -3,13 +3,15 @@ pub mod models;
 use crate::{ext::PathExt, factorio::GameCacheId};
 use log::*;
 use models::*;
-use rusqlite::{params, Connection, OptionalExtension, Transaction, NO_PARAMS};
+use rusqlite::{params, Connection, OptionalExtension, NO_PARAMS};
 use std::{
-    env,
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
 };
 use tokio::task;
+
+const DB_PATH: &str = "modtorio.db";
+const SCHEMA: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema.sql"));
 
 pub struct Cache {
     conn: Arc<Mutex<Connection>>,
@@ -18,14 +20,14 @@ pub struct Cache {
 #[derive(Debug)]
 pub struct CacheBuilder {
     db_path: PathBuf,
+    schema: String,
 }
 
 impl CacheBuilder {
     pub fn new() -> Self {
         Self {
-            db_path: PathBuf::from(
-                env::var("DATABASE_URL").expect("couldn't read DATABASE_URL env variable"),
-            ),
+            db_path: PathBuf::from(DB_PATH),
+            schema: String::from(SCHEMA),
         }
     }
 
@@ -35,11 +37,22 @@ impl CacheBuilder {
     {
         Self {
             db_path: PathBuf::from(path.as_ref()),
+            ..self
         }
+    }
+
+    pub fn with_schema(self, schema: String) -> Self {
+        Self { schema, ..self }
     }
 
     pub fn build(self) -> anyhow::Result<Cache> {
         let conn = Connection::open(self.db_path.get_str()?)?;
+
+        debug!("Applying database schema...");
+        let stmt = format!("BEGIN TRANSACTION; {} COMMIT;", self.schema);
+
+        trace!("{}", stmt);
+        conn.execute_batch(&stmt)?;
 
         Ok(Cache {
             conn: Arc::new(Mutex::new(conn)),
