@@ -319,6 +319,18 @@ impl Info {
         &self.name
     }
 
+    pub fn author(&self) -> &str {
+        &self.author.name
+    }
+
+    pub fn contact(&self) -> Option<&str> {
+        self.author.contact.as_deref()
+    }
+
+    pub fn homepage(&self) -> Option<&str> {
+        self.author.homepage.as_deref()
+    }
+
     pub fn title(&self) -> &str {
         &self.display.title
     }
@@ -327,8 +339,20 @@ impl Info {
         self.display.summary.as_deref()
     }
 
+    pub fn description(&self) -> &str {
+        &self.display.description
+    }
+
+    pub fn changelog(&self) -> Option<&str> {
+        self.display.changelog.as_deref()
+    }
+
     pub fn own_version(&self) -> anyhow::Result<HumanVersion> {
         Ok(self.versions()?.own)
+    }
+
+    pub fn factorio_version(&self) -> anyhow::Result<HumanVersion> {
+        Ok(self.versions()?.factorio)
     }
 
     pub fn releases(&self) -> anyhow::Result<Vec<Release>> {

@@ -135,7 +135,7 @@ impl Mods {
 
         for m in self.mods.values() {
             let mut mods = new_game_mods.lock().await;
-            mods.push(models::NewGameMod {
+            mods.push(models::GameMod {
                 game: game_id,
                 factorio_mod: m.name().await.to_string(),
             });

@@ -82,17 +82,35 @@ impl Mod {
         }
 
         let name = self.name().await;
+        let author = self.author().await;
+        let contact = self.contact().await;
+        let homepage = self.homepage().await;
+        let title = self.title().await;
         let summary = self.summary().await;
-        let new_factorio_mod = models::NewFactorioMod {
+        let description = self.description().await;
+        let changelog = self.changelog().await;
+        let version = self.own_version().await?.to_string();
+        let factorio_version = self.factorio_version().await?.to_string();
+
+        let new_factorio_mod = models::FactorioMod {
             name,
+            author,
+            contact,
+            homepage,
+            title,
             summary,
+            description,
+            changelog,
+            version,
+            factorio_version,
             last_updated: Utc::now().to_string(),
         };
+
         trace!("'{}' cached mod: {:?}", self.name().await, new_factorio_mod);
         self.cache.set_factorio_mod(new_factorio_mod).await?;
 
         for release in self.releases().await? {
-            let new_mod_release = models::NewModRelease {
+            let new_mod_release = models::ModRelease {
                 factorio_mod: self.name().await,
                 download_url: release.url()?.to_string(),
                 released_on: release.released_on().to_string(),
@@ -110,7 +128,7 @@ impl Mod {
 
             let mut new_release_dependencies = Vec::new();
             for dependency in release.dependencies().into_iter() {
-                new_release_dependencies.push(models::NewReleaseDependency {
+                new_release_dependencies.push(models::ReleaseDependency {
                     release_mod_name: self.name().await,
                     release_version: release.version().to_string(),
                     name: dependency.name().to_string(),
@@ -155,7 +173,8 @@ impl Mod {
                 time_since_updated.to_std()? > Duration::from_secs(self.config.cache_expiry);
 
             trace!(
-                "Ensuring mod '{}' has portal info. Got cached mod: {:?}. Expired: {} (configured expiry {} seconds)",
+                "Ensuring mod '{}' has portal info. Got cached mod: {:?}. Expired: {} (configured \
+                 expiry {} seconds)",
                 self.name().await,
                 cache_mod,
                 expired,
@@ -246,6 +265,21 @@ impl Mod {
         info.name().to_string()
     }
 
+    pub async fn author(&self) -> String {
+        let info = self.info.lock().await;
+        info.author().to_string()
+    }
+
+    pub async fn contact(&self) -> Option<String> {
+        let info = self.info.lock().await;
+        info.contact().map(|c| c.to_string())
+    }
+
+    pub async fn homepage(&self) -> Option<String> {
+        let info = self.info.lock().await;
+        info.homepage().map(|c| c.to_string())
+    }
+
     pub async fn title(&self) -> String {
         let info = self.info.lock().await;
         info.title().to_string()
@@ -256,9 +290,24 @@ impl Mod {
         info.summary().map(|s| s.to_string())
     }
 
+    pub async fn description(&self) -> String {
+        let info = self.info.lock().await;
+        info.description().to_string()
+    }
+
+    pub async fn changelog(&self) -> Option<String> {
+        let info = self.info.lock().await;
+        info.changelog().map(|s| s.to_string())
+    }
+
     pub async fn own_version(&self) -> anyhow::Result<HumanVersion> {
         let info = self.info.lock().await;
         info.own_version()
+    }
+
+    pub async fn factorio_version(&self) -> anyhow::Result<HumanVersion> {
+        let info = self.info.lock().await;
+        info.factorio_version()
     }
 
     pub async fn releases(&self) -> anyhow::Result<Vec<Release>> {

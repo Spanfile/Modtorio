@@ -37,12 +37,10 @@ impl Factorio {
 
         let id = if let Some(c) = *cache_id {
             self.cache
-                .update_game(
-                    c,
-                    models::NewGame {
-                        path: self.root.get_str()?.to_string(),
-                    },
-                )
+                .update_game(models::Game {
+                    id: c,
+                    path: self.root.get_str()?.to_string(),
+                })
                 .await?;
 
             debug!("Updating existing game cache (id {})", c);
@@ -50,7 +48,8 @@ impl Factorio {
         } else {
             let new_id = self
                 .cache
-                .insert_game(models::NewGame {
+                .insert_game(models::Game {
+                    id: 0,
                     path: self.root.get_str()?.to_string(),
                 })
                 .await?;
