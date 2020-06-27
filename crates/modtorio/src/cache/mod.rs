@@ -1,7 +1,7 @@
 mod cache_meta;
 pub mod models;
 
-use crate::{ext::PathExt, factorio::GameCacheId};
+use crate::{ext::PathExt, factorio::GameCacheId, util::HumanVersion};
 pub use cache_meta::{CacheMetaField, CacheMetaValue};
 use log::*;
 use models::*;
@@ -62,7 +62,8 @@ impl CacheBuilder {
             conn: Arc::new(Mutex::new(conn)),
         };
 
-        let checksums_match = encoded_checksum_matches_meta(&cache, &encoded_checksum).await?;
+        let checksums_match =
+            db_exists && encoded_checksum_matches_meta(&cache, &encoded_checksum).await?;
         debug!(
             "Cache database exists: {}. Schema checksums match: {}",
             db_exists, checksums_match
@@ -217,16 +218,8 @@ impl Cache {
             for row in stmt.query_map_named(named_params! { ":id": game.id }, |row| {
                 Ok(FactorioMod {
                     name: row.get(0)?,
-                    author: row.get(1)?,
-                    contact: row.get(2)?,
-                    homepage: row.get(3)?,
-                    title: row.get(4)?,
-                    summary: row.get(5)?,
-                    description: row.get(6)?,
-                    changelog: row.get(7)?,
-                    version: row.get(8)?,
-                    factorio_version: row.get(9)?,
-                    last_updated: row.get(10)?,
+                    summary: row.get(1)?,
+                    last_updated: row.get(2)?,
                 })
             })? {
                 mods.push(row?);
@@ -244,13 +237,18 @@ impl Cache {
         task::spawn_blocking(move || -> anyhow::Result<()> {
             let conn = conn.lock().unwrap();
             let mut stmt = conn.prepare(
-                "REPLACE INTO game_mod (game, factorio_mod) VALUES(:game, :factorio_mod)",
+                "REPLACE INTO game_mod (game, factorio_mod, mod_version, mod_zip, zip_checksum) \
+                 VALUES(:game, :factorio_mod, :mod_version, :mod_zip, :zip_checksum)",
             )?;
 
             for m in &mods {
-                stmt.execute_named(
-                    named_params! {":game": m.game, ":factorio_mod": m.factorio_mod },
-                )?;
+                stmt.execute_named(named_params! {
+                    ":game": m.game,
+                    ":factorio_mod": m.factorio_mod,
+                    ":mod_version": m.mod_version,
+                    ":mod_zip": m.mod_zip,
+                    ":zip_checksum": m.zip_checksum
+                })?;
             }
 
             Ok(())
@@ -305,16 +303,8 @@ impl Cache {
                 .query_row_named(named_params! {":name": factorio_mod}, |row| {
                     Ok(FactorioMod {
                         name: row.get(0)?,
-                        author: row.get(1)?,
-                        contact: row.get(2)?,
-                        homepage: row.get(3)?,
-                        title: row.get(4)?,
-                        summary: row.get(5)?,
-                        description: row.get(6)?,
-                        changelog: row.get(7)?,
-                        version: row.get(8)?,
-                        factorio_version: row.get(9)?,
-                        last_updated: row.get(10)?,
+                        summary: row.get(1)?,
+                        last_updated: row.get(2)?,
                     })
                 })
                 .optional()?)
@@ -329,23 +319,11 @@ impl Cache {
         task::spawn_blocking(move || -> anyhow::Result<()> {
             let conn = conn.lock().unwrap();
             let mut stmt = conn.prepare(
-                "REPLACE INTO factorio_mod (name, author, contact, homepage, title, summary, \
-                 description, changelog, version, factorio_version, last_updated) VALUES(:name, \
-                 :author, :contact, :homepage, :title, :summary, :description, :changelog, \
-                 :version, :factorio_version, :last_updated)",
+                "REPLACE INTO factorio_mod (name, last_updated) VALUES(:name, :last_updated)",
             )?;
 
             stmt.execute_named(named_params! {
                 ":name": factorio_mod.name,
-                ":author": factorio_mod.author,
-                ":contact": factorio_mod.contact,
-                ":homepage": factorio_mod.homepage,
-                ":title": factorio_mod.title,
-                ":summary": factorio_mod.summary,
-                ":description": factorio_mod.description,
-                ":changelog": factorio_mod.changelog,
-                ":version": factorio_mod.version,
-                ":factorio_version": factorio_mod.factorio_version,
                 ":last_updated": factorio_mod.last_updated,
             })?;
 
@@ -415,7 +393,7 @@ impl Cache {
     pub async fn get_release_dependencies(
         &self,
         release_mod_name: String,
-        release_version: String,
+        release_version: HumanVersion,
     ) -> anyhow::Result<Vec<ReleaseDependency>> {
         let conn = Arc::clone(&self.conn);
         let result = task::spawn_blocking(move || -> anyhow::Result<Vec<ReleaseDependency>> {

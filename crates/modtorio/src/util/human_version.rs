@@ -1,8 +1,13 @@
 use anyhow::anyhow;
 use lazy_static::lazy_static;
 use regex::Regex;
+use rusqlite::{
+    types::{self, ToSqlOutput},
+    ToSql,
+};
 use serde::{de, de::Visitor, Deserialize};
 use std::{fmt, fmt::Display, str::FromStr};
+use types::{FromSql, FromSqlError, FromSqlResult, Value, ValueRef};
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Comparator {
@@ -116,6 +121,36 @@ impl FromStr for HumanVersionReq {
             comparator,
             version,
         })
+    }
+}
+
+impl ToSql for HumanVersion {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::Owned(Value::Text(self.to_string())))
+    }
+}
+
+impl FromSql for HumanVersion {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match HumanVersion::from_str(value.as_str()?) {
+            Ok(v) => Ok(v),
+            Err(_) => Err(FromSqlError::InvalidType), // TODO: bad error type?
+        }
+    }
+}
+
+impl ToSql for HumanVersionReq {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::Owned(Value::Text(self.to_string())))
+    }
+}
+
+impl FromSql for HumanVersionReq {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match HumanVersionReq::from_str(value.as_str()?) {
+            Ok(v) => Ok(v),
+            Err(_) => Err(FromSqlError::InvalidType), // TODO: bad error type?
+        }
     }
 }
 

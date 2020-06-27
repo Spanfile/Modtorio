@@ -1,13 +1,15 @@
 use crate::{cache, util::HumanVersionReq};
 use anyhow::anyhow;
 use lazy_static::lazy_static;
-use num_derive::FromPrimitive;
-use num_traits::FromPrimitive;
 use regex::Regex;
+use rusqlite::{
+    types::{FromSql, FromSqlError, FromSqlResult, ToSqlOutput, Value, ValueRef},
+    ToSql,
+};
 use serde::{de, de::Visitor, Deserialize};
-use std::{convert::TryFrom, fmt, str::FromStr};
+use std::{fmt, str::FromStr};
 
-#[derive(Debug, PartialEq, Copy, Clone, FromPrimitive)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Requirement {
     Mandatory = 0,
     Optional,
@@ -87,16 +89,20 @@ impl FromStr for Requirement {
     }
 }
 
+impl fmt::Display for Requirement {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Requirement::Optional => f.write_str("?"),
+            Requirement::Incompatible => f.write_str("!"),
+            Requirement::OptionalHidden => f.write_str("(?)"),
+            Requirement::Mandatory => f.write_str(""),
+        }
+    }
+}
+
 impl fmt::Display for Dependency {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self.requirement {
-            Requirement::Optional => f.write_str("? ")?,
-            Requirement::Incompatible => f.write_str("! ")?,
-            Requirement::OptionalHidden => f.write_str("(?) ")?,
-            _ => {}
-        }
-
-        f.write_fmt(format_args!("{} ", &self.name))?;
+        f.write_fmt(format_args!("{} {} ", self.requirement, &self.name))?;
         if let Some(version) = self.version {
             f.write_fmt(format_args!("{}", version))?;
         }
@@ -105,23 +111,28 @@ impl fmt::Display for Dependency {
     }
 }
 
-impl TryFrom<cache::models::ReleaseDependency> for Dependency {
-    type Error = anyhow::Error;
+impl ToSql for Requirement {
+    fn to_sql(&self) -> rusqlite::Result<ToSqlOutput<'_>> {
+        Ok(ToSqlOutput::Owned(Value::Text(self.to_string())))
+    }
+}
 
-    fn try_from(dep: cache::models::ReleaseDependency) -> anyhow::Result<Self> {
-        let version = if let Some(vers) = dep.version_req {
-            Some(vers.parse()?)
-        } else {
-            None
-        };
+impl FromSql for Requirement {
+    fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
+        match Requirement::from_str(value.as_str()?) {
+            Ok(v) => Ok(v),
+            Err(_) => Err(FromSqlError::InvalidType), // TODO: bad error type?
+        }
+    }
+}
 
-        let req = dep.requirement;
-        Ok(Self {
-            requirement: FromPrimitive::from_i32(req)
-                .ok_or_else(|| anyhow!("Couldn't convert i32 {} to Requirement", req))?,
+impl From<cache::models::ReleaseDependency> for Dependency {
+    fn from(dep: cache::models::ReleaseDependency) -> Self {
+        Self {
+            requirement: dep.requirement,
             name: dep.name,
-            version,
-        })
+            version: dep.version_req,
+        }
     }
 }
 

@@ -1,3 +1,4 @@
+use super::GameCacheId;
 use crate::{
     cache::models,
     ext::PathExt,
@@ -123,9 +124,9 @@ impl Mods {
         self.mods.len()
     }
 
-    pub async fn update_cache(&self, game_id: i64) -> anyhow::Result<()> {
+    pub async fn update_cache(&self, game_id: GameCacheId) -> anyhow::Result<()> {
         for game_mod in self.mods.values() {
-            debug!("Updating cache for '{}'", game_mod.name().await);
+            debug!("Updating cache for '{}'...", game_mod.name().await);
             game_mod.update_cache().await?;
 
             info!("Updated cache for {}", game_mod.display().await);
@@ -134,11 +135,31 @@ impl Mods {
         let new_game_mods = Mutex::new(Vec::new());
 
         for m in self.mods.values() {
+            let name = m.name().await;
+            debug!("Updating game '{}' cached mod '{}'...", game_id, name);
+
             let mut mods = new_game_mods.lock().await;
-            mods.push(models::GameMod {
+            let factorio_mod = name.clone();
+            let mod_version = m.own_version().await?;
+            let mod_zip = m.zip_path().await?.display().to_string();
+            let zip_checksum = m.get_zip_checksum().await?;
+
+            let cache_game_mod = models::GameMod {
                 game: game_id,
-                factorio_mod: m.name().await.to_string(),
-            });
+                factorio_mod,
+                mod_version,
+                mod_zip,
+                zip_checksum,
+            };
+            trace!("{}'s cached mod {}: {:?}", game_id, name, cache_game_mod);
+
+            mods.push(cache_game_mod);
+
+            info!(
+                "Updated game ID '{}'s cached mod '{}'",
+                game_id,
+                m.title().await
+            );
         }
 
         self.cache
@@ -276,6 +297,7 @@ impl Mods {
                     )
                     .await?,
                 );
+                // TODO: DOWNLOAD THE MOD?????
                 Ok(entry.insert(new_mod))
             }
         }

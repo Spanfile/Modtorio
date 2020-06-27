@@ -11,10 +11,7 @@ use anyhow::{anyhow, ensure};
 use chrono::{DateTime, Utc};
 use log::*;
 use serde::Deserialize;
-use std::{
-    convert::TryFrom,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 use tokio::task;
 
 #[derive(Debug)]
@@ -249,19 +246,19 @@ impl Info {
             let mut dependencies = Vec::new();
 
             for cache_dep in cache
-                .get_release_dependencies(self.name.clone(), release.version.clone())
+                .get_release_dependencies(self.name.clone(), release.version)
                 .await?
             {
-                dependencies.push(Dependency::try_from(cache_dep)?);
+                dependencies.push(cache_dep.into());
             }
 
             releases.push(Release {
                 download_url: PathBuf::from(release.download_url),
-                released_on: release.released_on.parse()?,
-                version: release.version.parse()?,
+                released_on: release.released_on,
+                version: release.version,
                 sha1: release.sha1,
                 info_object: ReleaseInfoObject {
-                    factorio_version: release.factorio_version.parse()?,
+                    factorio_version: release.factorio_version,
                     dependencies,
                 },
             });

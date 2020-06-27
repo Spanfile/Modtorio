@@ -2,16 +2,18 @@ mod dependency;
 mod info;
 
 use crate::{cache::models, util::HumanVersion, Cache, Config, ModPortal};
+use anyhow::anyhow;
 use bytesize::ByteSize;
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use info::Info;
 use log::*;
+use sha2::{Digest, Sha256};
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
     time::Duration,
 };
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, task};
 
 pub use dependency::{Dependency, Requirement};
 pub use info::Release;
@@ -21,6 +23,7 @@ pub struct Mod {
     config: Arc<Config>,
     portal: Arc<ModPortal>,
     cache: Arc<Cache>,
+    zip_path: Arc<Mutex<Option<PathBuf>>>,
 }
 
 #[derive(Debug)]
@@ -34,22 +37,20 @@ pub enum DownloadResult {
 }
 
 impl Mod {
-    pub async fn from_zip<P>(
-        path: P,
+    pub async fn from_zip(
+        path: PathBuf,
         config: Arc<Config>,
         portal: Arc<ModPortal>,
         cache: Arc<Cache>,
-    ) -> anyhow::Result<Mod>
-    where
-        P: 'static + AsRef<Path> + Send,
-    {
-        let info = Mutex::new(Info::from_zip(path).await?);
+    ) -> anyhow::Result<Mod> {
+        let info = Mutex::new(Info::from_zip(path.clone()).await?);
 
         Ok(Self {
             info,
             config,
             portal,
             cache,
+            zip_path: Arc::new(Mutex::new(Some(path))),
         })
     }
 
@@ -66,6 +67,7 @@ impl Mod {
             config,
             portal,
             cache,
+            zip_path: Arc::new(Mutex::new(None)),
         })
     }
 }
@@ -82,28 +84,12 @@ impl Mod {
         }
 
         let name = self.name().await;
-        let author = self.author().await;
-        let contact = self.contact().await;
-        let homepage = self.homepage().await;
-        let title = self.title().await;
         let summary = self.summary().await;
-        let description = self.description().await;
-        let changelog = self.changelog().await;
-        let version = self.own_version().await?.to_string();
-        let factorio_version = self.factorio_version().await?.to_string();
 
         let new_factorio_mod = models::FactorioMod {
             name,
-            author,
-            contact,
-            homepage,
-            title,
             summary,
-            description,
-            changelog,
-            version,
-            factorio_version,
-            last_updated: Utc::now().to_string(),
+            last_updated: Utc::now(),
         };
 
         trace!("'{}' cached mod: {:?}", self.name().await, new_factorio_mod);
@@ -113,10 +99,10 @@ impl Mod {
             let new_mod_release = models::ModRelease {
                 factorio_mod: self.name().await,
                 download_url: release.url()?.to_string(),
-                released_on: release.released_on().to_string(),
-                version: release.version().to_string(),
+                released_on: release.released_on(),
+                version: release.version(),
                 sha1: release.sha1().to_string(),
-                factorio_version: release.factorio_version().to_string(),
+                factorio_version: release.factorio_version(),
             };
             trace!(
                 "'{}'s cached release {}: {:?}",
@@ -130,10 +116,10 @@ impl Mod {
             for dependency in release.dependencies().into_iter() {
                 new_release_dependencies.push(models::ReleaseDependency {
                     release_mod_name: self.name().await,
-                    release_version: release.version().to_string(),
+                    release_version: release.version(),
                     name: dependency.name().to_string(),
-                    requirement: dependency.requirement() as i32,
-                    version_req: dependency.version().map(|v| v.to_string()),
+                    requirement: dependency.requirement(),
+                    version_req: dependency.version(),
                 });
             }
 
@@ -167,8 +153,7 @@ impl Mod {
     /// from the mod portal if the cache has expired
     pub async fn ensure_portal_info(&self) -> anyhow::Result<()> {
         if let Some(cache_mod) = self.cache.get_factorio_mod(self.name().await).await? {
-            let last_updated = cache_mod.last_updated.parse::<DateTime<Utc>>()?;
-            let time_since_updated = Utc::now() - last_updated;
+            let time_since_updated = Utc::now() - cache_mod.last_updated;
             let expired =
                 time_since_updated.to_std()? > Duration::from_secs(self.config.cache_expiry);
 
@@ -221,7 +206,7 @@ impl Mod {
         );
 
         let old_version = self.own_version().await.ok();
-        let old_archive = self.get_archive_filename().await?;
+        let old_archive = self.zip_path().await?.display().to_string();
         self.populate_info_from_zip(path).await?;
 
         if let Some(old_version) = old_version {
@@ -244,7 +229,9 @@ impl Mod {
 
 impl Mod {
     async fn populate_info_from_zip(&self, path: PathBuf) -> anyhow::Result<()> {
-        self.info.lock().await.populate_from_zip(path).await
+        *self.zip_path.lock().await = Some(path.clone());
+        self.info.lock().await.populate_from_zip(path).await?;
+        Ok(())
     }
 
     async fn is_portal_populated(&self) -> bool {
@@ -255,9 +242,40 @@ impl Mod {
         self.info.lock().await.display()
     }
 
-    pub async fn get_archive_filename(&self) -> anyhow::Result<String> {
-        let info = self.info.lock().await;
-        Ok(format!("{}_{}.zip", info.name(), info.own_version()?))
+    pub async fn zip_path(&self) -> anyhow::Result<PathBuf> {
+        Ok(self
+            .zip_path
+            .lock()
+            .await
+            .clone()
+            .ok_or_else(|| anyhow!("mod zip path not set"))?)
+    }
+
+    pub async fn get_zip_checksum(&self) -> anyhow::Result<String> {
+        trace!(
+            "Calculating zip checksum for mod '{}': {}",
+            self.title().await,
+            self.zip_path().await?.display()
+        );
+
+        let zip_path = self
+            .zip_path
+            .lock()
+            .await
+            .clone()
+            .ok_or_else(|| anyhow!("mod zip path not set"))?;
+        let result = task::spawn_blocking(move || -> anyhow::Result<String> {
+            let mut hasher = Sha256::new();
+            let mut zip = std::fs::File::open(zip_path)?;
+
+            std::io::copy(&mut zip, &mut hasher)?;
+
+            let result = hasher.finalize();
+            Ok(hex::encode(&result[..]))
+        })
+        .await?;
+
+        Ok(result?)
     }
 
     pub async fn name(&self) -> String {
