@@ -1,9 +1,12 @@
+mod cache_meta;
 pub mod models;
 
 use crate::{ext::PathExt, factorio::GameCacheId};
+pub use cache_meta::{CacheMetaField, CacheMetaValue};
 use log::*;
 use models::*;
 use rusqlite::{named_params, Connection, OptionalExtension, NO_PARAMS};
+use sha2::{Digest, Sha256};
 use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -45,18 +48,108 @@ impl CacheBuilder {
         Self { schema, ..self }
     }
 
-    pub fn build(self) -> anyhow::Result<Cache> {
+    pub async fn build(self) -> anyhow::Result<Cache> {
+        let mut hasher = Sha256::new();
+        hasher.update(&self.schema);
+
+        let result = hasher.finalize();
+        let encoded_checksum = hex::encode(&result[..]);
+        trace!("Cache database schema checksum: {}", encoded_checksum);
+
+        let db_exists = self.db_path.exists();
         let conn = Connection::open(self.db_path.get_str()?)?;
-
-        debug!("Applying database schema...");
-        let stmt = format!("BEGIN TRANSACTION; {} COMMIT;", self.schema);
-
-        trace!("{}", stmt);
-        conn.execute_batch(&stmt)?;
-
-        Ok(Cache {
+        let cache = Cache {
             conn: Arc::new(Mutex::new(conn)),
+        };
+
+        let checksums_match = encoded_checksum_matches_meta(&cache, &encoded_checksum).await?;
+        debug!(
+            "Cache database exists: {}. Schema checksums match: {}",
+            db_exists, checksums_match
+        );
+
+        if !db_exists || !checksums_match {
+            debug!("Applying database schema...");
+            trace!("{}", self.schema);
+
+            cache.apply_schema(self.schema).await?;
+            cache
+                .set_meta(CacheMetaValue {
+                    field: CacheMetaField::SchemaChecksum,
+                    value: Some(encoded_checksum),
+                })
+                .await?;
+        }
+
+        Ok(cache)
+    }
+}
+
+async fn encoded_checksum_matches_meta(
+    cache: &Cache,
+    encoded_checksum: &str,
+) -> anyhow::Result<bool> {
+    if let Some(metavalue) = cache.get_meta(CacheMetaField::SchemaChecksum).await? {
+        if let Some(checksum) = metavalue.value {
+            trace!("Got existing schema checksum: {}", checksum);
+            return Ok(checksum == encoded_checksum);
+        }
+    }
+
+    Ok(false)
+}
+
+impl Cache {
+    async fn apply_schema(&self, schema: String) -> anyhow::Result<()> {
+        let conn = Arc::clone(&self.conn);
+        let result = task::spawn_blocking(move || -> anyhow::Result<()> {
+            conn.lock()
+                .unwrap()
+                .execute_batch(&format!("BEGIN TRANSACTION; {} COMMIT;", schema))?;
+            Ok(())
         })
+        .await?;
+
+        Ok(result?)
+    }
+
+    pub async fn get_meta(&self, field: CacheMetaField) -> anyhow::Result<Option<CacheMetaValue>> {
+        let conn = Arc::clone(&self.conn);
+        let result = task::spawn_blocking(move || -> anyhow::Result<Option<CacheMetaValue>> {
+            let conn = conn.lock().unwrap();
+            let mut stmt = conn.prepare("SELECT * FROM _meta WHERE field = :field LIMIT 1")?;
+
+            Ok(stmt
+                .query_row_named(named_params! { ":field": field.to_string() }, |row| {
+                    Ok(CacheMetaValue {
+                        field: row.get(0)?,
+                        value: row.get(1)?,
+                    })
+                })
+                .optional()?)
+        })
+        .await?;
+
+        Ok(result?)
+    }
+
+    pub async fn set_meta(&self, value: CacheMetaValue) -> anyhow::Result<()> {
+        let conn = Arc::clone(&self.conn);
+        let result = task::spawn_blocking(move || -> anyhow::Result<()> {
+            let conn = conn.lock().unwrap();
+            let mut stmt =
+                conn.prepare("REPLACE INTO _meta (field, value) VALUES (:field, :value)")?;
+
+            stmt.execute_named(named_params! {
+                ":field": value.field,
+                ":value": value.value,
+            })?;
+
+            Ok(())
+        })
+        .await?;
+
+        Ok(result?)
     }
 }
 

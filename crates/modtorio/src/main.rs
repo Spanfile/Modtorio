@@ -24,7 +24,7 @@ async fn main() -> anyhow::Result<()> {
     log::setup_logging(&config)?;
     config.debug_values();
 
-    let cache = Arc::new(cache::CacheBuilder::new().build()?);
+    let cache = Arc::new(cache::CacheBuilder::new().build().await?);
     let portal = Arc::new(ModPortal::new(&config)?);
 
     // let factorio = Arc::new(

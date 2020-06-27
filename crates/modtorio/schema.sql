@@ -1,3 +1,8 @@
+CREATE TABLE IF NOT EXISTS "_meta" (
+	"field"	TEXT NOT NULL,
+	"value"	TEXT,
+	PRIMARY KEY("field")
+);
 CREATE TABLE IF NOT EXISTS "factorio_mod" (
 	"name"	TEXT NOT NULL,
 	"author"	TEXT NOT NULL,
