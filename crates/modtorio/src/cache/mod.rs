@@ -1,8 +1,7 @@
 mod cache_meta;
 pub mod models;
 
-use crate::{ext::PathExt, factorio::GameCacheId, util::HumanVersion};
-use blake2::{Blake2b, Digest};
+use crate::{ext::PathExt, factorio::GameCacheId, util, util::HumanVersion};
 pub use cache_meta::{CacheMetaField, CacheMetaValue};
 use log::*;
 use models::*;
@@ -49,7 +48,7 @@ impl CacheBuilder {
     }
 
     pub async fn build(self) -> anyhow::Result<Cache> {
-        let encoded_checksum = calculate_checksum(&self.schema);
+        let encoded_checksum = util::checksum::blake2b_string(&self.schema);
         trace!("Cache database schema checksum: {}", encoded_checksum);
 
         let db_exists = self.db_path.exists();
@@ -90,13 +89,6 @@ async fn checksum_matches_meta(cache: &Cache, encoded_checksum: &str) -> anyhow:
     }
 
     Ok(false)
-}
-
-fn calculate_checksum(value: &str) -> String {
-    let mut hasher = Blake2b::new();
-    hasher.update(value);
-    let result = hasher.finalize();
-    hex::encode(&result[..])
 }
 
 impl Cache {

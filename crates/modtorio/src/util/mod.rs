@@ -1,3 +1,4 @@
+pub mod checksum;
 mod human_version;
 
 use std::path::{Path, PathBuf};

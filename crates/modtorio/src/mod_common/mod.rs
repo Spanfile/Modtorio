@@ -1,8 +1,12 @@
 mod dependency;
 mod info;
 
-use crate::{cache::models, error::ModError, util::HumanVersion, Cache, Config, ModPortal};
-use blake2::{Blake2b, Digest};
+use crate::{
+    cache::models,
+    error::ModError,
+    util::{self, HumanVersion},
+    Cache, Config, ModPortal,
+};
 use bytesize::ByteSize;
 use chrono::Utc;
 use info::Info;
@@ -23,6 +27,7 @@ pub struct Mod {
     portal: Arc<ModPortal>,
     cache: Arc<Cache>,
     zip_path: Arc<Mutex<Option<PathBuf>>>,
+    zip_checksum: Arc<Mutex<Option<String>>>,
 }
 
 #[derive(Debug)]
@@ -35,6 +40,25 @@ pub enum DownloadResult {
     },
 }
 
+async fn calculate_zip_checksum<P>(zip: P) -> anyhow::Result<String>
+where
+    P: AsRef<Path>,
+{
+    let path = zip.as_ref().to_owned();
+    let result = task::spawn_blocking(move || -> anyhow::Result<String> {
+        util::checksum::blake2b_file(path)
+    })
+    .await?;
+
+    let result = result?;
+    trace!(
+        "Calculated zip checksum ({}): {}",
+        zip.as_ref().display(),
+        result
+    );
+    Ok(result)
+}
+
 impl Mod {
     pub async fn from_zip(
         path: PathBuf,
@@ -43,6 +67,7 @@ impl Mod {
         cache: Arc<Cache>,
     ) -> anyhow::Result<Mod> {
         let info = Mutex::new(Info::from_zip(path.clone()).await?);
+        let zip_checksum = calculate_zip_checksum(&path).await?;
 
         Ok(Self {
             info,
@@ -50,6 +75,7 @@ impl Mod {
             portal,
             cache,
             zip_path: Arc::new(Mutex::new(Some(path))),
+            zip_checksum: Arc::new(Mutex::new(Some(zip_checksum))),
         })
     }
 
@@ -67,6 +93,7 @@ impl Mod {
             portal,
             cache,
             zip_path: Arc::new(Mutex::new(None)),
+            zip_checksum: Arc::new(Mutex::new(None)),
         })
     }
 }
@@ -266,26 +293,20 @@ impl Mod {
     }
 
     pub async fn get_zip_checksum(&self) -> anyhow::Result<String> {
-        let zip_path = self.zip_path().await?;
-        let result = task::spawn_blocking(move || -> anyhow::Result<String> {
-            let mut hasher = Blake2b::new();
-            let mut zip = std::fs::File::open(zip_path)?;
+        if let Some(checksum) = self.zip_checksum.lock().await.as_ref() {
+            return Ok(checksum.to_owned());
+        }
 
-            std::io::copy(&mut zip, &mut hasher)?;
+        let checksum = calculate_zip_checksum(self.zip_path().await?).await?;
+        *self.zip_checksum.lock().await = Some(checksum.clone());
 
-            let result = hasher.finalize();
-            Ok(hex::encode(&result[..]))
-        })
-        .await?;
-
-        let result = result?;
         trace!(
             "Calculated zip checksum for mod '{}' ({}): {}",
             self.title().await,
             self.zip_path().await?.display(),
-            result
+            checksum
         );
-        Ok(result)
+        Ok(checksum)
     }
 
     pub async fn name(&self) -> String {
