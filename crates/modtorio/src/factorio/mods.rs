@@ -69,8 +69,11 @@ impl<'a> ModsBuilder {
                 debug!("Loaded mod {} from zip", mod_name);
 
                 match m.fetch_cache_info().await {
-                    Ok(_) => trace!("Mod '{}' populated from cache", mod_name),
-                    Err(e) => debug!("Mod cache loading failed with: {}", e),
+                    Ok(()) => trace!("Mod '{}' populated from cache", mod_name),
+                    Err(e) => {
+                        error!("Mod cache for '{}' failed to load", mod_name);
+                        debug!("{:?}", e);
+                    }
                 }
 
                 let name = m.name().await.to_owned();
@@ -125,24 +128,27 @@ impl Mods {
     }
 
     pub async fn update_cache(&self, game_id: GameCacheId) -> anyhow::Result<()> {
-        for game_mod in self.mods.values() {
-            debug!("Updating cache for '{}'...", game_mod.name().await);
-            game_mod.update_cache().await?;
-
-            info!("Updated cache for {}", game_mod.display().await);
-        }
-
         let new_game_mods = Mutex::new(Vec::new());
 
-        for m in self.mods.values() {
-            let name = m.name().await;
-            debug!("Updating game '{}' cached mod '{}'...", game_id, name);
+        for fact_mod in self.mods.values() {
+            let mod_name = fact_mod.name().await;
+            let mod_display = fact_mod.display().await;
+            debug!("Updating cache for '{}'...", mod_name);
 
-            let mut mods = new_game_mods.lock().await;
-            let factorio_mod = name.clone();
-            let mod_version = m.own_version().await?;
-            let mod_zip = m.zip_path().await?.display().to_string();
-            let zip_checksum = m.get_zip_checksum().await?;
+            match fact_mod.update_cache().await {
+                Ok(()) => info!("Updated cache for {}", mod_display),
+                Err(e) => {
+                    error!("Cache update for {} failed", mod_display);
+                    debug!("{:?}", e);
+                }
+            }
+
+            debug!("Updating game '{}' cached mod '{}'...", game_id, mod_name);
+
+            let factorio_mod = mod_name.clone();
+            let mod_version = fact_mod.own_version().await?;
+            let mod_zip = fact_mod.zip_path().await?.display().to_string();
+            let zip_checksum = fact_mod.get_zip_checksum().await?;
 
             let cache_game_mod = models::GameMod {
                 game: game_id,
@@ -151,20 +157,20 @@ impl Mods {
                 mod_zip,
                 zip_checksum,
             };
-            trace!("{}'s cached mod {}: {:?}", game_id, name, cache_game_mod);
-
-            mods.push(cache_game_mod);
-
-            info!(
-                "Updated game ID '{}'s cached mod '{}'",
+            trace!(
+                "{}'s cached mod {}: {:?}",
                 game_id,
-                m.title().await
+                mod_name,
+                cache_game_mod
             );
+
+            new_game_mods.lock().await.push(cache_game_mod);
         }
 
         self.cache
             .set_mods_of_game(new_game_mods.into_inner())
             .await?;
+        info!("Updated game ID '{}'s cached mods", game_id);
 
         Ok(())
     }

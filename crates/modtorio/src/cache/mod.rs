@@ -6,7 +6,7 @@ pub use cache_meta::{CacheMetaField, CacheMetaValue};
 use log::*;
 use models::*;
 use rusqlite::{named_params, Connection, OptionalExtension, NO_PARAMS};
-use sha2::{Digest, Sha256};
+use sha1::{Digest, Sha1};
 use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -49,11 +49,7 @@ impl CacheBuilder {
     }
 
     pub async fn build(self) -> anyhow::Result<Cache> {
-        let mut hasher = Sha256::new();
-        hasher.update(&self.schema);
-
-        let result = hasher.finalize();
-        let encoded_checksum = hex::encode(&result[..]);
+        let encoded_checksum = calculate_checksum(&self.schema);
         trace!("Cache database schema checksum: {}", encoded_checksum);
 
         let db_exists = self.db_path.exists();
@@ -62,8 +58,7 @@ impl CacheBuilder {
             conn: Arc::new(Mutex::new(conn)),
         };
 
-        let checksums_match =
-            db_exists && encoded_checksum_matches_meta(&cache, &encoded_checksum).await?;
+        let checksums_match = db_exists && checksum_matches_meta(&cache, &encoded_checksum).await?;
         debug!(
             "Cache database exists: {}. Schema checksums match: {}",
             db_exists, checksums_match
@@ -86,10 +81,7 @@ impl CacheBuilder {
     }
 }
 
-async fn encoded_checksum_matches_meta(
-    cache: &Cache,
-    encoded_checksum: &str,
-) -> anyhow::Result<bool> {
+async fn checksum_matches_meta(cache: &Cache, encoded_checksum: &str) -> anyhow::Result<bool> {
     if let Some(metavalue) = cache.get_meta(CacheMetaField::SchemaChecksum).await? {
         if let Some(checksum) = metavalue.value {
             trace!("Got existing schema checksum: {}", checksum);
@@ -98,6 +90,13 @@ async fn encoded_checksum_matches_meta(
     }
 
     Ok(false)
+}
+
+fn calculate_checksum(value: &str) -> String {
+    let mut hasher = Sha1::new();
+    hasher.update(value);
+    let result = hasher.finalize();
+    hex::encode(&result[..])
 }
 
 impl Cache {
@@ -346,9 +345,9 @@ impl Cache {
                 stmt.query_map_named(named_params! { ":factorio_mod": factorio_mod }, |row| {
                     Ok(ModRelease {
                         factorio_mod: row.get(0)?,
-                        download_url: row.get(1)?,
-                        released_on: row.get(2)?,
-                        version: row.get(3)?,
+                        version: row.get(1)?,
+                        download_url: row.get(2)?,
+                        released_on: row.get(3)?,
                         sha1: row.get(4)?,
                         factorio_version: row.get(5)?,
                     })

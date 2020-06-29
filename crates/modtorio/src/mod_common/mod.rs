@@ -7,7 +7,7 @@ use bytesize::ByteSize;
 use chrono::Utc;
 use info::Info;
 use log::*;
-use sha2::{Digest, Sha256};
+use sha1::{Digest, Sha1};
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -265,7 +265,7 @@ impl Mod {
             .clone()
             .ok_or_else(|| anyhow!("mod zip path not set"))?;
         let result = task::spawn_blocking(move || -> anyhow::Result<String> {
-            let mut hasher = Sha256::new();
+            let mut hasher = Sha1::new();
             let mut zip = std::fs::File::open(zip_path)?;
 
             std::io::copy(&mut zip, &mut hasher)?;

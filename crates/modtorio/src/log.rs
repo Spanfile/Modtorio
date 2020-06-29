@@ -6,18 +6,19 @@ use fern::{
 };
 pub use log::{debug, error, info, trace, warn};
 
+const TIME_FORMAT: &str = "%y/%m/%d %H:%M:%S%.6f";
+
 pub fn setup_logging(config: &Config) -> anyhow::Result<()> {
     let colors = ColoredLevelConfig::new()
         .info(Color::Green)
         .debug(Color::Magenta);
-    let time_format = "%y/%m/%d %H:%M:%S%.6f";
 
     Dispatch::new()
         .format(move |out, msg, record| {
             out.finish(format_args!(
-                "[{}] [{: ^6}] {}",
+                "[{}] [{}] {}",
                 // "[{} UTC] [{}] {}",
-                Local::now().format(time_format),
+                Local::now().format(TIME_FORMAT),
                 colors.color(record.level()),
                 msg
             ))

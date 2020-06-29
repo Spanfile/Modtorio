@@ -108,10 +108,16 @@ impl ModPortal {
         Ok(response)
     }
 
+    async fn get_string(&self, url: Url) -> anyhow::Result<String> {
+        Ok(self.get(url).await?.text().await?)
+    }
+
     async fn get_json<T>(&self, url: Url) -> anyhow::Result<T>
     where
         T: serde::de::DeserializeOwned,
     {
-        Ok(self.get(url).await?.json().await?)
+        let response = self.get_string(url).await?;
+        trace!("{}", response);
+        Ok(serde_json::from_str(&response)?)
     }
 }

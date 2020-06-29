@@ -243,6 +243,7 @@ impl Info {
 
         let mut releases = Vec::new();
         for release in cache.get_mod_releases(self.name.clone()).await? {
+            trace!("Mod '{}' got cached release: {:?}", self.name, release);
             let mut dependencies = Vec::new();
 
             for cache_dep in cache
@@ -264,9 +265,7 @@ impl Info {
             });
         }
 
-        trace!("Mod '{}' got cached releases: {:?}", self.name, releases);
         self.releases = Some(releases);
-
         Ok(())
     }
 
