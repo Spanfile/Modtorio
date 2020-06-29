@@ -38,7 +38,7 @@ pub enum ModError {
     },
     #[error("No zip path set")]
     MissingZipPath,
-    #[error("Mod zip name does not match existing name: {zip} vs {existing}")]
+    #[error("Mod name from zip does not match existing name: {zip} vs {existing}")]
     ZipNameMismatch { zip: String, existing: String },
     #[error("Mod not in cache")]
     ModNotInCache,

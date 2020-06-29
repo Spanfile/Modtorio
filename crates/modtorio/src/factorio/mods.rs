@@ -70,7 +70,16 @@ impl<'a> ModsBuilder {
 
                 match m.fetch_cache_info().await {
                     Ok(()) => trace!("Mod '{}' populated from cache", mod_name),
-                    Err(e) => error!("Mod cache for '{}' failed to load: {}", mod_name, e),
+                    Err(e) => {
+                        if let Some(ModError::ModNotInCache) = e.downcast_ref() {
+                            debug!(
+                                "Non-critical error: mod cache for '{}' failed to load: {}",
+                                mod_name, e
+                            );
+                        } else {
+                            error!("Mod cache for '{}' failed to load: {}", mod_name, e);
+                        }
+                    }
                 }
 
                 let name = m.name().await.to_owned();
