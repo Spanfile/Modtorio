@@ -2,11 +2,11 @@ mod cache_meta;
 pub mod models;
 
 use crate::{ext::PathExt, factorio::GameCacheId, util::HumanVersion};
+use blake2::{Blake2b, Digest};
 pub use cache_meta::{CacheMetaField, CacheMetaValue};
 use log::*;
 use models::*;
 use rusqlite::{named_params, Connection, OptionalExtension, NO_PARAMS};
-use sha1::{Digest, Sha1};
 use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -93,7 +93,7 @@ async fn checksum_matches_meta(cache: &Cache, encoded_checksum: &str) -> anyhow:
 }
 
 fn calculate_checksum(value: &str) -> String {
-    let mut hasher = Sha1::new();
+    let mut hasher = Blake2b::new();
     hasher.update(value);
     let result = hasher.finalize();
     hex::encode(&result[..])

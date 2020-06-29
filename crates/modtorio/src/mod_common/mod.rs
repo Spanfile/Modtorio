@@ -2,11 +2,11 @@ mod dependency;
 mod info;
 
 use crate::{cache::models, error::ModError, util::HumanVersion, Cache, Config, ModPortal};
+use blake2::{Blake2b, Digest};
 use bytesize::ByteSize;
 use chrono::Utc;
 use info::Info;
 use log::*;
-use sha1::{Digest, Sha1};
 use std::{
     path::{Path, PathBuf},
     sync::Arc,
@@ -268,7 +268,7 @@ impl Mod {
     pub async fn get_zip_checksum(&self) -> anyhow::Result<String> {
         let zip_path = self.zip_path().await?;
         let result = task::spawn_blocking(move || -> anyhow::Result<String> {
-            let mut hasher = Sha1::new();
+            let mut hasher = Blake2b::new();
             let mut zip = std::fs::File::open(zip_path)?;
 
             std::io::copy(&mut zip, &mut hasher)?;

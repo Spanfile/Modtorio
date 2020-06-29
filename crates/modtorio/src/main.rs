@@ -17,6 +17,8 @@ use config::Config;
 use mod_portal::ModPortal;
 use std::sync::Arc;
 
+const SAMPLE_GAME_DIRECTORY: &str = "./sample";
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     dotenv::dotenv()?;
@@ -57,10 +59,13 @@ async fn main() -> anyhow::Result<()> {
     }
 
     if games.is_empty() {
-        info!("No cached games found, importing from /sample...");
+        info!(
+            "No cached games found, importing from {}...",
+            SAMPLE_GAME_DIRECTORY
+        );
 
         games.push(
-            factorio::Importer::from_root("./sample")
+            factorio::Importer::from_root(SAMPLE_GAME_DIRECTORY)
                 .import(Arc::clone(&config), Arc::clone(&portal), Arc::clone(&cache))
                 .await?,
         );
