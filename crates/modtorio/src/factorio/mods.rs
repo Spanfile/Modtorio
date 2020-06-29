@@ -7,6 +7,7 @@ use crate::{
     util::HumanVersion,
     Cache, Config, ModPortal,
 };
+use futures::future;
 use glob::glob;
 use log::*;
 use std::{
@@ -41,17 +42,18 @@ impl<'a> ModsBuilder {
     ) -> anyhow::Result<Mods> {
         let zips = self.directory.join("*.zip");
         let mods = Arc::new(Mutex::new(HashMap::new()));
+        let mut tasks = Vec::new();
 
         for entry in glob(zips.get_str()?)? {
             let entry = entry?;
             let mods = Arc::clone(&mods);
             let (config, portal, cache) =
                 (Arc::clone(&config), Arc::clone(&portal), Arc::clone(&cache));
-            task::spawn(async move || -> anyhow::Result<()> {
-                info!("Loading mod from zip {}", entry.display());
+            let task = task::spawn(async move || -> anyhow::Result<()> {
+                trace!("Loading mod from zip {}", entry.display());
 
                 let m = match Mod::from_zip(
-                    entry,
+                    entry.clone(),
                     Arc::clone(&config),
                     Arc::clone(&portal),
                     Arc::clone(&cache),
@@ -66,7 +68,8 @@ impl<'a> ModsBuilder {
                 };
 
                 let mod_name = m.name().await.to_string();
-                debug!("Loaded mod {} from zip", mod_name);
+                let mod_display = m.display().await;
+                debug!("Loaded mod {} from zip, fetching cache...", mod_name);
 
                 match m.fetch_cache_info().await {
                     Ok(()) => trace!("Mod '{}' populated from cache", mod_name),
@@ -82,9 +85,8 @@ impl<'a> ModsBuilder {
                     }
                 }
 
-                let name = m.name().await.to_owned();
                 let mut mods = mods.lock().await;
-                match mods.entry(name) {
+                match mods.entry(mod_name) {
                     Entry::Occupied(mut entry) => {
                         let existing: &Arc<Mod> = entry.get();
 
@@ -106,10 +108,14 @@ impl<'a> ModsBuilder {
                     }
                 }
 
+                info!("Loaded mod {} from zip {}", mod_display, entry.display());
                 Ok(())
-            }())
-            .await??;
+            }());
+
+            tasks.push(task);
         }
+
+        future::join_all(tasks).await;
 
         let mods = mods
             .lock()
@@ -140,7 +146,7 @@ impl Mods {
         for fact_mod in self.mods.values() {
             let mod_name = fact_mod.name().await;
             let mod_display = fact_mod.display().await;
-            info!("Updating cache for {}...", mod_display);
+            trace!("Updating cache for '{}'", mod_name);
 
             match fact_mod.update_cache().await {
                 Ok(()) => debug!("Updated cache for {}", mod_name),
@@ -169,6 +175,7 @@ impl Mods {
             // );
 
             new_game_mods.lock().await.push(cache_game_mod);
+            info!("Updated cache for {}", mod_display);
         }
 
         self.cache
