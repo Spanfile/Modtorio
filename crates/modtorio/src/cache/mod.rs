@@ -168,18 +168,23 @@ impl Cache {
         Ok(self.conn.lock().unwrap().execute_batch("COMMIT")?)
     }
 
-    pub async fn get_game_ids(&self) -> anyhow::Result<Vec<GameCacheId>> {
+    pub async fn get_games(&self) -> anyhow::Result<Vec<Game>> {
         let conn = Arc::clone(&self.conn);
-        let result = task::spawn_blocking(move || -> anyhow::Result<Vec<GameCacheId>> {
+        let result = task::spawn_blocking(move || -> anyhow::Result<Vec<Game>> {
             let conn = conn.lock().unwrap();
-            let mut stmt = conn.prepare("SELECT id FROM game")?;
-            let mut ids = Vec::new();
+            let mut stmt = conn.prepare("SELECT * FROM game")?;
+            let mut games = Vec::new();
 
-            for row in stmt.query_map(NO_PARAMS, |row| row.get(0))? {
-                ids.push(row?);
+            for game in stmt.query_map(NO_PARAMS, |row| {
+                Ok(Game {
+                    id: row.get(0)?,
+                    path: row.get(1)?,
+                })
+            })? {
+                games.push(game?);
             }
 
-            Ok(ids)
+            Ok(games)
         })
         .await?;
 

@@ -2,7 +2,6 @@ mod mods;
 mod settings;
 
 use crate::{cache::models, ext::PathExt, Cache, Config, ModPortal};
-use anyhow::anyhow;
 use log::*;
 use mods::{Mods, ModsBuilder};
 use settings::ServerSettings;
@@ -12,6 +11,9 @@ use std::{
     sync::Arc,
 };
 use tokio::sync::Mutex;
+
+const SERVER_SETTINGS_FILENAME: &str = "server-settings.json";
+const MODS_PATH: &str = "mods/";
 
 pub type GameCacheId = i64;
 
@@ -24,7 +26,7 @@ pub struct Factorio {
 }
 
 pub struct Importer {
-    root: Option<PathBuf>,
+    root: PathBuf,
     settings: PathBuf,
     game_cache_id: Option<GameCacheId>,
 }
@@ -43,7 +45,7 @@ impl Factorio {
                 })
                 .await?;
 
-            debug!("Updating existing game cache (id {})", c);
+            info!("Updating existing game ID {} cache", c);
             c
         } else {
             let new_id = self
@@ -55,12 +57,15 @@ impl Factorio {
                 .await?;
             *cache_id = Some(new_id);
 
-            debug!("Inserting new game cache (id {})", new_id);
+            info!("Creating new game cache with ID {}", new_id);
             new_id
         };
 
         self.mods.update_cache(id).await?;
-        self.cache.commit_transaction()
+        self.cache.commit_transaction()?;
+
+        info!("Game ID {} cached updated", id);
+        Ok(())
     }
 }
 
@@ -70,17 +75,17 @@ impl Importer {
         P: AsRef<Path>,
     {
         Self {
-            root: Some(root.as_ref().to_path_buf()),
-            settings: PathBuf::from("server-settings.json"),
+            root: root.as_ref().to_path_buf(),
+            settings: PathBuf::from(SERVER_SETTINGS_FILENAME),
             game_cache_id: None,
         }
     }
 
-    pub fn from_cache(game_cache_id: GameCacheId) -> Self {
+    pub fn from_cache(cached_game: &models::Game) -> Self {
         Self {
-            root: None,
-            settings: PathBuf::from("server-settings.json"),
-            game_cache_id: Some(game_cache_id),
+            root: PathBuf::from(&cached_game.path),
+            settings: PathBuf::from(SERVER_SETTINGS_FILENAME),
+            game_cache_id: Some(cached_game.id),
         }
     }
 
@@ -101,29 +106,19 @@ impl Importer {
         portal: Arc<ModPortal>,
         cache: Arc<Cache>,
     ) -> anyhow::Result<Factorio> {
-        let (root, cache_id) = match self.game_cache_id {
-            Some(id) => {
-                let cached_game = cache.get_game(id).await?;
-                (Some(PathBuf::from(cached_game.path)), Some(cached_game.id))
-            }
-            None => (self.root, None),
-        };
-
-        let root = root.ok_or_else(|| anyhow!("no valid game root"))?;
-
-        let mut settings_path = root.clone();
+        let mut settings_path = self.root.clone();
         settings_path.push(self.settings);
 
-        let mut mods_path = root.clone();
-        mods_path.push("mods/");
+        let mut mods_path = self.root.clone();
+        mods_path.push(MODS_PATH);
 
         Ok(Factorio {
             settings: ServerSettings::from_game_json(&fs::read_to_string(settings_path)?)?,
             mods: ModsBuilder::root(mods_path)
                 .build(config, portal, Arc::clone(&cache))
                 .await?,
-            root,
-            cache_id: Mutex::new(cache_id),
+            root: self.root,
+            cache_id: Mutex::new(self.game_cache_id),
             cache,
         })
     }

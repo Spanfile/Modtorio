@@ -33,16 +33,26 @@ async fn main() -> anyhow::Result<()> {
     //         .await?,
     // );
 
-    let cached_games = cache.get_game_ids().await?;
+    let cached_games = cache.get_games().await?;
     let mut games = Vec::new();
+    debug!("Got cached games: {:?}", cached_games);
 
-    for id in cached_games {
-        let game = factorio::Importer::from_cache(id)
+    for cached_game in &cached_games {
+        info!(
+            "Importing cached game ID {} from path {}...",
+            cached_game.id, cached_game.path
+        );
+
+        let game = factorio::Importer::from_cache(cached_game)
             .import(Arc::clone(&config), Arc::clone(&portal), Arc::clone(&cache))
             .await?;
 
         games.push(game);
-        debug!("Cached game id {} imported", id);
+        info!(
+            "Cached game ID {} imported from {}",
+            cached_game.id, cached_game.path
+        );
+        debug!("Cached game: {:?}", cached_game);
     }
 
     if games.is_empty() {

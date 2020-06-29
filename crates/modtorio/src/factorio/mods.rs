@@ -48,7 +48,7 @@ impl<'a> ModsBuilder {
             let (config, portal, cache) =
                 (Arc::clone(&config), Arc::clone(&portal), Arc::clone(&cache));
             task::spawn(async move || -> anyhow::Result<()> {
-                info!("Creating mod from zip {}", entry.display());
+                info!("Loading mod from zip {}", entry.display());
 
                 let m = match Mod::from_zip(
                     entry,
@@ -70,10 +70,7 @@ impl<'a> ModsBuilder {
 
                 match m.fetch_cache_info().await {
                     Ok(()) => trace!("Mod '{}' populated from cache", mod_name),
-                    Err(e) => {
-                        error!("Mod cache for '{}' failed to load", mod_name);
-                        debug!("{:?}", e);
-                    }
+                    Err(e) => error!("Mod cache for '{}' failed to load: {}", mod_name, e),
                 }
 
                 let name = m.name().await.to_owned();
@@ -128,19 +125,17 @@ impl Mods {
     }
 
     pub async fn update_cache(&self, game_id: GameCacheId) -> anyhow::Result<()> {
+        debug!("Updating cached mods for game {}", game_id);
         let new_game_mods = Mutex::new(Vec::new());
 
         for fact_mod in self.mods.values() {
             let mod_name = fact_mod.name().await;
             let mod_display = fact_mod.display().await;
-            debug!("Updating cache for '{}'...", mod_name);
+            info!("Updating cache for {}...", mod_display);
 
             match fact_mod.update_cache().await {
-                Ok(()) => info!("Updated cache for {}", mod_display),
-                Err(e) => {
-                    error!("Cache update for {} failed", mod_display);
-                    debug!("{:?}", e);
-                }
+                Ok(()) => debug!("Updated cache for {}", mod_name),
+                Err(e) => error!("Cache update for {} failed: {}", mod_display, e),
             }
 
             debug!("Updating game '{}' cached mod '{}'...", game_id, mod_name);
@@ -157,12 +152,12 @@ impl Mods {
                 mod_zip,
                 zip_checksum,
             };
-            trace!(
-                "{}'s cached mod {}: {:?}",
-                game_id,
-                mod_name,
-                cache_game_mod
-            );
+            // trace!(
+            //     "{}'s cached mod {}: {:?}",
+            //     game_id,
+            //     mod_name,
+            //     cache_game_mod
+            // );
 
             new_game_mods.lock().await.push(cache_game_mod);
         }
@@ -170,7 +165,7 @@ impl Mods {
         self.cache
             .set_mods_of_game(new_game_mods.into_inner())
             .await?;
-        info!("Updated game ID '{}'s cached mods", game_id);
+        info!("Updated game ID {}'s cached mods", game_id);
 
         Ok(())
     }
@@ -229,7 +224,7 @@ impl Mods {
     }
 
     pub async fn ensure_dependencies(&mut self) -> anyhow::Result<()> {
-        info!("Ensuring dependencies are met...");
+        info!("Ensuring mod dependencies are met...");
 
         let mut missing: Vec<String> = Vec::new();
 
@@ -243,10 +238,16 @@ impl Mods {
         }
 
         if !missing.is_empty() {
-            info!("Found {} missing dependencies, installing", missing.len());
+            info!(
+                "Found {} missing mod dependencies, installing",
+                missing.len()
+            );
+
             for miss in &missing {
                 self.add_from_portal(&miss, None).await?;
             }
+        } else {
+            info!("All mod dependencies met");
         }
 
         Ok(())

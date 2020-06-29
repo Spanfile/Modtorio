@@ -278,10 +278,7 @@ impl Info {
                     self.name
                 );
 
-                Err(anyhow!(
-                    "Mod '{}' not in cache while trying to load it from cache",
-                    self.name
-                ))
+                Err(anyhow!("mod not in cache"))
             }
         }
     }
