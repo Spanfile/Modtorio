@@ -1,8 +1,7 @@
 mod dependency;
 mod info;
 
-use crate::{cache::models, util::HumanVersion, Cache, Config, ModPortal};
-use anyhow::anyhow;
+use crate::{cache::models, error::ModError, util::HumanVersion, Cache, Config, ModPortal};
 use bytesize::ByteSize;
 use chrono::Utc;
 use info::Info;
@@ -263,7 +262,7 @@ impl Mod {
             .lock()
             .await
             .clone()
-            .ok_or_else(|| anyhow!("mod zip path not set"))?)
+            .ok_or(ModError::MissingZipPath)?)
     }
 
     pub async fn get_zip_checksum(&self) -> anyhow::Result<String> {

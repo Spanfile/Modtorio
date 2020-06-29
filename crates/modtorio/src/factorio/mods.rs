@@ -1,12 +1,12 @@
 use super::GameCacheId;
 use crate::{
     cache::models,
+    error::ModError,
     ext::PathExt,
     mod_common::{DownloadResult, Mod, Requirement},
     util::HumanVersion,
     Cache, Config, ModPortal,
 };
-use anyhow::anyhow;
 use glob::glob;
 use log::*;
 use std::{
@@ -259,7 +259,7 @@ impl Mods {
         Ok(self
             .mods
             .get(name)
-            .ok_or_else(|| anyhow!("No such mod: {}", name))?)
+            .ok_or_else(|| ModError::NoSuchMod(name.to_owned()))?)
     }
 
     async fn add_or_update_in_place(
@@ -353,11 +353,11 @@ impl Mods {
                 }
                 Requirement::Incompatible => match self.get_mod(dep.name()) {
                     Ok(_) => {
-                        return Err(anyhow::anyhow!(
-                            "Cannot ensure dependency {} of '{}'",
-                            dep,
-                            target_name
-                        ));
+                        return Err(ModError::CannotEnsureDependency {
+                            dependency: dep,
+                            mod_display: target_mod.display().await,
+                        }
+                        .into());
                     }
                     Err(_) => debug!("Dependency {} of '{}' met", dep, target_name),
                 },

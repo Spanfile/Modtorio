@@ -1,13 +1,14 @@
 use super::Dependency;
 use crate::{
     cache::models,
+    error::ModError,
     ext::{PathExt, ZipExt},
     mod_portal::ModPortal,
     util,
     util::HumanVersion,
     Cache,
 };
-use anyhow::{anyhow, ensure};
+use anyhow::ensure;
 use chrono::{DateTime, Utc};
 use log::*;
 use serde::Deserialize;
@@ -204,11 +205,10 @@ impl Info {
         let info: ZipInfo = read_object_from_zip(path, "info.json").await?;
         ensure!(
             info.name == self.name,
-            anyhow!(
-                "Mod zip name doesn't match existing name ({} vs {})",
-                info.name,
-                self.name
-            )
+            ModError::ZipNameMismatch {
+                zip: info.name,
+                existing: self.name.clone()
+            }
         );
 
         self.versions = Some(Versions {
@@ -278,7 +278,7 @@ impl Info {
                     self.name
                 );
 
-                Err(anyhow!("mod not in cache"))
+                Err(ModError::ModNotInCache.into())
             }
         }
     }
@@ -303,9 +303,7 @@ impl Info {
     }
 
     fn versions(&self) -> anyhow::Result<Versions> {
-        Ok(self
-            .versions
-            .ok_or_else(|| anyhow!("Missing version info (is the mod installed?)"))?)
+        Ok(self.versions.ok_or(ModError::MissingInfo)?)
     }
 
     pub fn name(&self) -> &str {
@@ -353,7 +351,7 @@ impl Info {
             .releases
             .as_ref()
             .cloned()
-            .ok_or_else(|| anyhow!("Missing releases (has the mod been fetched from portal?)"))?)
+            .ok_or(ModError::MissingInfo)?)
     }
 
     pub fn get_release(&self, version: Option<HumanVersion>) -> anyhow::Result<Release> {
@@ -364,26 +362,21 @@ impl Info {
                 .iter()
                 .find(|r| r.version == version)
                 .cloned()
-                .ok_or_else(|| {
-                    anyhow!(
-                        "Mod '{}' doesn't have a release version {}",
-                        self.name,
-                        version
-                    )
-                }),
+                .ok_or_else(|| ModError::NoSuchRelease(version).into()),
             None => releases
                 .iter()
                 .last()
                 .cloned()
-                .ok_or_else(|| anyhow!("Mod '{}' has no releases", self.name)),
+                .ok_or_else(|| ModError::NoReleases.into()),
         }
     }
 
     pub fn dependencies(&self) -> anyhow::Result<Vec<Dependency>> {
-        self.dependencies
+        Ok(self
+            .dependencies
             .as_ref()
             .cloned()
-            .ok_or_else(|| anyhow!("Missing dependencies (has the mod been fetched from portal?)"))
+            .ok_or(ModError::MissingInfo)?)
     }
 }
 

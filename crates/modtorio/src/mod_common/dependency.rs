@@ -1,5 +1,4 @@
-use crate::{cache, util::HumanVersionReq};
-use anyhow::anyhow;
+use crate::{cache, error::DependencyParsingError, util::HumanVersionReq};
 use lazy_static::lazy_static;
 use regex::Regex;
 use rusqlite::{
@@ -8,6 +7,8 @@ use rusqlite::{
 };
 use serde::{de, de::Visitor, Deserialize};
 use std::{fmt, str::FromStr};
+
+const DEPENDENCY_PARSER_REGEX: &str = r"(\?|!|\(\?\))? ?([^>=<]+)( ?[>=<]{1,2} ?[\d\.]*)?$";
 
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Requirement {
@@ -39,17 +40,16 @@ impl Dependency {
 }
 
 impl FromStr for Dependency {
-    type Err = anyhow::Error;
+    type Err = DependencyParsingError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         lazy_static! {
-            static ref RE: Regex =
-                Regex::new(r"(\?|!|\(\?\))? ?([^>=<]+)( ?[>=<]{1,2} ?[\d\.]*)?$").unwrap();
+            static ref RE: Regex = Regex::new(DEPENDENCY_PARSER_REGEX).unwrap();
         }
 
         let captures = RE
             .captures(s)
-            .ok_or_else(|| anyhow!("dependency regex returned no captures"))?;
+            .ok_or_else(|| DependencyParsingError::NoRegexCaptures(s.to_owned()))?;
 
         let requirement = captures
             .get(1)
@@ -58,7 +58,7 @@ impl FromStr for Dependency {
 
         let name = captures
             .get(2)
-            .ok_or_else(|| anyhow!("dependency regex didn't capture name"))?
+            .ok_or_else(|| DependencyParsingError::NameNotCaptured(s.to_owned()))?
             .as_str()
             .trim()
             .to_string();
@@ -76,7 +76,7 @@ impl FromStr for Dependency {
 }
 
 impl FromStr for Requirement {
-    type Err = anyhow::Error;
+    type Err = DependencyParsingError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
@@ -84,7 +84,9 @@ impl FromStr for Requirement {
             "!" => Ok(Requirement::Incompatible),
             "(?)" => Ok(Requirement::OptionalHidden),
             "" => Ok(Requirement::Mandatory),
-            _ => Err(anyhow!("invalid string for requirement: {}", s)),
+            _ => Err(DependencyParsingError::InvalidRequirementString(
+                s.to_owned(),
+            )),
         }
     }
 }

@@ -1,5 +1,5 @@
-use crate::{config::Config, ext::ResponseExt};
-use anyhow::{anyhow, ensure};
+use crate::{config::Config, error::ModPortalError, ext::ResponseExt};
+use anyhow::ensure;
 use log::*;
 use reqwest::{Client, StatusCode};
 use std::path::{Path, PathBuf};
@@ -71,7 +71,7 @@ impl ModPortal {
 
         ensure!(
             status == StatusCode::OK,
-            anyhow!("download returned non-OK status code {}", status)
+            ModPortalError::ErrorStatus(status)
         );
 
         let mut temp = fs::File::from_std(tempfile()?);

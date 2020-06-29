@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use crate::error::HumanVersionError;
 use lazy_static::lazy_static;
 use regex::Regex;
 use rusqlite::{
@@ -44,16 +44,15 @@ impl HumanVersion {
 }
 
 impl FromStr for HumanVersion {
-    type Err = anyhow::Error;
+    type Err = HumanVersionError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let args: Vec<&str> = s.split('.').collect();
 
         let major = args
             .get(0)
-            .map(|c| c.parse::<u64>())
-            .ok_or_else(|| anyhow!("couldn't parse first argument as u64"))??;
-
+            .ok_or(HumanVersionError::MissingComponent)?
+            .parse::<u64>()?;
         let minor = args.get(1).map_or(Ok(0), |c| c.parse::<u64>())?;
         let patch = args.get(2).map_or(Ok(0), |c| c.parse::<u64>())?;
 
@@ -90,7 +89,7 @@ impl Display for HumanVersionReq {
 }
 
 impl FromStr for HumanVersionReq {
-    type Err = anyhow::Error;
+    type Err = HumanVersionError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         lazy_static! {
@@ -99,7 +98,7 @@ impl FromStr for HumanVersionReq {
 
         let captures = RE
             .captures(s)
-            .ok_or_else(|| anyhow!("version requirement regex returned no captures"))?;
+            .ok_or_else(|| HumanVersionError::NoRegexCaptures(s.to_owned()))?;
 
         let comparator = match captures.get(1).map(|c| c.as_str()) {
             Some(">=") => Comparator::GreaterOrEqual,
@@ -108,12 +107,12 @@ impl FromStr for HumanVersionReq {
             Some("<") => Comparator::Less,
             Some("<=") => Comparator::LessOrEqual,
             Some(c) => panic!("impossible case (regex returned {})", c),
-            None => return Err(anyhow!("no comparator in input")),
+            None => return Err(HumanVersionError::MissingComparator(s.to_owned())),
         };
 
         let version = captures
             .get(2)
-            .ok_or_else(|| anyhow!("no version in input"))?
+            .ok_or_else(|| HumanVersionError::MissingVersion(s.to_owned()))?
             .as_str()
             .parse()?;
 

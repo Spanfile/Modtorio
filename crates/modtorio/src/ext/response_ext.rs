@@ -1,4 +1,4 @@
-use anyhow::anyhow;
+use crate::error::ResponseError;
 use async_trait::async_trait;
 use tokio::prelude::*;
 
@@ -31,11 +31,6 @@ impl ResponseExt for reqwest::Response {
             .path_segments()
             .and_then(|segments| segments.last())
             .and_then(|name| if name.is_empty() { None } else { Some(name) })
-            .ok_or_else(|| {
-                anyhow!(
-                    "Response URL doesn't have a file name component ({})",
-                    self.url().as_str()
-                )
-            })
+            .ok_or_else(|| ResponseError::NoFilename.into())
     }
 }
