@@ -308,7 +308,14 @@ impl Info {
         cache_mod: models::FactorioMod,
     ) -> anyhow::Result<()> {
         trace!("Mod '{}' got cached mod: {:?}", self.name, cache_mod);
-        // TODO: get summary from cache object
+
+        self.author.name = cache_mod.author;
+        self.author.contact = cache_mod.contact;
+        self.author.homepage = cache_mod.homepage;
+        self.display.title = cache_mod.title;
+        self.display.summary = cache_mod.summary;
+        self.display.description = cache_mod.description;
+        self.display.changelog = cache_mod.changelog;
 
         let mut releases = Vec::new();
         for release in cache.get_mod_releases(self.name.clone()).await? {

@@ -40,14 +40,27 @@ pub enum DownloadResult {
     },
 }
 
-async fn calculate_zip_checksum<P>(zip: P) -> anyhow::Result<String>
+enum ChecksumAlgorithm {
+    BLAKE2b,
+    SHA1,
+}
+
+const CACHE_ZIP_CHECKSUM_ALGO: ChecksumAlgorithm = ChecksumAlgorithm::BLAKE2b;
+const DOWNLOADED_ZIP_CHECKSUM_ALGO: ChecksumAlgorithm = ChecksumAlgorithm::SHA1;
+
+async fn calculate_zip_checksum<P>(algorithm: ChecksumAlgorithm, zip: P) -> anyhow::Result<String>
 where
     P: AsRef<Path>,
 {
     let path = zip.as_ref().to_owned();
-    let result = task::spawn_blocking(move || -> anyhow::Result<String> {
-        util::checksum::blake2b_file(path)
-    })
+    let result = match algorithm {
+        ChecksumAlgorithm::BLAKE2b => task::spawn_blocking(move || -> anyhow::Result<String> {
+            util::checksum::blake2b_file(path)
+        }),
+        ChecksumAlgorithm::SHA1 => task::spawn_blocking(move || -> anyhow::Result<String> {
+            util::checksum::sha1_file(path)
+        }),
+    }
     .await?;
 
     let result = result?;
@@ -70,7 +83,8 @@ async fn verify_zip(cached_mod: &models::GameMod) -> anyhow::Result<()> {
         zip_path.display(),
         cached_mod.zip_checksum
     );
-    let existing_zip_checksum = calculate_zip_checksum(&zip_path).await?;
+    let existing_zip_checksum = calculate_zip_checksum(CACHE_ZIP_CHECKSUM_ALGO, &zip_path).await?;
+
     if existing_zip_checksum != cached_mod.zip_checksum {
         return Err(ModError::ZipChecksumMismatch {
             zip_checksum: cached_mod.zip_checksum.clone(),
@@ -123,7 +137,7 @@ impl Mod {
     {
         debug!("Creating mod from zip: '{}'", path.as_ref().display());
         let info = Mutex::new(Info::from_zip(path.as_ref().to_owned()).await?);
-        let zip_checksum = calculate_zip_checksum(&path).await?;
+        let zip_checksum = calculate_zip_checksum(CACHE_ZIP_CHECKSUM_ALGO, &path).await?;
 
         Ok(Self {
             info,
@@ -308,11 +322,28 @@ impl Mod {
             .await?;
 
         debug!(
-            "{} ({} bytes) downloaded, populating info from {}",
+            "{} ({} bytes) downloaded, validating checksum...",
             ByteSize::b(download_size as u64),
             download_size,
-            path.display()
         );
+
+        let download_checksum = calculate_zip_checksum(DOWNLOADED_ZIP_CHECKSUM_ALGO, &path).await?;
+        let checksums_match = download_checksum == release.sha1();
+        trace!(
+            "Got downloaded zip checksum: {} (matches: {})",
+            download_checksum,
+            checksums_match
+        );
+
+        if !checksums_match {
+            return Err(ModError::ZipChecksumMismatch {
+                zip_checksum: download_checksum,
+                expected: release.sha1().to_owned(),
+            }
+            .into());
+        }
+
+        debug!("populating info");
 
         let old_version = self.own_version().await.ok();
         let old_archive = self.zip_path().await?.display().to_string();
@@ -365,7 +396,8 @@ impl Mod {
             return Ok(checksum.to_owned());
         }
 
-        let checksum = calculate_zip_checksum(self.zip_path().await?).await?;
+        let checksum =
+            calculate_zip_checksum(CACHE_ZIP_CHECKSUM_ALGO, self.zip_path().await?).await?;
         *self.zip_checksum.lock().await = Some(checksum.clone());
 
         trace!(

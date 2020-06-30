@@ -183,24 +183,6 @@ impl Cache {
         Ok(result?)
     }
 
-    pub async fn get_game(&self, id: GameCacheId) -> anyhow::Result<Game> {
-        let conn = Arc::clone(&self.conn);
-        let result = task::spawn_blocking(move || -> anyhow::Result<Game> {
-            let conn = conn.lock().unwrap();
-            let mut stmt = conn.prepare("SELECT * FROM game WHERE id = :id LIMIT 1")?;
-
-            Ok(stmt.query_row_named(named_params! {":id": id}, |row| {
-                Ok(Game {
-                    id: row.get(0)?,
-                    path: row.get(1)?,
-                })
-            })?)
-        })
-        .await?;
-
-        Ok(result?)
-    }
-
     pub async fn get_mods_of_game(
         &self,
         game_cache_id: GameCacheId,
