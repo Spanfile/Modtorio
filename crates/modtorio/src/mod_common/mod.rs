@@ -83,12 +83,12 @@ async fn verify_zip(cached_mod: &models::GameMod) -> anyhow::Result<()> {
 
 impl Mod {
     pub async fn from_cache(
-        game_mod: models::GameMod,
+        game_mod: &models::GameMod,
         config: Arc<Config>,
         portal: Arc<ModPortal>,
         cache: Arc<Cache>,
     ) -> anyhow::Result<Mod> {
-        trace!("Creating mod from cached {:?}", game_mod);
+        debug!("Creating mod from cached: {:?}", game_mod);
         let factorio_mod = cache
             .get_factorio_mod(game_mod.factorio_mod.clone())
             .await?
@@ -107,18 +107,22 @@ impl Mod {
             config,
             portal,
             cache,
-            zip_path: Arc::new(Mutex::new(Some(PathBuf::from(game_mod.mod_zip)))),
-            zip_checksum: Arc::new(Mutex::new(Some(game_mod.zip_checksum))),
+            zip_path: Arc::new(Mutex::new(Some(PathBuf::from(game_mod.mod_zip.clone())))),
+            zip_checksum: Arc::new(Mutex::new(Some(game_mod.zip_checksum.clone()))),
         })
     }
 
-    pub async fn from_zip(
-        path: PathBuf,
+    pub async fn from_zip<P>(
+        path: P,
         config: Arc<Config>,
         portal: Arc<ModPortal>,
         cache: Arc<Cache>,
-    ) -> anyhow::Result<Mod> {
-        let info = Mutex::new(Info::from_zip(path.clone()).await?);
+    ) -> anyhow::Result<Mod>
+    where
+        P: AsRef<Path>,
+    {
+        debug!("Creating mod from zip: '{}'", path.as_ref().display());
+        let info = Mutex::new(Info::from_zip(path.as_ref().to_owned()).await?);
         let zip_checksum = calculate_zip_checksum(&path).await?;
 
         Ok(Self {
@@ -126,7 +130,7 @@ impl Mod {
             config,
             portal,
             cache,
-            zip_path: Arc::new(Mutex::new(Some(path))),
+            zip_path: Arc::new(Mutex::new(Some(path.as_ref().to_owned()))),
             zip_checksum: Arc::new(Mutex::new(Some(zip_checksum))),
         })
     }
@@ -137,6 +141,7 @@ impl Mod {
         portal: Arc<ModPortal>,
         cache: Arc<Cache>,
     ) -> anyhow::Result<Mod> {
+        debug!("Creating mod from portal: '{}'", name);
         let info = Mutex::new(Info::from_portal(name, portal.as_ref()).await?);
 
         Ok(Self {

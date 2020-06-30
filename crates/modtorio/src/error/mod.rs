@@ -23,15 +23,17 @@ pub enum ResponseError {
 }
 
 #[derive(Debug, Error)]
-pub enum ZipError<'a> {
+pub enum ZipError {
     #[error("Zip file doesn't contain such file: {0}")]
-    NoFile(&'a str),
+    NoFile(String),
 }
 
 #[derive(Debug, Error)]
 pub enum ModError {
     #[error("No such mod: {0}")]
     NoSuchMod(String),
+    #[error("Duplicate mod: {0}")]
+    DuplicateMod(String),
     #[error("Cannot ensure dependency {dependency} of {mod_display}")]
     CannotEnsureDependency {
         dependency: Dependency,

@@ -1,25 +1,22 @@
+mod mods_builder;
+
 use super::GameCacheId;
 use crate::{
     cache::models,
     error::ModError,
-    ext::PathExt,
     mod_common::{DownloadResult, Mod, Requirement},
     util::HumanVersion,
     Cache, Config, ModPortal,
 };
-use glob::glob;
+pub use mods_builder::ModsBuilder;
+
 use log::*;
 use std::{
     collections::{hash_map::Entry, HashMap},
     path::PathBuf,
     sync::Arc,
 };
-use tokio::{fs, sync::Mutex, task};
-
-pub struct ModsBuilder {
-    directory: PathBuf,
-    game_cache_id: Option<GameCacheId>,
-}
+use tokio::{fs, sync::Mutex};
 
 pub struct Mods {
     directory: PathBuf,
@@ -27,128 +24,6 @@ pub struct Mods {
     config: Arc<Config>,
     portal: Arc<ModPortal>,
     cache: Arc<Cache>,
-}
-
-impl<'a> ModsBuilder {
-    pub fn root(directory: PathBuf) -> Self {
-        ModsBuilder {
-            directory,
-            game_cache_id: None,
-        }
-    }
-
-    pub fn with_game_cache_id(self, game_cache_id: GameCacheId) -> Self {
-        Self {
-            game_cache_id: Some(game_cache_id),
-            ..self
-        }
-    }
-
-    async fn build_from_cache(
-        self,
-        game_cache_id: GameCacheId,
-        cache: Arc<Cache>,
-    ) -> anyhow::Result<()> {
-        unimplemented!()
-    }
-
-    async fn build_from_filesystem(self) -> anyhow::Result<()> {
-        unimplemented!()
-    }
-
-    pub async fn build(
-        self,
-        config: Arc<Config>,
-        portal: Arc<ModPortal>,
-        cache: Arc<Cache>,
-    ) -> anyhow::Result<Mods> {
-        let zips = self.directory.join("*.zip");
-        let mods = Arc::new(Mutex::new(HashMap::new()));
-
-        for entry in glob(zips.get_str()?)? {
-            let entry = entry?;
-            let mods = Arc::clone(&mods);
-            let (config, portal, cache) =
-                (Arc::clone(&config), Arc::clone(&portal), Arc::clone(&cache));
-            task::spawn(async move || -> anyhow::Result<()> {
-                trace!("Loading mod from zip {}", entry.display());
-
-                let m = match Mod::from_zip(
-                    entry.clone(),
-                    Arc::clone(&config),
-                    Arc::clone(&portal),
-                    Arc::clone(&cache),
-                )
-                .await
-                {
-                    Ok(m) => Arc::new(m),
-                    Err(e) => {
-                        warn!("Mod failed to load: {}", e);
-                        return Ok(());
-                    }
-                };
-
-                let mod_name = m.name().await.to_string();
-                let mod_display = m.display().await;
-                debug!("Loaded mod {} from zip, fetching cache...", mod_name);
-
-                match m.fetch_cache_info().await {
-                    Ok(()) => trace!("Mod '{}' populated from cache", mod_name),
-                    Err(e) => {
-                        if let Some(ModError::ModNotInCache) = e.downcast_ref() {
-                            debug!(
-                                "Non-critical error: mod cache for '{}' failed to load: {}",
-                                mod_name, e
-                            );
-                        } else {
-                            error!("Mod cache for '{}' failed to load: {}", mod_name, e);
-                        }
-                    }
-                }
-
-                let mut mods = mods.lock().await;
-                match mods.entry(mod_name) {
-                    Entry::Occupied(mut entry) => {
-                        let existing: &Arc<Mod> = entry.get();
-
-                        warn!(
-                            "Found duplicate '{}' (new {} vs existing {})",
-                            entry.key(),
-                            m.own_version().await?,
-                            existing.own_version().await?
-                        );
-
-                        let own_version = m.own_version().await?;
-                        let existing_version = existing.own_version().await?;
-                        if own_version > existing_version {
-                            entry.insert(m);
-                        }
-                    }
-                    Entry::Vacant(entry) => {
-                        entry.insert(m);
-                    }
-                }
-
-                info!("Loaded mod {} from zip {}", mod_display, entry.display());
-                Ok(())
-            }());
-        }
-
-        let mods = mods
-            .lock()
-            .await
-            .iter()
-            .map(|(k, v)| (k.to_owned(), Arc::clone(v)))
-            .collect();
-
-        Ok(Mods {
-            directory: self.directory,
-            mods,
-            config,
-            portal,
-            cache,
-        })
-    }
 }
 
 impl Mods {
@@ -167,7 +42,10 @@ impl Mods {
 
             match fact_mod.update_cache().await {
                 Ok(()) => debug!("Updated cache for {}", mod_name),
-                Err(e) => error!("Cache update for {} failed: {}", mod_display, e),
+                Err(e) => {
+                    error!("Cache update for {} failed: {}", mod_display, e);
+                    continue;
+                }
             }
 
             debug!("Updating game '{}' cached mod '{}'...", game_id, mod_name);

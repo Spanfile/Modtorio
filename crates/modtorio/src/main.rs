@@ -50,12 +50,14 @@ async fn main() -> anyhow::Result<()> {
             .import(Arc::clone(&config), Arc::clone(&portal), Arc::clone(&cache))
             .await?;
 
-        games.push(game);
         info!(
-            "Cached game ID {} imported from {}",
-            cached_game.id, cached_game.path
+            "Cached game ID {} imported from {}. {} mods",
+            cached_game.id,
+            cached_game.path,
+            game.mods.count()
         );
         debug!("Cached game: {:?}", cached_game);
+        games.push(game);
     }
 
     if games.is_empty() {

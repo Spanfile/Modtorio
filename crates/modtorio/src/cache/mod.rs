@@ -201,27 +201,23 @@ impl Cache {
         Ok(result?)
     }
 
-    pub async fn get_mods_of_game(&self, game: Game) -> anyhow::Result<Vec<FactorioMod>> {
+    pub async fn get_mods_of_game(
+        &self,
+        game_cache_id: GameCacheId,
+    ) -> anyhow::Result<Vec<GameMod>> {
         let conn = Arc::clone(&self.conn);
-        let result = task::spawn_blocking(move || -> anyhow::Result<Vec<FactorioMod>> {
+        let result = task::spawn_blocking(move || -> anyhow::Result<Vec<GameMod>> {
             let conn = conn.lock().unwrap();
-            let mut stmt = conn.prepare(
-                "SELECT * FROM game_mod INNER JOIN factorio_mod ON factorio_mod.name == \
-                 game_mod.factorio_mod WHERE game_mod.game == :id;",
-            )?;
+            let mut stmt = conn.prepare("SELECT * FROM game_mod WHERE game_mod.game == :id")?;
             let mut mods = Vec::new();
 
-            for row in stmt.query_map_named(named_params! { ":id": game.id }, |row| {
-                Ok(FactorioMod {
-                    name: row.get(0)?,
-                    author: row.get(1)?,
-                    contact: row.get(2)?,
-                    homepage: row.get(3)?,
-                    title: row.get(4)?,
-                    summary: row.get(5)?,
-                    description: row.get(6)?,
-                    changelog: row.get(7)?,
-                    last_updated: row.get(8)?,
+            for row in stmt.query_map_named(named_params! { ":id": game_cache_id }, |row| {
+                Ok(GameMod {
+                    game: row.get(0)?,
+                    factorio_mod: row.get(1)?,
+                    mod_version: row.get(2)?,
+                    mod_zip: row.get(3)?,
+                    zip_checksum: row.get(4)?,
                 })
             })? {
                 mods.push(row?);
