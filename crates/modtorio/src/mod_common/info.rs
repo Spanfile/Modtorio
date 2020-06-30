@@ -84,14 +84,14 @@ struct ZipInfo {
 
 #[derive(Debug, Deserialize)]
 struct PortalInfo {
-    name: String,
-    owner: String,
-    releases: Vec<Release>,
-    summary: String,
-    title: String,
+    name: Option<String>,
+    owner: Option<String>,
+    releases: Option<Vec<Release>>,
+    summary: Option<String>,
+    title: Option<String>,
     changelog: Option<String>,
-    description: String,
-    homepage: String,
+    description: Option<String>,
+    homepage: Option<String>,
 }
 
 // #[derive(Debug)]
@@ -123,18 +123,24 @@ where
 }
 
 fn compress_portal_info(info: PortalInfo) -> PortalInfo {
-    let new_releases = info
-        .releases
-        .into_iter()
-        .map(|release| Release {
-            download_url: util::get_last_path_segment(release.download_url),
-            ..release
-        })
-        .collect();
+    if let Some(releases) = info.releases {
+        let new_releases = releases
+            .into_iter()
+            .map(|release| Release {
+                download_url: util::get_last_path_segment(release.download_url),
+                ..release
+            })
+            .collect();
 
-    PortalInfo {
-        releases: new_releases,
-        ..info
+        PortalInfo {
+            releases: Some(new_releases),
+            ..info
+        }
+    } else {
+        warn!("Missing releases in portal info when compressing");
+        debug!("{:?}", info);
+
+        info
     }
 }
 
@@ -152,7 +158,7 @@ impl Info {
         let portal_info: PortalInfo = portal.fetch_mod(name).await?;
         let portal_info = compress_portal_info(portal_info);
 
-        Ok(Self::from_portal_info(portal_info))
+        Ok(Self::from_portal_info(portal_info)?)
     }
 
     pub async fn from_cache(
@@ -239,24 +245,24 @@ impl Info {
         }
     }
 
-    fn from_portal_info(info: PortalInfo) -> Self {
-        Self {
-            name: info.name,
+    fn from_portal_info(info: PortalInfo) -> anyhow::Result<Self> {
+        Ok(Self {
+            name: info.name.ok_or(ModError::MissingField("name"))?,
             versions: None,
             author: Author {
-                name: info.owner,
+                name: info.owner.unwrap_or_default(), // TODO: warn when default returned
                 contact: None,
-                homepage: Some(info.homepage),
+                homepage: info.homepage,
             },
             display: Display {
-                title: info.title,
-                summary: Some(info.summary),
-                description: info.description,
+                title: info.title.ok_or(ModError::MissingField("name"))?,
+                summary: info.summary,
+                description: info.description.unwrap_or_default(),
                 changelog: info.changelog,
             },
             dependencies: None,
-            releases: Some(info.releases),
-        }
+            releases: info.releases,
+        })
     }
 
     pub async fn populate_from_zip<P>(&mut self, path: P) -> anyhow::Result<()>
@@ -288,8 +294,8 @@ impl Info {
         let info = compress_portal_info(info);
 
         trace!("'{}' got PortalInfo: {:?}", self.name, info);
-        self.display.summary = Some(info.summary);
-        self.releases = Some(info.releases);
+        self.display.summary = Some(info.summary.unwrap_or_default());
+        self.releases = Some(info.releases.unwrap_or_default());
 
         Ok(())
     }

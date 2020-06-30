@@ -79,7 +79,7 @@ async fn main() -> anyhow::Result<()> {
     //     .await?;
 
     for factorio in games.iter_mut() {
-        // factorio.mods.update().await?;
+        factorio.mods.update().await?;
         factorio.mods.ensure_dependencies().await?;
         factorio.update_cache().await?;
     }

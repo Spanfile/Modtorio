@@ -58,6 +58,8 @@ pub enum ModError {
     NoSuchRelease(HumanVersion),
     #[error("No releases")]
     NoReleases,
+    #[error("Missing critical field: {0}")]
+    MissingField(&'static str),
 }
 
 #[derive(Debug, Error)]

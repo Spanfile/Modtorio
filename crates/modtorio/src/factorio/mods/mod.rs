@@ -139,9 +139,9 @@ impl Mods {
 
         let mut missing: Vec<String> = Vec::new();
 
-        for m in self.mods.values() {
+        for fact_mod in self.mods.values() {
             missing.extend(
-                self.ensure_single_dependencies(m)
+                self.ensure_single_dependencies(fact_mod)
                     .await?
                     .into_iter()
                     .map(|m| m),
