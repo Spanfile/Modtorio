@@ -140,6 +140,10 @@ impl Mods {
         let mut missing: Vec<String> = Vec::new();
 
         for fact_mod in self.mods.values() {
+            info!(
+                "Ensuring '{}'s dependencies are met...",
+                fact_mod.title().await
+            );
             missing.extend(
                 self.ensure_single_dependencies(fact_mod)
                     .await?
@@ -181,6 +185,7 @@ impl Mods {
         match self.mods.entry(name.to_owned()) {
             Entry::Occupied(entry) => {
                 let existing_mod = entry.into_mut();
+                info!("Downloading {}...", existing_mod.display().await);
 
                 match existing_mod.download(version, &self.directory).await? {
                     DownloadResult::New => info!("{} added", existing_mod.display().await),
@@ -192,8 +197,7 @@ impl Mods {
                         old_archive,
                     } => {
                         debug!("Removing old mod archive {}", old_archive);
-                        let path = self.directory.join(old_archive);
-                        fs::remove_file(path).await?;
+                        fs::remove_file(old_archive).await?;
 
                         info!(
                             "{} replaced from ver. {}",
@@ -226,6 +230,7 @@ impl Mods {
         let target_name = target_mod.name().await;
 
         for dep in target_mod.dependencies().await? {
+            trace!("Ensuring dependency {:?}", dep);
             if dep.name() == "base" {
                 continue;
             }

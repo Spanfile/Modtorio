@@ -293,7 +293,7 @@ impl Info {
         let info: PortalInfo = portal.fetch_mod(&self.name).await?;
         let info = compress_portal_info(info);
 
-        trace!("'{}' got PortalInfo: {:?}", self.name, info);
+        // trace!("'{}' got PortalInfo: {:?}", self.name, info);
         self.display.summary = Some(info.summary.unwrap_or_default());
         self.releases = Some(info.releases.unwrap_or_default());
 

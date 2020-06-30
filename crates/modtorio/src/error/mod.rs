@@ -52,7 +52,7 @@ pub enum ModError {
     },
     #[error("Mod not in cache")]
     ModNotInCache,
-    #[error("Missing info (ist the mod installed?)")]
+    #[error("Missing info (is the mod installed?)")]
     MissingInfo,
     #[error("No such release version: {0}")]
     NoSuchRelease(HumanVersion),
