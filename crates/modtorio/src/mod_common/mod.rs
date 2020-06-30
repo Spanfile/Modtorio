@@ -59,7 +59,59 @@ where
     Ok(result)
 }
 
+async fn verify_zip(cached_mod: &models::GameMod) -> anyhow::Result<()> {
+    let zip_path = PathBuf::from(&cached_mod.mod_zip);
+    if !zip_path.exists() {
+        return Err(ModError::MissingZip(zip_path).into());
+    }
+
+    trace!(
+        "Verifying mod zip ({}) checksum (expecting {})...",
+        zip_path.display(),
+        cached_mod.zip_checksum
+    );
+    let existing_zip_checksum = calculate_zip_checksum(&zip_path).await?;
+    if existing_zip_checksum != cached_mod.zip_checksum {
+        return Err(ModError::ZipChecksumMismatch {
+            zip_checksum: cached_mod.zip_checksum.clone(),
+            expected: existing_zip_checksum,
+        }
+        .into());
+    }
+    Ok(())
+}
+
 impl Mod {
+    pub async fn from_cache(
+        game_mod: models::GameMod,
+        config: Arc<Config>,
+        portal: Arc<ModPortal>,
+        cache: Arc<Cache>,
+    ) -> anyhow::Result<Mod> {
+        trace!("Creating mod from cached {:?}", game_mod);
+        let factorio_mod = cache
+            .get_factorio_mod(game_mod.factorio_mod.clone())
+            .await?
+            .ok_or(ModError::ModNotInCache)?;
+        let info =
+            Mutex::new(Info::from_cache(factorio_mod, game_mod.mod_version, cache.as_ref()).await?);
+
+        debug!(
+            "Verifying mod '{}' zip ({}) against cache...",
+            game_mod.factorio_mod, game_mod.mod_zip
+        );
+        verify_zip(&game_mod).await?;
+
+        Ok(Self {
+            info,
+            config,
+            portal,
+            cache,
+            zip_path: Arc::new(Mutex::new(Some(PathBuf::from(game_mod.mod_zip)))),
+            zip_checksum: Arc::new(Mutex::new(Some(game_mod.zip_checksum))),
+        })
+    }
+
     pub async fn from_zip(
         path: PathBuf,
         config: Arc<Config>,
@@ -112,11 +164,22 @@ impl Mod {
         }
 
         let name = self.name().await;
+        let author = self.author().await;
+        let contact = self.contact().await;
+        let homepage = self.homepage().await;
+        let title = self.title().await;
         let summary = self.summary().await;
-
+        let description = self.description().await;
+        let changelog = self.changelog().await;
         let new_factorio_mod = models::FactorioMod {
             name,
+            author,
+            contact,
+            homepage,
+            title,
             summary,
+            description,
+            changelog,
             last_updated: Utc::now(),
         };
 

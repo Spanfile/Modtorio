@@ -214,8 +214,14 @@ impl Cache {
             for row in stmt.query_map_named(named_params! { ":id": game.id }, |row| {
                 Ok(FactorioMod {
                     name: row.get(0)?,
-                    summary: row.get(1)?,
-                    last_updated: row.get(2)?,
+                    author: row.get(1)?,
+                    contact: row.get(2)?,
+                    homepage: row.get(3)?,
+                    title: row.get(4)?,
+                    summary: row.get(5)?,
+                    description: row.get(6)?,
+                    changelog: row.get(7)?,
+                    last_updated: row.get(8)?,
                 })
             })? {
                 mods.push(row?);
@@ -299,8 +305,14 @@ impl Cache {
                 .query_row_named(named_params! {":name": factorio_mod}, |row| {
                     Ok(FactorioMod {
                         name: row.get(0)?,
-                        summary: row.get(1)?,
-                        last_updated: row.get(2)?,
+                        author: row.get(1)?,
+                        contact: row.get(2)?,
+                        homepage: row.get(3)?,
+                        title: row.get(4)?,
+                        summary: row.get(5)?,
+                        description: row.get(6)?,
+                        changelog: row.get(7)?,
+                        last_updated: row.get(8)?,
                     })
                 })
                 .optional()?)
@@ -315,11 +327,20 @@ impl Cache {
         task::spawn_blocking(move || -> anyhow::Result<()> {
             let conn = conn.lock().unwrap();
             let mut stmt = conn.prepare(
-                "REPLACE INTO factorio_mod (name, last_updated) VALUES(:name, :last_updated)",
+                "REPLACE INTO factorio_mod (name, author, contact, homepage, title, summary, \
+                 description, changelog, last_updated) VALUES(:name, :author, :contact, \
+                 :homepage, :title, :summary, :description, :changelog, :last_updated)",
             )?;
 
             stmt.execute_named(named_params! {
                 ":name": factorio_mod.name,
+                ":author": factorio_mod.author,
+                ":contact": factorio_mod.contact,
+                ":homepage": factorio_mod.homepage,
+                ":title": factorio_mod.title,
+                ":summary": factorio_mod.summary,
+                ":description": factorio_mod.description,
+                ":changelog": factorio_mod.changelog,
                 ":last_updated": factorio_mod.last_updated,
             })?;
 

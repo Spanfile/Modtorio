@@ -7,7 +7,6 @@ use crate::{
     util::HumanVersion,
     Cache, Config, ModPortal,
 };
-use futures::future;
 use glob::glob;
 use log::*;
 use std::{
@@ -19,6 +18,7 @@ use tokio::{fs, sync::Mutex, task};
 
 pub struct ModsBuilder {
     directory: PathBuf,
+    game_cache_id: Option<GameCacheId>,
 }
 
 pub struct Mods {
@@ -31,7 +31,29 @@ pub struct Mods {
 
 impl<'a> ModsBuilder {
     pub fn root(directory: PathBuf) -> Self {
-        ModsBuilder { directory }
+        ModsBuilder {
+            directory,
+            game_cache_id: None,
+        }
+    }
+
+    pub fn with_game_cache_id(self, game_cache_id: GameCacheId) -> Self {
+        Self {
+            game_cache_id: Some(game_cache_id),
+            ..self
+        }
+    }
+
+    async fn build_from_cache(
+        self,
+        game_cache_id: GameCacheId,
+        cache: Arc<Cache>,
+    ) -> anyhow::Result<()> {
+        unimplemented!()
+    }
+
+    async fn build_from_filesystem(self) -> anyhow::Result<()> {
+        unimplemented!()
     }
 
     pub async fn build(
@@ -42,14 +64,13 @@ impl<'a> ModsBuilder {
     ) -> anyhow::Result<Mods> {
         let zips = self.directory.join("*.zip");
         let mods = Arc::new(Mutex::new(HashMap::new()));
-        let mut tasks = Vec::new();
 
         for entry in glob(zips.get_str()?)? {
             let entry = entry?;
             let mods = Arc::clone(&mods);
             let (config, portal, cache) =
                 (Arc::clone(&config), Arc::clone(&portal), Arc::clone(&cache));
-            let task = task::spawn(async move || -> anyhow::Result<()> {
+            task::spawn(async move || -> anyhow::Result<()> {
                 trace!("Loading mod from zip {}", entry.display());
 
                 let m = match Mod::from_zip(
@@ -111,11 +132,7 @@ impl<'a> ModsBuilder {
                 info!("Loaded mod {} from zip {}", mod_display, entry.display());
                 Ok(())
             }());
-
-            tasks.push(task);
         }
-
-        future::join_all(tasks).await;
 
         let mods = mods
             .lock()

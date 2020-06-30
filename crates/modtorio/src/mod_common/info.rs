@@ -109,7 +109,7 @@ fn default_dependencies() -> Vec<Dependency> {
 
 async fn read_object_from_zip<P, T>(path: P, name: &'static str) -> anyhow::Result<T>
 where
-    P: 'static + AsRef<Path> + Send,
+    P: 'static + AsRef<Path> + Send, // TODO: these sorts of requirements are a bit icky
     T: 'static + serde::de::DeserializeOwned + Send,
 {
     task::spawn_blocking(move || -> anyhow::Result<T> {
@@ -139,7 +139,7 @@ fn compress_portal_info(info: PortalInfo) -> PortalInfo {
 }
 
 impl Info {
-    pub async fn from_zip<P>(path: P) -> anyhow::Result<Info>
+    pub async fn from_zip<P>(path: P) -> anyhow::Result<Self>
     where
         P: 'static + AsRef<Path> + Send,
     {
@@ -148,11 +148,72 @@ impl Info {
         Ok(Self::from_zip_info(info, String::new()))
     }
 
-    pub async fn from_portal(name: &str, portal: &ModPortal) -> anyhow::Result<Info> {
+    pub async fn from_portal(name: &str, portal: &ModPortal) -> anyhow::Result<Self> {
         let portal_info: PortalInfo = portal.fetch_mod(name).await?;
         let portal_info = compress_portal_info(portal_info);
 
         Ok(Self::from_portal_info(portal_info))
+    }
+
+    pub async fn from_cache(
+        factorio_mod: models::FactorioMod,
+        version: HumanVersion,
+        cache: &Cache,
+    ) -> anyhow::Result<Self> {
+        trace!("Building info object from cached mod {:?}", factorio_mod);
+
+        let name = factorio_mod.name;
+        let mut releases = Vec::new();
+        let mut this_release = None;
+
+        for release in cache.get_mod_releases(name.clone()).await? {
+            let mut dependencies = Vec::new();
+
+            for cache_dep in cache
+                .get_release_dependencies(name.clone(), release.version)
+                .await?
+            {
+                dependencies.push(cache_dep.into());
+            }
+
+            releases.push(Release {
+                download_url: PathBuf::from(release.download_url.clone()),
+                released_on: release.released_on,
+                version: release.version,
+                sha1: release.sha1.clone(),
+                info_object: ReleaseInfoObject {
+                    factorio_version: release.factorio_version,
+                    dependencies,
+                },
+            });
+
+            if release.version == version {
+                this_release = Some(release);
+            }
+        }
+
+        let this_release = this_release.ok_or(ModError::NoSuchRelease(version))?;
+
+        Ok(Self {
+            name,
+            versions: Some(Versions {
+                own: this_release.version,
+                factorio: this_release.factorio_version,
+            }),
+            author: Author {
+                name: factorio_mod.author,
+                contact: factorio_mod.contact,
+                homepage: factorio_mod.homepage,
+            },
+            display: Display {
+                title: factorio_mod.title,
+                summary: factorio_mod.summary,
+                description: factorio_mod.description,
+                changelog: factorio_mod.changelog,
+            },
+            dependencies: None,
+            releases: Some(releases),
+        })
     }
 
     fn from_zip_info(info: ZipInfo, changelog: String) -> Self {
@@ -239,7 +300,7 @@ impl Info {
         cache_mod: models::FactorioMod,
     ) -> anyhow::Result<()> {
         trace!("Mod '{}' got cached mod: {:?}", self.name, cache_mod);
-        self.display.summary = cache_mod.summary;
+        // TODO: get summary from cache object
 
         let mut releases = Vec::new();
         for release in cache.get_mod_releases(self.name.clone()).await? {

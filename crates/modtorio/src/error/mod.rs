@@ -1,4 +1,5 @@
 use crate::{mod_common::Dependency, util::HumanVersion};
+use std::path::PathBuf;
 use thiserror::Error;
 
 #[derive(Debug, Error)]
@@ -40,6 +41,13 @@ pub enum ModError {
     MissingZipPath,
     #[error("Mod name from zip does not match existing name: {zip} vs {existing}")]
     ZipNameMismatch { zip: String, existing: String },
+    #[error("Mod zip does not exist in filesystem: {0}")]
+    MissingZip(PathBuf),
+    #[error("Mod zip's checksum does not match expected: got {zip_checksum}, expected {expected}")]
+    ZipChecksumMismatch {
+        zip_checksum: String,
+        expected: String,
+    },
     #[error("Mod not in cache")]
     ModNotInCache,
     #[error("Missing info (ist the mod installed?)")]

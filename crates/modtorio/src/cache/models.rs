@@ -14,7 +14,13 @@ pub struct Game {
 #[derive(Debug, PartialEq)]
 pub struct FactorioMod {
     pub name: String,
+    pub author: String,
+    pub contact: Option<String>,
+    pub homepage: Option<String>,
+    pub title: String,
     pub summary: Option<String>,
+    pub description: String,
+    pub changelog: Option<String>,
     pub last_updated: DateTime<Utc>,
 }
 

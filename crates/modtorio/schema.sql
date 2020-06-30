@@ -5,7 +5,13 @@ CREATE TABLE IF NOT EXISTS "_meta" (
 );
 CREATE TABLE IF NOT EXISTS "factorio_mod" (
 	"name"	TEXT NOT NULL,
+	"author"	TEXT NOT NULL,
+	"contact"	TEXT,
+	"homepage"	TEXT,
+	"title"	TEXT NOT NULL,
 	"summary"	TEXT,
+	"description"	TEXT NOT NULL,
+	"changelog"	TEXT,
 	"last_updated"	TEXT NOT NULL,
 	PRIMARY KEY("name")
 );
