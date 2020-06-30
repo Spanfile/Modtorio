@@ -41,7 +41,7 @@ impl Mods {
             trace!("Updating cache for '{}'", mod_name);
 
             match fact_mod.update_cache().await {
-                Ok(()) => debug!("Updated cache for {}", mod_name),
+                Ok(()) => debug!("Updated Factorio mod cache for {}", mod_name),
                 Err(e) => {
                     error!("Cache update for {} failed: {}", mod_display, e);
                     continue;

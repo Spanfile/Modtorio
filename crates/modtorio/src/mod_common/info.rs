@@ -194,17 +194,19 @@ impl Info {
             });
 
             if release.version == version {
-                this_release = Some(release);
+                // store the index of this wanted version so it can be referenced later
+                // required in order to get the release's dependencies into this info object
+                this_release = Some(releases.len() - 1);
             }
         }
 
-        let this_release = this_release.ok_or(ModError::NoSuchRelease(version))?;
+        let this_release = &releases[this_release.ok_or(ModError::NoSuchRelease(version))?];
 
         Ok(Self {
             name,
             versions: Some(Versions {
                 own: this_release.version,
-                factorio: this_release.factorio_version,
+                factorio: this_release.info_object.factorio_version,
             }),
             author: Author {
                 name: factorio_mod.author,
@@ -217,7 +219,7 @@ impl Info {
                 description: factorio_mod.description,
                 changelog: factorio_mod.changelog,
             },
-            dependencies: None,
+            dependencies: Some(this_release.info_object.dependencies.clone()),
             releases: Some(releases),
         })
     }
