@@ -104,45 +104,19 @@ impl Cache {
 
         Ok(result?)
     }
+}
 
-    pub async fn get_meta(&self, field: CacheMetaField) -> anyhow::Result<Option<CacheMetaValue>> {
-        let conn = Arc::clone(&self.conn);
-        let result = task::spawn_blocking(move || -> anyhow::Result<Option<CacheMetaValue>> {
-            let conn = conn.lock().unwrap();
-            let mut stmt = conn.prepare("SELECT * FROM _meta WHERE field = :field LIMIT 1")?;
-
-            Ok(stmt
-                .query_row_named(named_params! { ":field": field.to_string() }, |row| {
-                    Ok(CacheMetaValue {
-                        field: row.get(0)?,
-                        value: row.get(1)?,
-                    })
-                })
-                .optional()?)
+macro_rules! sql {
+    ($conn:ident => $b:block) => {
+        Ok({
+            let _c = Arc::clone(&$conn);
+            task::spawn_blocking(move || -> anyhow::Result<_> {
+                let $conn = _c.lock().unwrap();
+                $b
+            })
+            .await??
         })
-        .await?;
-
-        Ok(result?)
-    }
-
-    pub async fn set_meta(&self, value: CacheMetaValue) -> anyhow::Result<()> {
-        let conn = Arc::clone(&self.conn);
-        let result = task::spawn_blocking(move || -> anyhow::Result<()> {
-            let conn = conn.lock().unwrap();
-            let mut stmt =
-                conn.prepare("REPLACE INTO _meta (field, value) VALUES (:field, :value)")?;
-
-            stmt.execute_named(named_params! {
-                ":field": value.field,
-                ":value": value.value,
-            })?;
-
-            Ok(())
-        })
-        .await?;
-
-        Ok(result?)
-    }
+    };
 }
 
 impl Cache {
@@ -160,10 +134,38 @@ impl Cache {
         Ok(self.conn.lock().unwrap().execute_batch("COMMIT")?)
     }
 
+    pub async fn get_meta(&self, field: CacheMetaField) -> anyhow::Result<Option<CacheMetaValue>> {
+        let conn = &self.conn;
+        sql!(conn => {
+            let mut stmt = conn.prepare("SELECT * FROM _meta WHERE field = :field LIMIT 1")?;
+
+            Ok(stmt
+                .query_row_named(named_params! { ":field": field.to_string() }, |row| {
+                    Ok(CacheMetaValue {
+                        field: row.get(0)?,
+                        value: row.get(1)?,
+                    })
+                })
+                .optional()?)
+        })
+    }
+
+    pub async fn set_meta(&self, value: CacheMetaValue) -> anyhow::Result<()> {
+        let conn = &self.conn;
+        sql!(conn => {
+            let mut stmt =
+                conn.prepare("REPLACE INTO _meta (field, value) VALUES (:field, :value)")?;
+            stmt.execute_named(&[
+                (":field", &value.field as &dyn ::rusqlite::ToSql),
+                (":value", &value.value as &dyn ::rusqlite::ToSql),
+            ])?;
+            Ok(())
+        })
+    }
+
     pub async fn get_games(&self) -> anyhow::Result<Vec<Game>> {
-        let conn = Arc::clone(&self.conn);
-        let result = task::spawn_blocking(move || -> anyhow::Result<Vec<Game>> {
-            let conn = conn.lock().unwrap();
+        let conn = &self.conn;
+        sql!(conn => {
             let mut stmt = conn.prepare("SELECT * FROM game")?;
             let mut games = Vec::new();
 
@@ -178,18 +180,14 @@ impl Cache {
 
             Ok(games)
         })
-        .await?;
-
-        Ok(result?)
     }
 
     pub async fn get_mods_of_game(
         &self,
         game_cache_id: GameCacheId,
     ) -> anyhow::Result<Vec<GameMod>> {
-        let conn = Arc::clone(&self.conn);
-        let result = task::spawn_blocking(move || -> anyhow::Result<Vec<GameMod>> {
-            let conn = conn.lock().unwrap();
+        let conn = &self.conn;
+        sql!(conn => {
             let mut stmt = conn.prepare("SELECT * FROM game_mod WHERE game_mod.game == :id")?;
             let mut mods = Vec::new();
 
@@ -207,15 +205,11 @@ impl Cache {
 
             Ok(mods)
         })
-        .await?;
-
-        Ok(result?)
     }
 
     pub async fn set_mods_of_game(&self, mods: Vec<GameMod>) -> anyhow::Result<()> {
-        let conn = Arc::clone(&self.conn);
-        task::spawn_blocking(move || -> anyhow::Result<()> {
-            let conn = conn.lock().unwrap();
+        let conn = &self.conn;
+        sql!(conn => {
             let mut stmt = conn.prepare(
                 "REPLACE INTO game_mod (game, factorio_mod, mod_version, mod_zip, zip_checksum) \
                  VALUES(:game, :factorio_mod, :mod_version, :mod_zip, :zip_checksum)",
@@ -233,15 +227,11 @@ impl Cache {
 
             Ok(())
         })
-        .await??;
-
-        Ok(())
     }
 
     pub async fn insert_game(&self, new_game: Game) -> anyhow::Result<i64> {
-        let conn = Arc::clone(&self.conn);
-        let result = task::spawn_blocking(move || -> anyhow::Result<i64> {
-            let conn = conn.lock().unwrap();
+        let conn = &self.conn;
+        sql!(conn => {
             let mut stmt = conn.prepare("INSERT INTO game (path) VALUES (:path)")?;
 
             stmt.execute_named(named_params! { ":path": new_game.path })?;
@@ -249,15 +239,11 @@ impl Cache {
 
             Ok(id)
         })
-        .await?;
-
-        Ok(result?)
     }
 
     pub async fn update_game(&self, game: Game) -> anyhow::Result<()> {
-        let conn = Arc::clone(&self.conn);
-        task::spawn_blocking(move || -> anyhow::Result<()> {
-            let conn = conn.lock().unwrap();
+        let conn = &self.conn;
+        sql!(conn => {
             conn.execute_named(
                 "UPDATE game SET path = :path WHERE id = :id",
                 named_params! { ":path": game.path, ":id": game.id },
@@ -265,18 +251,14 @@ impl Cache {
 
             Ok(())
         })
-        .await??;
-
-        Ok(())
     }
 
     pub async fn get_factorio_mod(
         &self,
         factorio_mod: String,
     ) -> anyhow::Result<Option<FactorioMod>> {
-        let conn = Arc::clone(&self.conn);
-        let result = task::spawn_blocking(move || -> anyhow::Result<Option<FactorioMod>> {
-            let conn = conn.lock().unwrap();
+        let conn = &self.conn;
+        sql!(conn => {
             let mut stmt = conn.prepare("SELECT * FROM factorio_mod WHERE name = :name LIMIT 1")?;
 
             Ok(stmt
@@ -295,15 +277,11 @@ impl Cache {
                 })
                 .optional()?)
         })
-        .await?;
-
-        Ok(result?)
     }
 
     pub async fn set_factorio_mod(&self, factorio_mod: models::FactorioMod) -> anyhow::Result<()> {
-        let conn = Arc::clone(&self.conn);
-        task::spawn_blocking(move || -> anyhow::Result<()> {
-            let conn = conn.lock().unwrap();
+        let conn = &self.conn;
+        sql!(conn => {
             let mut stmt = conn.prepare(
                 "REPLACE INTO factorio_mod (name, author, contact, homepage, title, summary, \
                  description, changelog, last_updated) VALUES(:name, :author, :contact, \
@@ -324,15 +302,11 @@ impl Cache {
 
             Ok(())
         })
-        .await??;
-
-        Ok(())
     }
 
     pub async fn get_mod_releases(&self, factorio_mod: String) -> anyhow::Result<Vec<ModRelease>> {
-        let conn = Arc::clone(&self.conn);
-        let result = task::spawn_blocking(move || -> anyhow::Result<Vec<ModRelease>> {
-            let conn = conn.lock().unwrap();
+        let conn = &self.conn;
+        sql!(conn => {
             let mut stmt =
                 conn.prepare("SELECT * FROM mod_release WHERE factorio_mod = :factorio_mod")?;
             let mut mods = Vec::new();
@@ -354,15 +328,11 @@ impl Cache {
 
             Ok(mods)
         })
-        .await?;
-
-        Ok(result?)
     }
 
     pub async fn set_mod_release(&self, release: ModRelease) -> anyhow::Result<()> {
-        let conn = Arc::clone(&self.conn);
-        task::spawn_blocking(move || -> anyhow::Result<()> {
-            let conn = conn.lock().unwrap();
+        let conn = &self.conn;
+        sql!(conn => {
             let mut stmt = conn.prepare(
                 "REPLACE INTO mod_release (factorio_mod, download_url, released_on, version, \
                  sha1, factorio_version) VALUES(:factorio_mod, :download_url, :released_on, \
@@ -380,9 +350,6 @@ impl Cache {
 
             Ok(())
         })
-        .await??;
-
-        Ok(())
     }
 
     pub async fn get_release_dependencies(
@@ -390,9 +357,8 @@ impl Cache {
         release_mod_name: String,
         release_version: HumanVersion,
     ) -> anyhow::Result<Vec<ReleaseDependency>> {
-        let conn = Arc::clone(&self.conn);
-        let result = task::spawn_blocking(move || -> anyhow::Result<Vec<ReleaseDependency>> {
-            let conn = conn.lock().unwrap();
+        let conn = &self.conn;
+        sql!(conn => {
             let mut stmt = conn.prepare(
                 "SELECT * FROM release_dependency WHERE release_mod_name = :release_mod_name AND \
                  release_version = :release_version",
@@ -415,18 +381,14 @@ impl Cache {
 
             Ok(dependencies)
         })
-        .await?;
-
-        Ok(result?)
     }
 
     pub async fn set_release_dependencies(
         &self,
         dependencies: Vec<ReleaseDependency>,
     ) -> anyhow::Result<()> {
-        let conn = Arc::clone(&self.conn);
-        task::spawn_blocking(move || -> anyhow::Result<()> {
-            let conn = conn.lock().unwrap();
+        let conn = &self.conn;
+        sql!(conn => {
             let mut stmt = conn.prepare(
                 "REPLACE INTO release_dependency (release_mod_name, release_version, name, \
                  requirement, version_req) VALUES(:release_mod_name, :release_version, :name, \
@@ -445,8 +407,5 @@ impl Cache {
 
             Ok(())
         })
-        .await??;
-
-        Ok(())
     }
 }

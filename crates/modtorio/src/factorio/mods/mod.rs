@@ -31,6 +31,7 @@ impl Mods {
         self.mods.len()
     }
 
+    #[allow(dead_code)]
     pub async fn update_cache(&self, game_id: GameCacheId) -> anyhow::Result<()> {
         debug!("Updating cached mods for game {}", game_id);
         let new_game_mods = Mutex::new(Vec::new());
@@ -97,6 +98,7 @@ impl Mods {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn update(&mut self) -> anyhow::Result<()> {
         info!("Checking for mod updates...");
 
@@ -134,6 +136,7 @@ impl Mods {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub async fn ensure_dependencies(&mut self) -> anyhow::Result<()> {
         info!("Ensuring mod dependencies are met...");
 

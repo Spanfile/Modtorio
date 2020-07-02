@@ -4,11 +4,24 @@ use crate::{
     util::{HumanVersion, HumanVersionReq},
 };
 use chrono::{DateTime, Utc};
+use derive::Model;
 
-#[derive(Debug, PartialEq)]
+pub trait Model {
+    fn select() -> &'static str;
+    fn replace_into() -> &'static str;
+    fn insert_into() -> &'static str;
+    fn update() -> &'static str;
+}
+
+#[derive(Debug, PartialEq, Model)]
 pub struct Game {
     pub id: GameCacheId,
     pub path: String,
+}
+
+#[derive(Model)]
+pub enum Genitalia {
+    Penis,
 }
 
 #[derive(Debug, PartialEq)]
