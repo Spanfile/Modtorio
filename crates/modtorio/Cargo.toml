@@ -40,7 +40,7 @@ version = "1.0.114"
 features = ["derive"]
 
 [dependencies.zip]
-git = "https://github.com/Spanfile/zip-rs.git"
+git = "ssh://git@git.spans.me/Spanfile/zip-rs"
 
 [dependencies.fern]
 version = "0.6.0"

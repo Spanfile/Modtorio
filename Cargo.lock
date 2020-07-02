@@ -1600,7 +1600,7 @@ dependencies = [
 [[package]]
 name = "zip"
 version = "0.5.7"
-source = "git+https://github.com/Spanfile/zip-rs.git#1e38eed5e80a640e9e6d91624edad31642da5e40"
+source = "git+ssh://git@git.spans.me/Spanfile/zip-rs#1e38eed5e80a640e9e6d91624edad31642da5e40"
 dependencies = [
  "bzip2",
  "crc32fast",
