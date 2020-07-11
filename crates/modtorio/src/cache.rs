@@ -188,10 +188,10 @@ impl Cache {
     ) -> anyhow::Result<Vec<GameMod>> {
         let conn = &self.conn;
         sql!(conn => {
-            let mut stmt = conn.prepare("SELECT * FROM game_mod WHERE game_mod.game == :id")?;
+            let mut stmt = conn.prepare(GameMod::select())?;
             let mut mods = Vec::new();
 
-            for row in stmt.query_map_named(named_params! { ":id": game_cache_id }, |row| {
+            for row in stmt.query_map_named(named_params! { ":game": game_cache_id }, |row| {
                 Ok(GameMod {
                     game: row.get(0)?,
                     factorio_mod: row.get(1)?,
@@ -210,10 +210,7 @@ impl Cache {
     pub async fn set_mods_of_game(&self, mods: Vec<GameMod>) -> anyhow::Result<()> {
         let conn = &self.conn;
         sql!(conn => {
-            let mut stmt = conn.prepare(
-                "REPLACE INTO game_mod (game, factorio_mod, mod_version, mod_zip, zip_checksum) \
-                 VALUES(:game, :factorio_mod, :mod_version, :mod_zip, :zip_checksum)",
-            )?;
+            let mut stmt = conn.prepare(GameMod::replace_into())?;
 
             for m in &mods {
                 stmt.execute_named(named_params! {
@@ -232,7 +229,7 @@ impl Cache {
     pub async fn insert_game(&self, new_game: Game) -> anyhow::Result<i64> {
         let conn = &self.conn;
         sql!(conn => {
-            let mut stmt = conn.prepare("INSERT INTO game (path) VALUES (:path)")?;
+            let mut stmt = conn.prepare(Game::insert_into())?;
 
             stmt.execute_named(named_params! { ":path": new_game.path })?;
             let id = conn.last_insert_rowid();
@@ -245,7 +242,7 @@ impl Cache {
         let conn = &self.conn;
         sql!(conn => {
             conn.execute_named(
-                "UPDATE game SET path = :path WHERE id = :id",
+                Game::update(),
                 named_params! { ":path": game.path, ":id": game.id },
             )?;
 
@@ -259,7 +256,7 @@ impl Cache {
     ) -> anyhow::Result<Option<FactorioMod>> {
         let conn = &self.conn;
         sql!(conn => {
-            let mut stmt = conn.prepare("SELECT * FROM factorio_mod WHERE name = :name LIMIT 1")?;
+            let mut stmt = conn.prepare(FactorioMod::select())?;
 
             Ok(stmt
                 .query_row_named(named_params! {":name": factorio_mod}, |row| {
@@ -282,11 +279,7 @@ impl Cache {
     pub async fn set_factorio_mod(&self, factorio_mod: models::FactorioMod) -> anyhow::Result<()> {
         let conn = &self.conn;
         sql!(conn => {
-            let mut stmt = conn.prepare(
-                "REPLACE INTO factorio_mod (name, author, contact, homepage, title, summary, \
-                 description, changelog, last_updated) VALUES(:name, :author, :contact, \
-                 :homepage, :title, :summary, :description, :changelog, :last_updated)",
-            )?;
+            let mut stmt = conn.prepare(FactorioMod::replace_into())?;
 
             stmt.execute_named(named_params! {
                 ":name": factorio_mod.name,
@@ -308,7 +301,7 @@ impl Cache {
         let conn = &self.conn;
         sql!(conn => {
             let mut stmt =
-                conn.prepare("SELECT * FROM mod_release WHERE factorio_mod = :factorio_mod")?;
+                conn.prepare(ModRelease::select())?;
             let mut mods = Vec::new();
 
             for m in
@@ -333,11 +326,7 @@ impl Cache {
     pub async fn set_mod_release(&self, release: ModRelease) -> anyhow::Result<()> {
         let conn = &self.conn;
         sql!(conn => {
-            let mut stmt = conn.prepare(
-                "REPLACE INTO mod_release (factorio_mod, download_url, released_on, version, \
-                 sha1, factorio_version) VALUES(:factorio_mod, :download_url, :released_on, \
-                 :version, :sha1, :factorio_version)",
-            )?;
+            let mut stmt = conn.prepare(ModRelease::replace_into())?;
 
             stmt.execute_named(named_params! {
                 ":factorio_mod": release.factorio_mod,
@@ -359,10 +348,7 @@ impl Cache {
     ) -> anyhow::Result<Vec<ReleaseDependency>> {
         let conn = &self.conn;
         sql!(conn => {
-            let mut stmt = conn.prepare(
-                "SELECT * FROM release_dependency WHERE release_mod_name = :release_mod_name AND \
-                 release_version = :release_version",
-            )?;
+            let mut stmt = conn.prepare(ReleaseDependency::select())?;
             let mut dependencies = Vec::new();
 
             for dep in
@@ -389,11 +375,7 @@ impl Cache {
     ) -> anyhow::Result<()> {
         let conn = &self.conn;
         sql!(conn => {
-            let mut stmt = conn.prepare(
-                "REPLACE INTO release_dependency (release_mod_name, release_version, name, \
-                 requirement, version_req) VALUES(:release_mod_name, :release_version, :name, \
-                 :requirement, :version_req)",
-            )?;
+            let mut stmt = conn.prepare(ReleaseDependency::replace_into())?;
 
             for rel in dependencies {
                 stmt.execute_named(named_params! {
