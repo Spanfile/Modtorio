@@ -5,8 +5,13 @@ authors = ["Spanfile <spansdev@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-syn = "1.0.33"
 quote = "1.0.7"
+thiserror = "1.0.20"
+proc-macro2 = "1.0.18"
+
+[dependencies.syn]
+version = "1.0.33"
+features = ["full"]
 
 [lib]
 proc-macro = true

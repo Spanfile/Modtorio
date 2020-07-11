@@ -19,11 +19,6 @@ pub struct Game {
     pub path: String,
 }
 
-#[derive(Model)]
-pub enum Genitalia {
-    Penis,
-}
-
 #[derive(Debug, PartialEq)]
 pub struct FactorioMod {
     pub name: String,
