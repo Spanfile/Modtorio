@@ -5,11 +5,12 @@ use heck::SnakeCase;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{
-    parse_macro_input, spanned::Spanned, Data, DeriveInput, Field, Fields, FieldsNamed, Meta,
+    parse_macro_input, spanned::Spanned, Data, DeriveInput, Field, Fields, FieldsNamed, Ident,
+    Meta, Type,
 };
 use thiserror::Error;
 
-const PRIMARY_KEY_ATTRIBUTE: &str = "primary_key";
+const INDEX_ATTRIBUTE: &str = "index";
 
 #[derive(Error, Debug)]
 enum MacroError {
@@ -25,11 +26,12 @@ enum MacroError {
 
 #[derive(Debug)]
 struct MacroField {
-    is_primary_key: bool,
-    identifier: String,
+    is_index: bool,
+    ident: Ident,
+    ty: Type,
 }
 
-#[proc_macro_derive(Model, attributes(primary_key))]
+#[proc_macro_derive(Model, attributes(index))]
 pub fn model(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
     let output = match run_macro(input) {
@@ -53,26 +55,36 @@ fn run_macro(input: DeriveInput) -> Result<TokenStream, MacroError> {
     let table_name = ident.to_string().to_snake_case();
 
     let macro_fields = parse_fields(fields)?;
+
     let select = select_clause(&table_name, &macro_fields);
+    let select_all = select_all_clause(&table_name);
     let replace_into = replace_into_clause(&table_name, &macro_fields);
     let insert = insert_into_clause(&table_name, &macro_fields);
     let update = update_clause(&table_name, &macro_fields);
 
+    let params = params_fn(&macro_fields);
+
     Ok(quote!(
-        impl Model for #ident {
-            fn select() -> &'static str {
+        impl #ident {
+            #params
+
+            pub fn select() -> &'static str {
                 #select
             }
 
-            fn replace_into() -> &'static str {
+            pub fn select_all() -> &'static str {
+                #select_all
+            }
+
+            pub fn replace_into() -> &'static str {
                 #replace_into
             }
 
-            fn insert_into() -> &'static str {
+            pub fn insert_into() -> &'static str {
                 #insert
             }
 
-            fn update() -> &'static str {
+            pub fn update() -> &'static str {
                 #update
             }
         }
@@ -103,7 +115,7 @@ fn sql_equals(ident: &str) -> String {
 fn has_primary_key_attribute(field: &Field) -> bool {
     for attr in &field.attrs {
         if let Ok(Meta::Path(path)) = attr.parse_meta() {
-            if path.is_ident(PRIMARY_KEY_ATTRIBUTE) {
+            if path.is_ident(INDEX_ATTRIBUTE) {
                 return true;
             }
         }
@@ -116,15 +128,16 @@ fn parse_fields(fields: &FieldsNamed) -> Result<Vec<MacroField>, MacroError> {
     let mut macro_fields = Vec::new();
 
     for field in &fields.named {
-        let identifier = field
+        let ident = field
             .ident
-            .as_ref()
-            .ok_or_else(|| MacroError::NoIdentOnField(field.span()))?
-            .to_string();
+            .clone()
+            .ok_or_else(|| MacroError::NoIdentOnField(field.span()))?;
+        let ty = field.ty.clone();
 
         macro_fields.push(MacroField {
-            is_primary_key: has_primary_key_attribute(field),
-            identifier,
+            is_index: has_primary_key_attribute(field),
+            ident,
+            ty,
         });
     }
 
@@ -136,11 +149,11 @@ fn select_clause(table_name: &str, fields: &[MacroField]) -> String {
     let mut conditions = Vec::new();
 
     for field in fields {
-        if !field.is_primary_key {
+        if !field.is_index {
             continue;
         }
 
-        conditions.push(sql_equals(&field.identifier));
+        conditions.push(sql_equals(&field.ident.to_string()));
     }
 
     format!(
@@ -150,16 +163,22 @@ fn select_clause(table_name: &str, fields: &[MacroField]) -> String {
     )
 }
 
+fn select_all_clause(table_name: &str) -> String {
+    // SELECT * FROM game_mod
+    format!("SELECT * FROM {}", table_name)
+}
+
 fn replace_into_clause(table_name: &str, fields: &[MacroField]) -> String {
     // REPLACE INTO game_mod (game, factorio_mod, mod_version, mod_zip, zip_checksum) VALUES(:game,
     // :factorio_mod, :mod_version, :mod_zip, :zip_checksum)
 
-    let mut field_names: Vec<&str> = Vec::new();
+    let mut field_names = Vec::new();
     let mut values = Vec::new();
 
     for field in fields {
-        field_names.push(&field.identifier);
-        values.push(sql_parameter(&field.identifier));
+        let ident = field.ident.to_string();
+        values.push(sql_parameter(&ident));
+        field_names.push(ident);
     }
 
     format!(
@@ -173,16 +192,17 @@ fn replace_into_clause(table_name: &str, fields: &[MacroField]) -> String {
 fn insert_into_clause(table_name: &str, fields: &[MacroField]) -> String {
     // INSERT INTO game (path) VALUES (:path)
 
-    let mut field_names: Vec<&str> = Vec::new();
+    let mut field_names = Vec::new();
     let mut values = Vec::new();
 
     for field in fields {
-        if field.is_primary_key {
+        if field.is_index {
             continue;
         }
 
-        field_names.push(&field.identifier);
-        values.push(sql_parameter(&field.identifier));
+        let ident = field.ident.to_string();
+        values.push(sql_parameter(&ident));
+        field_names.push(ident);
     }
 
     format!(
@@ -200,10 +220,12 @@ fn update_clause(table_name: &str, fields: &[MacroField]) -> String {
     let mut conditions = Vec::new();
 
     for field in fields {
-        if field.is_primary_key {
-            conditions.push(sql_equals(&field.identifier));
+        let ident = field.ident.to_string();
+
+        if field.is_index {
+            conditions.push(sql_equals(&ident));
         } else {
-            updates.push(sql_equals(&field.identifier));
+            updates.push(sql_equals(&ident));
         }
     }
 
@@ -212,5 +234,30 @@ fn update_clause(table_name: &str, fields: &[MacroField]) -> String {
         table_name,
         updates.join(", "),
         conditions.join(", "),
+    )
+}
+
+fn params_fn(fields: &[MacroField]) -> TokenStream {
+    let mut fn_params = Vec::new();
+    let mut sql_params = Vec::new();
+
+    for field in fields {
+        if !field.is_index {
+            continue;
+        }
+
+        let ident = &field.ident;
+        let ty = &field.ty;
+        let sql_param = sql_parameter(&ident.to_string());
+
+        fn_params.push(quote!(#ident: &'a #ty));
+        sql_params.push(quote!((#sql_param, #ident as &dyn ::rusqlite::ToSql)));
+    }
+
+    // &[(":id", &id as &dyn ::rusqlite::ToSql)]
+    quote!(
+        pub fn params<'a>(#(#fn_params),*) -> Vec<(&'static str, &'a dyn ::rusqlite::ToSql)> {
+            vec![#(#sql_params),*]
+        }
     )
 }

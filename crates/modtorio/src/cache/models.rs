@@ -6,23 +6,16 @@ use crate::{
 use chrono::{DateTime, Utc};
 use derive::Model;
 
-pub trait Model {
-    fn select() -> &'static str;
-    fn replace_into() -> &'static str;
-    fn insert_into() -> &'static str;
-    fn update() -> &'static str;
-}
-
 #[derive(Debug, PartialEq, Model)]
 pub struct Game {
-    #[primary_key]
+    #[index]
     pub id: GameCacheId,
     pub path: String,
 }
 
 #[derive(Debug, PartialEq, Model)]
 pub struct FactorioMod {
-    #[primary_key]
+    #[index]
     pub name: String,
     pub author: String,
     pub contact: Option<String>,
@@ -36,9 +29,8 @@ pub struct FactorioMod {
 
 #[derive(Debug, PartialEq, Model)]
 pub struct GameMod {
-    #[primary_key]
+    #[index]
     pub game: GameCacheId,
-    #[primary_key]
     pub factorio_mod: String,
     pub mod_version: HumanVersion,
     pub mod_zip: String,
@@ -47,11 +39,10 @@ pub struct GameMod {
 
 #[derive(Debug, PartialEq, Model)]
 pub struct ModRelease {
-    #[primary_key]
+    #[index]
     pub factorio_mod: String,
     pub download_url: String,
     pub released_on: DateTime<Utc>,
-    #[primary_key]
     pub version: HumanVersion,
     pub sha1: String,
     pub factorio_version: HumanVersion,
@@ -59,11 +50,11 @@ pub struct ModRelease {
 
 #[derive(Debug, PartialEq, Model)]
 pub struct ReleaseDependency {
-    #[primary_key]
+    #[index]
     pub release_mod_name: String,
-    #[primary_key]
+    #[index]
     pub release_version: HumanVersion,
-    #[primary_key]
+    #[index]
     pub name: String,
     pub requirement: Requirement,
     pub version_req: Option<HumanVersionReq>,

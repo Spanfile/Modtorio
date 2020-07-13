@@ -165,7 +165,7 @@ impl Cache {
     pub async fn get_games(&self) -> anyhow::Result<Vec<Game>> {
         let conn = &self.conn;
         sql!(conn => {
-            let mut stmt = conn.prepare("SELECT * FROM game")?;
+            let mut stmt = conn.prepare(Game::select_all())?;
             let mut games = Vec::new();
 
             for game in stmt.query_map(NO_PARAMS, |row| {
@@ -190,7 +190,7 @@ impl Cache {
             let mut stmt = conn.prepare(GameMod::select())?;
             let mut mods = Vec::new();
 
-            for row in stmt.query_map_named(named_params! { ":game": game_cache_id }, |row| {
+            for row in stmt.query_map_named(&GameMod::params(&game_cache_id), |row| {
                 Ok(GameMod {
                     game: row.get(0)?,
                     factorio_mod: row.get(1)?,
