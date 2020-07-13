@@ -57,11 +57,10 @@ impl CacheBuilder {
             conn: Arc::new(Mutex::new(conn)),
         };
 
+        debug!("Cache database exists: {}", db_exists);
+
         let checksums_match = db_exists && checksum_matches_meta(&cache, &encoded_checksum).await?;
-        debug!(
-            "Cache database exists: {}. Schema checksums match: {}",
-            db_exists, checksums_match
-        );
+        debug!("Schema checksums match: {}", checksums_match);
 
         if !db_exists || !checksums_match {
             debug!("Applying database schema...");

@@ -163,7 +163,7 @@ fn replace_into_clause(table_name: &str, fields: &[MacroField]) -> String {
     }
 
     format!(
-        "REPLCE INTO {} ({}) VALUES ({})",
+        "REPLACE INTO {} ({}) VALUES ({})",
         table_name,
         field_names.join(", "),
         values.join(", "),
