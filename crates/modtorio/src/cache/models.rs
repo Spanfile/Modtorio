@@ -9,6 +9,7 @@ use derive::Model;
 #[derive(Debug, PartialEq, Model)]
 pub struct Game {
     #[index]
+    #[ignore_in_all_params]
     pub id: GameCacheId,
     pub path: String,
 }
@@ -54,7 +55,6 @@ pub struct ReleaseDependency {
     pub release_mod_name: String,
     #[index]
     pub release_version: HumanVersion,
-    #[index]
     pub name: String,
     pub requirement: Requirement,
     pub version_req: Option<HumanVersionReq>,

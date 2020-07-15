@@ -5,12 +5,14 @@ use heck::SnakeCase;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
 use syn::{
-    parse_macro_input, spanned::Spanned, Data, DeriveInput, Field, Fields, FieldsNamed, Ident,
-    Meta, Type,
+    parse_macro_input, spanned::Spanned, Attribute, Data, DeriveInput, Fields, FieldsNamed, Ident,
+    Lit, Meta, Type,
 };
 use thiserror::Error;
 
 const INDEX_ATTRIBUTE: &str = "index";
+const IGNORE_IN_ALL_PARAMS_ATTRIBUTE: &str = "ignore_in_all_params";
+const TABLE_NAME_ATTRIBUTE: &str = "table_name";
 
 #[derive(Error, Debug)]
 enum MacroError {
@@ -20,6 +22,8 @@ enum MacroError {
     NoNamedFields(Span),
     #[error("field has no identifier")]
     NoIdentOnField(Span),
+    #[error("expected string literal")]
+    ExpectedStringLiteral(Span),
     #[error(transparent)]
     SynError(#[from] syn::Error),
 }
@@ -27,11 +31,12 @@ enum MacroError {
 #[derive(Debug)]
 struct MacroField {
     is_index: bool,
+    ignore_in_all_params: bool,
     ident: Ident,
     ty: Type,
 }
 
-#[proc_macro_derive(Model, attributes(index))]
+#[proc_macro_derive(Model, attributes(index, ignore_in_all_params, table_name))]
 pub fn model(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
     let output = match run_macro(input) {
@@ -39,7 +44,8 @@ pub fn model(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
         Err(err) => match err {
             MacroError::NoNamedFields(span)
             | MacroError::NotAStruct(span)
-            | MacroError::NoIdentOnField(span) => {
+            | MacroError::NoIdentOnField(span)
+            | MacroError::ExpectedStringLiteral(span) => {
                 syn::Error::new(span, err.to_string()).to_compile_error()
             }
             MacroError::SynError(err) => err.to_compile_error(),
@@ -52,7 +58,12 @@ pub fn model(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 fn run_macro(input: DeriveInput) -> Result<TokenStream, MacroError> {
     let fields = get_fields(&input)?;
     let ident = &input.ident;
-    let table_name = ident.to_string().to_snake_case();
+    let table_name =
+        if let Some(table_name) = get_attribute_value(&input.attrs, TABLE_NAME_ATTRIBUTE)? {
+            table_name
+        } else {
+            ident.to_string().to_snake_case()
+        };
 
     let macro_fields = parse_fields(fields)?;
 
@@ -62,7 +73,8 @@ fn run_macro(input: DeriveInput) -> Result<TokenStream, MacroError> {
     let insert = insert_into_clause(&table_name, &macro_fields);
     let update = update_clause(&table_name, &macro_fields);
 
-    let params = params_fn(&macro_fields);
+    let params = params_fns(&macro_fields);
+    let from_row = from_row_impl(&ident, &macro_fields);
 
     Ok(quote!(
         impl #ident {
@@ -88,6 +100,8 @@ fn run_macro(input: DeriveInput) -> Result<TokenStream, MacroError> {
                 #update
             }
         }
+
+        #from_row
     ))
 }
 
@@ -112,16 +126,31 @@ fn sql_equals(ident: &str) -> String {
     format!("{} = {}", ident, sql_parameter(ident))
 }
 
-fn has_primary_key_attribute(field: &Field) -> bool {
-    for attr in &field.attrs {
+fn has_attribute(attrs: &[Attribute], attribute: &str) -> bool {
+    for attr in attrs.iter() {
         if let Ok(Meta::Path(path)) = attr.parse_meta() {
-            if path.is_ident(INDEX_ATTRIBUTE) {
+            if path.is_ident(attribute) {
                 return true;
             }
         }
     }
 
     false
+}
+
+fn get_attribute_value(attrs: &[Attribute], attribute: &str) -> Result<Option<String>, MacroError> {
+    for attr in attrs.iter() {
+        if let Ok(Meta::NameValue(name_value)) = attr.parse_meta() {
+            if name_value.path.is_ident(attribute) {
+                return match &name_value.lit {
+                    Lit::Str(lit_str) => Ok(Some(lit_str.value())),
+                    _ => Err(MacroError::ExpectedStringLiteral(attr.span())),
+                };
+            }
+        }
+    }
+
+    Ok(None)
 }
 
 fn parse_fields(fields: &FieldsNamed) -> Result<Vec<MacroField>, MacroError> {
@@ -135,7 +164,8 @@ fn parse_fields(fields: &FieldsNamed) -> Result<Vec<MacroField>, MacroError> {
         let ty = field.ty.clone();
 
         macro_fields.push(MacroField {
-            is_index: has_primary_key_attribute(field),
+            is_index: has_attribute(&field.attrs, INDEX_ATTRIBUTE),
+            ignore_in_all_params: has_attribute(&field.attrs, IGNORE_IN_ALL_PARAMS_ATTRIBUTE),
             ident,
             ty,
         });
@@ -237,7 +267,17 @@ fn update_clause(table_name: &str, fields: &[MacroField]) -> String {
     )
 }
 
-fn params_fn(fields: &[MacroField]) -> TokenStream {
+fn params_fns(fields: &[MacroField]) -> TokenStream {
+    let index_params = index_params_fn(fields);
+    let all_params = all_params_fn(fields);
+
+    quote!(
+        #index_params
+        #all_params
+    )
+}
+
+fn index_params_fn(fields: &[MacroField]) -> TokenStream {
     let mut fn_params = Vec::new();
     let mut sql_params = Vec::new();
 
@@ -251,13 +291,54 @@ fn params_fn(fields: &[MacroField]) -> TokenStream {
         let sql_param = sql_parameter(&ident.to_string());
 
         fn_params.push(quote!(#ident: &'a #ty));
-        sql_params.push(quote!((#sql_param, #ident as &dyn ::rusqlite::ToSql)));
+        sql_params.push(quote!((#sql_param, #ident)));
     }
 
-    // &[(":id", &id as &dyn ::rusqlite::ToSql)]
     quote!(
-        pub fn params<'a>(#(#fn_params),*) -> Vec<(&'static str, &'a dyn ::rusqlite::ToSql)> {
+        pub fn select_params<'a>(#(#fn_params),*) -> Vec<(&'static str, &'a dyn ::rusqlite::ToSql)> {
             vec![#(#sql_params),*]
+        }
+    )
+}
+
+fn all_params_fn(fields: &[MacroField]) -> TokenStream {
+    let mut sql_params = Vec::new();
+
+    for field in fields {
+        if field.ignore_in_all_params {
+            continue;
+        }
+
+        let ident = &field.ident;
+        let sql_param = sql_parameter(&ident.to_string());
+
+        sql_params.push(quote!((#sql_param, &self.#ident)));
+    }
+
+    quote!(
+        pub fn all_params<'a>(&'a self) -> Vec<(&'static str, &'a dyn ::rusqlite::ToSql)> {
+            vec![#(#sql_params),*]
+        }
+    )
+}
+
+fn from_row_impl(ident: &Ident, fields: &[MacroField]) -> TokenStream {
+    let mut field_setters = Vec::new();
+
+    for (index, field) in fields.iter().enumerate() {
+        let field_ident = &field.ident;
+        field_setters.push(
+            quote!(#field_ident: row.get(#index).expect("column conversion to field failed")),
+        );
+    }
+
+    quote!(
+        impl From<&::rusqlite::Row<'_>> for #ident {
+            fn from(row: &::rusqlite::Row) -> Self {
+                Self {
+                    #(#field_setters),*
+                }
+            }
         }
     )
 }

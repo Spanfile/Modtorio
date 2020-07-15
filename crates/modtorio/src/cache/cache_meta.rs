@@ -1,3 +1,4 @@
+use derive::Model;
 use rusqlite::{
     types::{self, FromSql},
     ToSql,
@@ -11,8 +12,10 @@ pub enum CacheMetaField {
     SchemaChecksum,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Model)]
+#[table_name = "_meta"]
 pub struct CacheMetaValue {
+    #[index]
     pub field: CacheMetaField,
     pub value: Option<String>,
 }

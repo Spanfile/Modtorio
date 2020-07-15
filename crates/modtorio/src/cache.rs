@@ -5,7 +5,7 @@ use crate::{ext::PathExt, factorio::GameCacheId, util, util::HumanVersion};
 pub use cache_meta::{CacheMetaField, CacheMetaValue};
 use log::*;
 use models::*;
-use rusqlite::{named_params, Connection, OptionalExtension, NO_PARAMS};
+use rusqlite::{Connection, OptionalExtension, NO_PARAMS};
 use std::{
     path::{Path, PathBuf},
     sync::{Arc, Mutex},
@@ -136,14 +136,11 @@ impl Cache {
     pub async fn get_meta(&self, field: CacheMetaField) -> anyhow::Result<Option<CacheMetaValue>> {
         let conn = &self.conn;
         sql!(conn => {
-            let mut stmt = conn.prepare("SELECT * FROM _meta WHERE field = :field LIMIT 1")?;
+            let mut stmt = conn.prepare(CacheMetaValue::select())?;
 
             Ok(stmt
-                .query_row_named(named_params! { ":field": field.to_string() }, |row| {
-                    Ok(CacheMetaValue {
-                        field: row.get(0)?,
-                        value: row.get(1)?,
-                    })
+                .query_row_named(&CacheMetaValue::select_params(&field), |row| {
+                    Ok(row.into())
                 })
                 .optional()?)
         })
@@ -153,11 +150,8 @@ impl Cache {
         let conn = &self.conn;
         sql!(conn => {
             let mut stmt =
-                conn.prepare("REPLACE INTO _meta (field, value) VALUES (:field, :value)")?;
-            stmt.execute_named(&[
-                (":field", &value.field as &dyn ::rusqlite::ToSql),
-                (":value", &value.value as &dyn ::rusqlite::ToSql),
-            ])?;
+                conn.prepare(CacheMetaValue::replace_into())?;
+            stmt.execute_named(&value.all_params())?;
             Ok(())
         })
     }
@@ -169,10 +163,7 @@ impl Cache {
             let mut games = Vec::new();
 
             for game in stmt.query_map(NO_PARAMS, |row| {
-                Ok(Game {
-                    id: row.get(0)?,
-                    path: row.get(1)?,
-                })
+                Ok(row.into())
             })? {
                 games.push(game?);
             }
@@ -190,14 +181,8 @@ impl Cache {
             let mut stmt = conn.prepare(GameMod::select())?;
             let mut mods = Vec::new();
 
-            for row in stmt.query_map_named(&GameMod::params(&game_cache_id), |row| {
-                Ok(GameMod {
-                    game: row.get(0)?,
-                    factorio_mod: row.get(1)?,
-                    mod_version: row.get(2)?,
-                    mod_zip: row.get(3)?,
-                    zip_checksum: row.get(4)?,
-                })
+            for row in stmt.query_map_named(&GameMod::select_params(&game_cache_id), |row| {
+                Ok(row.into())
             })? {
                 mods.push(row?);
             }
@@ -212,13 +197,7 @@ impl Cache {
             let mut stmt = conn.prepare(GameMod::replace_into())?;
 
             for m in &mods {
-                stmt.execute_named(named_params! {
-                    ":game": m.game,
-                    ":factorio_mod": m.factorio_mod,
-                    ":mod_version": m.mod_version,
-                    ":mod_zip": m.mod_zip,
-                    ":zip_checksum": m.zip_checksum
-                })?;
+                stmt.execute_named(&m.all_params())?;
             }
 
             Ok(())
@@ -230,7 +209,7 @@ impl Cache {
         sql!(conn => {
             let mut stmt = conn.prepare(Game::insert_into())?;
 
-            stmt.execute_named(named_params! { ":path": new_game.path })?;
+            stmt.execute_named(&new_game.all_params())?;
             let id = conn.last_insert_rowid();
 
             Ok(id)
@@ -242,7 +221,7 @@ impl Cache {
         sql!(conn => {
             conn.execute_named(
                 Game::update(),
-                named_params! { ":path": game.path, ":id": game.id },
+                &game.all_params(),
             )?;
 
             Ok(())
@@ -258,18 +237,8 @@ impl Cache {
             let mut stmt = conn.prepare(FactorioMod::select())?;
 
             Ok(stmt
-                .query_row_named(named_params! {":name": factorio_mod}, |row| {
-                    Ok(FactorioMod {
-                        name: row.get(0)?,
-                        author: row.get(1)?,
-                        contact: row.get(2)?,
-                        homepage: row.get(3)?,
-                        title: row.get(4)?,
-                        summary: row.get(5)?,
-                        description: row.get(6)?,
-                        changelog: row.get(7)?,
-                        last_updated: row.get(8)?,
-                    })
+                .query_row_named(&FactorioMod::select_params(&factorio_mod), |row| {
+                    Ok(row.into())
                 })
                 .optional()?)
         })
@@ -280,17 +249,7 @@ impl Cache {
         sql!(conn => {
             let mut stmt = conn.prepare(FactorioMod::replace_into())?;
 
-            stmt.execute_named(named_params! {
-                ":name": factorio_mod.name,
-                ":author": factorio_mod.author,
-                ":contact": factorio_mod.contact,
-                ":homepage": factorio_mod.homepage,
-                ":title": factorio_mod.title,
-                ":summary": factorio_mod.summary,
-                ":description": factorio_mod.description,
-                ":changelog": factorio_mod.changelog,
-                ":last_updated": factorio_mod.last_updated,
-            })?;
+            stmt.execute_named(&factorio_mod.all_params())?;
 
             Ok(())
         })
@@ -304,15 +263,8 @@ impl Cache {
             let mut mods = Vec::new();
 
             for m in
-                stmt.query_map_named(named_params! { ":factorio_mod": factorio_mod }, |row| {
-                    Ok(ModRelease {
-                        factorio_mod: row.get(0)?,
-                        version: row.get(1)?,
-                        download_url: row.get(2)?,
-                        released_on: row.get(3)?,
-                        sha1: row.get(4)?,
-                        factorio_version: row.get(5)?,
-                    })
+                stmt.query_map_named(&FactorioMod::select_params(&factorio_mod), |row| {
+                    Ok(row.into())
                 })?
             {
                 mods.push(m?);
@@ -326,15 +278,7 @@ impl Cache {
         let conn = &self.conn;
         sql!(conn => {
             let mut stmt = conn.prepare(ModRelease::replace_into())?;
-
-            stmt.execute_named(named_params! {
-                ":factorio_mod": release.factorio_mod,
-                ":download_url": release.download_url,
-                ":released_on": release.released_on,
-                ":version": release.version,
-                ":sha1": release.sha1,
-                ":factorio_version": release.factorio_version,
-            })?;
+            stmt.execute_named(&release.all_params())?;
 
             Ok(())
         })
@@ -351,14 +295,8 @@ impl Cache {
             let mut dependencies = Vec::new();
 
             for dep in
-                stmt.query_map_named(named_params! { ":release_mod_name": release_mod_name, ":release_version": release_version }, |row| {
-                    Ok(ReleaseDependency {
-                        release_mod_name: row.get(0)?,
-                        release_version: row.get(1)?,
-                        name: row.get(2)?,
-                        requirement: row.get(3)?,
-                        version_req: row.get(4)?,
-                    })
+                stmt.query_map_named(&ReleaseDependency::select_params(&release_mod_name, &release_version), |row| {
+                    Ok(row.into())
                 })?
             {
                 dependencies.push(dep?);
@@ -377,13 +315,7 @@ impl Cache {
             let mut stmt = conn.prepare(ReleaseDependency::replace_into())?;
 
             for rel in dependencies {
-                stmt.execute_named(named_params! {
-                    ":release_mod_name": rel.release_mod_name,
-                    ":release_version": rel.release_version,
-                    ":name": rel.name,
-                    ":requirement": rel.requirement,
-                    ":version_req": rel.version_req,
-                })?;
+                stmt.execute_named(&rel.all_params())?;
             }
 
             Ok(())
