@@ -55,6 +55,14 @@ impl<'a> ModsBuilder {
             {
                 Ok(created_mod) => created_mod,
                 Err(e) => {
+                    if let Some(sql_error) = e.downcast_ref::<rusqlite::Error>() {
+                        error!(
+                            "SQL error while loading cached mod '{}' for game ID {}: {}",
+                            game_mod.factorio_mod, game_cache_id, sql_error
+                        );
+                        panic!();
+                    }
+
                     error!(
                         "Cached mod '{}' for game ID {} failed to load: {}",
                         game_mod.factorio_mod, game_cache_id, e
