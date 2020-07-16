@@ -39,7 +39,6 @@ impl Mods {
         for fact_mod in self.mods.values() {
             let mod_name = fact_mod.name().await;
             let mod_display = fact_mod.display().await;
-            trace!("Updating cache for '{}'", mod_name);
 
             match fact_mod.update_cache().await {
                 Ok(()) => debug!("Updated Factorio mod cache for {}", mod_name),
@@ -130,7 +129,7 @@ impl Mods {
         };
 
         for update in &updates {
-            let _ = self.add_or_update_in_place(update, None).await?;
+            self.add_or_update_in_place(update, None).await?;
         }
 
         Ok(())
@@ -222,7 +221,8 @@ impl Mods {
                     )
                     .await?,
                 );
-                // TODO: DOWNLOAD THE MOD?????
+
+                new_mod.download(version, &self.directory).await?;
                 Ok(entry.insert(new_mod))
             }
         }

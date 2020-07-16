@@ -343,18 +343,18 @@ impl Mod {
             .into());
         }
 
-        debug!("populating info");
-
         let old_version = self.own_version().await.ok();
-        let old_archive = self.zip_path().await?.display().to_string();
+        let old_archive = self.zip_path().await.ok();
         self.populate_info_from_zip(path).await?;
 
-        if let Some(old_version) = old_version {
+        if let (Some(old_version), Some(old_archive)) = (old_version, old_archive) {
             if old_version == self.own_version().await? {
                 debug!("'{}' unchaged after download", self.name().await);
                 Ok(DownloadResult::Unchanged)
             } else {
                 debug!("'{}' changed from ver. {}", self.name().await, old_version);
+
+                let old_archive = old_archive.display().to_string();
                 Ok(DownloadResult::Replaced {
                     old_version,
                     old_archive,

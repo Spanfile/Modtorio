@@ -79,7 +79,7 @@ async fn main() -> anyhow::Result<()> {
     //     .await?;
 
     for factorio in games.iter_mut() {
-        // factorio.mods.add_from_portal("Aircract", None).await?;
+        // factorio.mods.add_from_portal("FARL", None).await?;
 
         // factorio.mods.update().await?;
         // factorio.mods.ensure_dependencies().await?;
