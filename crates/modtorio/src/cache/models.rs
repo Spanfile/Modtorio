@@ -42,9 +42,9 @@ pub struct GameMod {
 pub struct ModRelease {
     #[index]
     pub factorio_mod: String,
+    pub version: HumanVersion,
     pub download_url: String,
     pub released_on: DateTime<Utc>,
-    pub version: HumanVersion,
     pub sha1: String,
     pub factorio_version: HumanVersion,
 }

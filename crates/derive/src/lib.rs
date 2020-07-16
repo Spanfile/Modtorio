@@ -327,9 +327,13 @@ fn from_row_impl(ident: &Ident, fields: &[MacroField]) -> TokenStream {
 
     for (index, field) in fields.iter().enumerate() {
         let field_ident = &field.ident;
-        field_setters.push(
-            quote!(#field_ident: row.get(#index).expect("column conversion to field failed")),
+        let error_message = format!(
+            "column conversion to {}.{} failed",
+            ident.to_string(),
+            field_ident.to_string()
         );
+
+        field_setters.push(quote!(#field_ident: row.get(#index).expect(#error_message)));
     }
 
     quote!(
