@@ -258,12 +258,11 @@ impl Cache {
     pub async fn get_mod_releases(&self, factorio_mod: String) -> anyhow::Result<Vec<ModRelease>> {
         let conn = &self.conn;
         sql!(conn => {
-            let mut stmt =
-                conn.prepare(ModRelease::select())?;
+            let mut stmt = conn.prepare(ModRelease::select())?;
             let mut mods = Vec::new();
 
             for m in
-                stmt.query_map_named(&FactorioMod::select_params(&factorio_mod), |row| {
+                stmt.query_map_named(&ModRelease::select_params(&factorio_mod), |row| {
                     Ok(row.into())
                 })?
             {
