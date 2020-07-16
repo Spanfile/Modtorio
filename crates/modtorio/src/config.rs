@@ -51,7 +51,7 @@ impl Config {
             .from_env::<Config>()
             .with_context(|| {
                 format!(
-                    "Failed to load Config from environment variables.\nConfig env:\n{}",
+                    "Failed to load config from environment variables:\n{}",
                     util::dump_env(APP_PREFIX)
                 )
             })?)
@@ -65,4 +65,57 @@ impl Config {
 
 fn default_cache_expiry() -> u64 {
     3600
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+
+    const MODTORIO_LOG_LEVEL: &str = "MODTORIO_LOG_LEVEL";
+    const MODTORIO_CACHE_EXPIRY: &str = "MODTORIO_CACHE_EXPIRY";
+    const MODTORIO_PORTAL_USERNAME: &str = "MODTORIO_PORTAL_USERNAME";
+    const MODTORIO_PORTAL_TOKEN: &str = "MODTORIO_PORTAL_TOKEN";
+
+    // HEY YOU RUNNING THESES TESTS WHO GOT HERE BECAUSE THESE SEEM TO FAIL RANDOMLY!
+    // don't worry, the randomness is caused by how cargo handles tests and environment variables.
+    // each test is run in parallel by default, and they all share the same globally mutable set of
+    // environment variables. makes sense yeah, it'd be fun if they had their own sets but whatcha
+    // gonna do. so to fix the tests failing, run 'em in series on a single thread.
+    // cargo test -- --test-threads=1
+
+    #[test]
+    fn config_from_env() {
+        env::set_var(MODTORIO_LOG_LEVEL, "trace");
+        env::set_var(MODTORIO_CACHE_EXPIRY, "1");
+        env::set_var(MODTORIO_PORTAL_USERNAME, "username");
+        env::set_var(MODTORIO_PORTAL_TOKEN, "token");
+
+        println!("{:?}", util::dump_env_lines(APP_PREFIX));
+        let config = Config::from_env().unwrap();
+        println!("{:?}", config);
+
+        assert_eq!(config.log.level, LogLevel::Trace);
+        assert_eq!(config.cache_expiry, 1);
+        assert_eq!(config.portal.username, "username");
+        assert_eq!(config.portal.token, "token");
+    }
+
+    #[test]
+    fn default_config() {
+        // expliclitly unset variables we're expecting aren't set to make sure any values from other
+        // tests aren't carried over
+        env::remove_var(MODTORIO_LOG_LEVEL);
+        env::remove_var(MODTORIO_CACHE_EXPIRY);
+
+        env::set_var(MODTORIO_PORTAL_USERNAME, "value not needed in test");
+        env::set_var(MODTORIO_PORTAL_TOKEN, "value not needed in test");
+
+        println!("{:?}", util::dump_env_lines(APP_PREFIX));
+        let config = Config::from_env().unwrap();
+        println!("{:?}", config);
+
+        assert_eq!(config.cache_expiry, default_cache_expiry());
+        assert_eq!(config.log.level, LogLevel::default());
+    }
 }

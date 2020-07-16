@@ -1,7 +1,7 @@
 use log::LevelFilter;
 use serde::Deserialize;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Eq, PartialEq)]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
     Trace,
