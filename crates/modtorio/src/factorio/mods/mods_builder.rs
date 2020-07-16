@@ -47,6 +47,7 @@ impl<'a> ModsBuilder {
         for game_mod in mods {
             let created_mod = match Mod::from_cache(
                 &game_mod,
+                &self.directory,
                 Arc::clone(&config),
                 Arc::clone(&portal),
                 Arc::clone(&cache),
@@ -77,12 +78,14 @@ impl<'a> ModsBuilder {
             "{} mods loaded from cache, checking for non-cached zips...",
             created_mods.len()
         );
+        trace!("Mod zips: {:?}", mod_zips);
 
         let zips = self.directory.join(ZIP_GLOB);
         for entry in util::glob(&zips)? {
-            trace!("Checking if {} is loaded...", entry.display());
+            let entry_file_name = entry.get_file_name()?;
+            trace!("Checking if {} is loaded...", entry_file_name);
 
-            if !mod_zips.contains(entry.get_str()?) {
+            if !mod_zips.contains(&entry_file_name) {
                 warn!(
                     "Found non-cached mod from filesystem: {}, loading from zip...",
                     entry.display()

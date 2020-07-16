@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS "game_mod" (
 	"game"	INTEGER NOT NULL,
 	"factorio_mod"	TEXT NOT NULL,
 	"mod_version"	TEXT NOT NULL,
-	"mod_zip"	TEXT UNIQUE NOT NULL,
+	"mod_zip"	TEXT NOT NULL,
 	"zip_checksum"	TEXT NOT NULL,
 	PRIMARY KEY("game","factorio_mod"),
 	FOREIGN KEY("factorio_mod") REFERENCES "factorio_mod"("name"),

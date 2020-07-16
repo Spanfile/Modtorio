@@ -4,6 +4,7 @@ use super::GameCacheId;
 use crate::{
     cache::models,
     error::ModError,
+    ext::PathExt,
     mod_common::{DownloadResult, Mod, Requirement},
     util::HumanVersion,
     Cache, Config, ModPortal,
@@ -52,7 +53,7 @@ impl Mods {
 
             let factorio_mod = mod_name.clone();
             let mod_version = fact_mod.own_version().await?;
-            let mod_zip = fact_mod.zip_path().await?.display().to_string();
+            let mod_zip = fact_mod.zip_path().await?.get_file_name()?;
             let zip_checksum = fact_mod.get_zip_checksum().await?;
 
             let cache_game_mod = models::GameMod {

@@ -72,8 +72,11 @@ where
     Ok(result)
 }
 
-async fn verify_zip(cached_mod: &models::GameMod) -> anyhow::Result<()> {
-    let zip_path = PathBuf::from(&cached_mod.mod_zip);
+async fn verify_zip<P>(game_mod: &models::GameMod, mods_root_path: P) -> anyhow::Result<()>
+where
+    P: AsRef<Path>,
+{
+    let zip_path = mods_root_path.as_ref().join(&game_mod.mod_zip);
     if !zip_path.exists() {
         return Err(ModError::MissingZip(zip_path).into());
     }
@@ -81,13 +84,13 @@ async fn verify_zip(cached_mod: &models::GameMod) -> anyhow::Result<()> {
     trace!(
         "Verifying mod zip ({}) checksum (expecting {})...",
         zip_path.display(),
-        cached_mod.zip_checksum
+        game_mod.zip_checksum
     );
     let existing_zip_checksum = calculate_zip_checksum(CACHE_ZIP_CHECKSUM_ALGO, &zip_path).await?;
 
-    if existing_zip_checksum != cached_mod.zip_checksum {
+    if existing_zip_checksum != game_mod.zip_checksum {
         return Err(ModError::ZipChecksumMismatch {
-            zip_checksum: cached_mod.zip_checksum.clone(),
+            zip_checksum: game_mod.zip_checksum.clone(),
             expected: existing_zip_checksum,
         }
         .into());
@@ -96,12 +99,16 @@ async fn verify_zip(cached_mod: &models::GameMod) -> anyhow::Result<()> {
 }
 
 impl Mod {
-    pub async fn from_cache(
+    pub async fn from_cache<P>(
         game_mod: &models::GameMod,
+        mods_root_path: P,
         config: Arc<Config>,
         portal: Arc<ModPortal>,
         cache: Arc<Cache>,
-    ) -> anyhow::Result<Mod> {
+    ) -> anyhow::Result<Mod>
+    where
+        P: AsRef<Path>,
+    {
         debug!("Creating mod from cached: {:?}", game_mod);
         let factorio_mod = cache
             .get_factorio_mod(game_mod.factorio_mod.clone())
@@ -114,14 +121,16 @@ impl Mod {
             "Verifying mod '{}' zip ({}) against cache...",
             game_mod.factorio_mod, game_mod.mod_zip
         );
-        verify_zip(&game_mod).await?;
+
+        verify_zip(&game_mod, &mods_root_path).await?;
+        let zip_path = PathBuf::from(&game_mod.mod_zip);
 
         Ok(Self {
             info,
             config,
             portal,
             cache,
-            zip_path: Arc::new(Mutex::new(Some(PathBuf::from(game_mod.mod_zip.clone())))),
+            zip_path: Arc::new(Mutex::new(Some(zip_path))),
             zip_checksum: Arc::new(Mutex::new(Some(game_mod.zip_checksum.clone()))),
         })
     }
