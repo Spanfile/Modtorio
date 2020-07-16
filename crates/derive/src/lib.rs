@@ -1,13 +1,13 @@
 #![feature(proc_macro_diagnostic)]
 
+mod helpers;
+
 extern crate proc_macro;
 use heck::SnakeCase;
+use helpers::*;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::{
-    parse_macro_input, spanned::Spanned, Attribute, Data, DeriveInput, Fields, FieldsNamed, Ident,
-    Lit, Meta, Type,
-};
+use syn::{parse_macro_input, spanned::Spanned, DeriveInput, FieldsNamed, Ident, Type};
 use thiserror::Error;
 
 const INDEX_ATTRIBUTE: &str = "index";
@@ -103,54 +103,6 @@ fn run_macro(input: DeriveInput) -> Result<TokenStream, MacroError> {
 
         #from_row
     ))
-}
-
-fn get_fields(input: &DeriveInput) -> Result<&FieldsNamed, MacroError> {
-    let data_struct = if let Data::Struct(data_struct) = &input.data {
-        data_struct
-    } else {
-        return Err(MacroError::NotAStruct(input.span()));
-    };
-
-    match &data_struct.fields {
-        Fields::Named(fields) => Ok(fields),
-        _ => Err(MacroError::NoNamedFields(input.span())),
-    }
-}
-
-fn sql_parameter(ident: &str) -> String {
-    format!(":{}", ident)
-}
-
-fn sql_equals(ident: &str) -> String {
-    format!("{} = {}", ident, sql_parameter(ident))
-}
-
-fn has_attribute(attrs: &[Attribute], attribute: &str) -> bool {
-    for attr in attrs.iter() {
-        if let Ok(Meta::Path(path)) = attr.parse_meta() {
-            if path.is_ident(attribute) {
-                return true;
-            }
-        }
-    }
-
-    false
-}
-
-fn get_attribute_value(attrs: &[Attribute], attribute: &str) -> Result<Option<String>, MacroError> {
-    for attr in attrs.iter() {
-        if let Ok(Meta::NameValue(name_value)) = attr.parse_meta() {
-            if name_value.path.is_ident(attribute) {
-                return match &name_value.lit {
-                    Lit::Str(lit_str) => Ok(Some(lit_str.value())),
-                    _ => Err(MacroError::ExpectedStringLiteral(attr.span())),
-                };
-            }
-        }
-    }
-
-    Ok(None)
 }
 
 fn parse_fields(fields: &FieldsNamed) -> Result<Vec<MacroField>, MacroError> {
@@ -268,7 +220,7 @@ fn update_clause(table_name: &str, fields: &[MacroField]) -> String {
 }
 
 fn params_fns(fields: &[MacroField]) -> TokenStream {
-    let index_params = index_params_fn(fields);
+    let index_params = select_params_fn(fields);
     let all_params = all_params_fn(fields);
 
     quote!(
@@ -277,7 +229,7 @@ fn params_fns(fields: &[MacroField]) -> TokenStream {
     )
 }
 
-fn index_params_fn(fields: &[MacroField]) -> TokenStream {
+fn select_params_fn(fields: &[MacroField]) -> TokenStream {
     let mut fn_params = Vec::new();
     let mut sql_params = Vec::new();
 
@@ -295,6 +247,7 @@ fn index_params_fn(fields: &[MacroField]) -> TokenStream {
     }
 
     quote!(
+        #[allow(clippy::ptr_arg)]
         pub fn select_params<'a>(#(#fn_params),*) -> Vec<(&'static str, &'a dyn ::rusqlite::ToSql)> {
             vec![#(#sql_params),*]
         }

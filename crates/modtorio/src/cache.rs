@@ -149,9 +149,7 @@ impl Cache {
     pub async fn set_meta(&self, value: CacheMetaValue) -> anyhow::Result<()> {
         let conn = &self.conn;
         sql!(conn => {
-            let mut stmt =
-                conn.prepare(CacheMetaValue::replace_into())?;
-            stmt.execute_named(&value.all_params())?;
+            conn.execute_named(CacheMetaValue::replace_into(), &value.all_params())?;
             Ok(())
         })
     }
@@ -207,9 +205,7 @@ impl Cache {
     pub async fn insert_game(&self, new_game: Game) -> anyhow::Result<i64> {
         let conn = &self.conn;
         sql!(conn => {
-            let mut stmt = conn.prepare(Game::insert_into())?;
-
-            stmt.execute_named(&new_game.all_params())?;
+            conn.execute_named(Game::insert_into(), &new_game.all_params())?;
             let id = conn.last_insert_rowid();
 
             Ok(id)
@@ -247,10 +243,7 @@ impl Cache {
     pub async fn set_factorio_mod(&self, factorio_mod: models::FactorioMod) -> anyhow::Result<()> {
         let conn = &self.conn;
         sql!(conn => {
-            let mut stmt = conn.prepare(FactorioMod::replace_into())?;
-
-            stmt.execute_named(&factorio_mod.all_params())?;
-
+            conn.execute_named(FactorioMod::replace_into(), &factorio_mod.all_params())?;
             Ok(())
         })
     }
@@ -276,9 +269,7 @@ impl Cache {
     pub async fn set_mod_release(&self, release: ModRelease) -> anyhow::Result<()> {
         let conn = &self.conn;
         sql!(conn => {
-            let mut stmt = conn.prepare(ModRelease::replace_into())?;
-            stmt.execute_named(&release.all_params())?;
-
+            conn.execute_named(ModRelease::replace_into(), &release.all_params())?;
             Ok(())
         })
     }
