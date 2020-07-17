@@ -36,6 +36,37 @@ struct MacroField {
     ty: Type,
 }
 
+/// Implements functions to build SQL queries and parameters based on a given model struct.
+/// The implemented functions are:
+///  * `select()` returns an SQL query string that selects rows based on the marked index (or
+///    indices)
+///  * `select_all()` returns an SQL query string that selects all rows
+///  * `replace_into()` returns an SQL query string that calls REPLACE INTO with a single complete
+///    model struct
+///  * `insert_into()` returns an SQL query string that calls INSERT INTO with a single complete
+///    model struct
+///  * `update()` returns an SQL query string that updates existing rows with given values
+///  * `select_params(field, ...)` returns a collection of parameters suitable for direct use with
+///    rusqlite. The function's parameters are values for the fields tagged as `index` with the
+///    corresponding attribute (see below).
+///  * `all_params(&self)` returns a collection of parameters suitable for direct use with rusqlite
+///    from a certain model struct object. Commonly used together with `replace_into()` and
+///    `insert_into()`. Certain fields can be ignored with the `ignore_in_all_params` attribute (see
+///    below).
+///
+/// By default, the derive macro will derive the database table name from model struct's
+/// name by converting it into snake case. This can be overridden with the `table_name` attribute
+/// (see below).
+///
+/// The following attributes can additionally be used on either the model struct or its fields:
+///  * `#[table_name = "..."]` used on the model struct. Specifies the table name to use instead of
+///    the automatically derived default.
+///  * `#[index]` specify a certain field to be used as an index when selecting and updating rows.
+///    Does not necessarily have to correspond to primary keys on the table. Can be set on multiple
+///    fields to use them all together in queries.
+///  * `#[ignore_in_all_params]` used together with the `index` attribute to ignore the field when
+///    calling `all_params()` on a struct object. Commonly used to ignore an autoincrementing
+///    primary key.
 #[proc_macro_derive(Model, attributes(index, ignore_in_all_params, table_name))]
 pub fn model(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let input = parse_macro_input!(item as DeriveInput);
