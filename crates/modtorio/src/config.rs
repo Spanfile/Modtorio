@@ -70,22 +70,29 @@ fn default_cache_expiry() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::env;
+    use lazy_static::lazy_static;
+    use std::{env, sync::Mutex};
+
+    // SO WHAT'S THIS THEN? when running tests with cargo, they all share the same set of
+    // environment variables (cargo's) and cargo runs them all in parallel. this means the tests
+    // *will* interfere with each other's environment variables. it'd be cool if each had their own
+    // set but whatcha gonna do. SO TO FIX IT, you could just run all the test in series on a single
+    // thread (cargo test -- --test-threads=1) but that fucks with other tests, slowing things down.
+    // instead, all these tests lock this one dummy mutex when starting, and release it when done,
+    // so these tests won't ever run in parallel but all other tests will.
+    lazy_static! {
+        static ref SERIAL_MUTEX: Mutex<()> = Mutex::new(());
+    }
 
     const MODTORIO_LOG_LEVEL: &str = "MODTORIO_LOG_LEVEL";
     const MODTORIO_CACHE_EXPIRY: &str = "MODTORIO_CACHE_EXPIRY";
     const MODTORIO_PORTAL_USERNAME: &str = "MODTORIO_PORTAL_USERNAME";
     const MODTORIO_PORTAL_TOKEN: &str = "MODTORIO_PORTAL_TOKEN";
 
-    // HEY YOU RUNNING THESES TESTS WHO GOT HERE BECAUSE THESE SEEM TO FAIL RANDOMLY!
-    // don't worry, the randomness is caused by how cargo handles tests and environment variables.
-    // each test is run in parallel by default, and they all share the same globally mutable set of
-    // environment variables. makes sense yeah, it'd be fun if they had their own sets but whatcha
-    // gonna do. so to fix the tests failing, run 'em in series on a single thread.
-    // cargo test -- --test-threads=1
-
     #[test]
     fn config_from_env() {
+        let _s = SERIAL_MUTEX.lock().expect("failed to lock serial mutex");
+
         env::set_var(MODTORIO_LOG_LEVEL, "trace");
         env::set_var(MODTORIO_CACHE_EXPIRY, "1");
         env::set_var(MODTORIO_PORTAL_USERNAME, "username");
@@ -103,6 +110,8 @@ mod tests {
 
     #[test]
     fn default_config() {
+        let _s = SERIAL_MUTEX.lock().expect("failed to lock serial mutex");
+
         // expliclitly unset variables we're expecting aren't set to make sure any values from other
         // tests aren't carried over
         env::remove_var(MODTORIO_LOG_LEVEL);
