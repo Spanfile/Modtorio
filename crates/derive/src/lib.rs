@@ -277,6 +277,11 @@ fn select_params_fn(fields: &[MacroField]) -> TokenStream {
         sql_params.push(quote!((#sql_param, #ident)));
     }
 
+    // ptr_arg lint is allowed to allow passing &String (otherwise clippy would complain about
+    // passing &str instead). the problem with that is because of the return type, the reference is
+    // converted into a dyn ::rusqlite::ToSql trait object, which in case of &str would mean trying
+    // to convert the unsized str object into the trait object (not gonna happen). I guess it'd be
+    // possible to figure out a way to instead handle the special &str case but this is easier so...
     quote!(
         #[allow(clippy::ptr_arg)]
         pub fn select_params<'a>(#(#fn_params),*) -> Vec<(&'static str, &'a dyn ::rusqlite::ToSql)> {
