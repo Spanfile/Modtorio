@@ -10,8 +10,16 @@ use std::{
     sync::Arc,
 };
 
+/// A glob string used to find zip archives (.zip extension).
 const ZIP_GLOB: &str = "*.zip";
 
+/// A builder used to build a game's mod collection from the game's mod directory.
+///
+/// If the given game is cached, the mods will be built from the cache and verified against their
+/// corresponding mod zip archives. If a cached mod isn't found in the mod directory, it will be
+/// ignored. Any mods in the mod directory that weren't cached (i.e. mods added externally) will be
+/// loaded afterwards.
+// TODO: doctests
 pub struct ModsBuilder {
     directory: PathBuf,
     game_cache_id: Option<GameCacheId>,

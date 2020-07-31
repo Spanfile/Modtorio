@@ -1,9 +1,20 @@
 use crate::error::PathError;
 use std::path::Path;
 
+/// Collection of common functions used with paths and path-like objects.
 pub trait PathExt {
+    /// Extracts the file name from the path and returns it as a `String`. If the path is a
+    /// directory, returns the directory name. Returns an error on the following conditions:
+    ///  * the path doesn't have a file name
+    ///  * the path contains invalid Unicode
     fn get_file_name(&self) -> anyhow::Result<String>;
+    /// Extracts the file stem (non-extension) portion from the path and returns it as a `String`.
+    /// Returns an error on the following conditions:
+    ///  * the path doesn't have a file name (`PathError::NoFilename`)
+    ///  * the path contains invalid Unicode (`PathError::InvalidUnicode`))
     fn get_file_stem(&self) -> anyhow::Result<String>;
+    /// Borrows the path as an `&str`. Returns `PathError::InvalidUnicode` error if the path
+    /// contains invalid Unicode
     fn get_str(&self) -> anyhow::Result<&str>;
 }
 

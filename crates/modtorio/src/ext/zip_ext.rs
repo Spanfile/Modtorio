@@ -6,7 +6,10 @@ use std::{
 };
 use zip::{read::ZipFile, ZipArchive};
 
+/// Collection of common functions used with zip archives
 pub trait ZipExt {
+    /// Find a file with a certain file name from anywhere in the zip archive. Returns
+    /// `ZipError::NoFile` if a file with the given file name isn't found.
     fn find_file(&mut self, name: &str) -> anyhow::Result<ZipFile<'_>>;
 }
 
