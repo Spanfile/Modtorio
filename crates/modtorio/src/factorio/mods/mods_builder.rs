@@ -1,3 +1,6 @@
+//! Provides the [ModsBuilder](ModsBuilder) which is used to build a [Mods](super::Mods) object from
+//! a game's mod root directory, optionally loading them from the program cache.
+
 use super::Mods;
 use crate::{
     cache::Cache, config::Config, error::ModError, ext::PathExt, factorio::GameCacheId,

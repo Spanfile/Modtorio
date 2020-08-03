@@ -1,10 +1,17 @@
+//! Provides the [Information](Information) struct which contains a server's settings related to its
+//! public display.
+
 use super::{GameFormatConversion, ServerSettingsGameFormat};
 use serde::{Deserialize, Serialize};
 
+/// Contains a server's settings related to its public display.
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct Information {
+    /// Corresponds to the `name` field. Defaults to `A Factorio server`.
     pub name: String,
+    /// Corresponds to the `description` field. Defaults to `A Factorio server`.
     pub description: String,
+    /// Corresponds to the `tags` field. Defaults to an empty vector.
     pub tags: Vec<String>,
 }
 

@@ -27,7 +27,7 @@ async fn main() -> anyhow::Result<()> {
     log::setup_logging(&config)?;
     config.debug_values();
 
-    let cache = Arc::new(cache::CacheBuilder::new().build().await?);
+    let cache = Arc::new(cache::Builder::new().build().await?);
     let portal = Arc::new(ModPortal::new(&config)?);
 
     // let factorio = Arc::new(
@@ -78,7 +78,7 @@ async fn main() -> anyhow::Result<()> {
     //     .add_from_portal("angelsindustries", None)
     //     .await?;
 
-    for factorio in games.iter_mut() {
+    for factorio in &mut games {
         // factorio.mods.add_from_portal("FARL", None).await?;
 
         // factorio.mods.update().await?;

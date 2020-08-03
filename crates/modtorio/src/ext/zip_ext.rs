@@ -1,3 +1,6 @@
+//! Provides the [`ZipExt`](ZipExt) trait which provides several commonly used functions on zip
+//! archives
+
 use super::PathExt;
 use crate::error::ZipError;
 use std::{

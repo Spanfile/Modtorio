@@ -3,10 +3,10 @@
 pub mod checksum;
 mod human_version;
 
-use std::path::{Path, PathBuf};
-
 use crate::ext::PathExt;
 pub use human_version::{Comparator, HumanVersion, HumanVersionReq};
+use serde::{Deserialize, Serialize};
+use std::path::{Path, PathBuf};
 
 /// Returns all environment variables of the current process with a given prefix as a string with
 /// each variable on its own line.
@@ -60,4 +60,41 @@ where
     }
 
     Ok(matches)
+}
+
+/// Represents a range of 64-bit unsigned integers.
+#[derive(Deserialize, Serialize, Debug, PartialEq)]
+pub struct Range {
+    pub min: u64,
+    pub max: u64,
+}
+
+/// Represents a limit that is either unbounded ([Unlimited](#variant.Unlimited)) or bounded by a
+/// 64-bit unsigned integer ([Limited](#variant.Limited)).
+///
+/// Conversion to and from `u64` is provided, where 0 is seen as [Unlimited](#variant.Unlimited)
+/// and every other value as [Limited](#variant.Limited).
+#[derive(Deserialize, Serialize, Debug, PartialEq, Clone, Copy)]
+pub enum Limit {
+    Unlimited,
+    Limited(u64),
+}
+
+impl From<u64> for Limit {
+    fn from(val: u64) -> Self {
+        if val == 0 {
+            Self::Unlimited
+        } else {
+            Self::Limited(val)
+        }
+    }
+}
+
+impl From<Limit> for u64 {
+    fn from(val: Limit) -> Self {
+        match val {
+            Limit::Unlimited => 0,
+            Limit::Limited(v) => v,
+        }
+    }
 }

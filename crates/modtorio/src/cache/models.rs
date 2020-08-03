@@ -1,6 +1,6 @@
 //! Cache models used to map rows in the cache database tables to/from structs.
 //!
-//! Each model struct derives [Model], which provides functions to to build SQL queries
+//! Each model struct derives [`Model`], which provides functions to to build SQL queries
 //! and parameters from them.
 //!
 //! [Model]: derive::Model
@@ -15,7 +15,7 @@ use derive::Model;
 
 /// An instance of a Factorio game.
 ///
-/// Uses the [id](#structfield.factorio_mod) field as index when querying the cache database.
+/// Uses the [`id`](#structfield.factorio_mod) field as index when querying the cache database.
 #[derive(Debug, PartialEq, Model)]
 pub struct Game {
     /// The game's cache ID.
@@ -28,7 +28,7 @@ pub struct Game {
 
 /// An instance of a Factorio mod.
 ///
-/// Uses the [name](#structfield.name) field as index when querying the cache database.
+/// Uses the [`name`](#structfield.name) field as index when querying the cache database.
 #[derive(Debug, PartialEq, Model)]
 pub struct FactorioMod {
     /// The mod's name.
@@ -53,9 +53,9 @@ pub struct FactorioMod {
 }
 
 /// A mapping of an instance of a Factorio game to an instance of a Factorio mod. Represents a
-/// many-to-many relationship from [Game] to [FactorioMod].
+/// many-to-many relationship from [`Game`] to [`FactorioMod`].
 ///
-/// Uses the [game](#structfield.game) field as an index when querying the cache database.
+/// Uses the [`game`](#structfield.game) field as an index when querying the cache database.
 ///
 /// [Game]: Game
 /// [FactorioMod]: FactorioMod
@@ -66,13 +66,13 @@ pub struct GameMod {
     /// [Game]: super::Game
     #[index]
     pub game: GameCacheId,
-    /// The mod's name. Corresponds to the [name][FactorioMod#structfield.name] field of a
-    /// [FactorioMod].
+    /// The mod's name. Corresponds to the [`name`][FactorioMod#structfield.name] field of a
+    /// [`FactorioMod`].
     ///
     /// [FactorioMod]: super::FactorioMod
     pub factorio_mod: String,
-    /// The mod's release version. Corresponds to the [version][ModRelease#structfield.version]
-    /// field of a [ModRelease].
+    /// The mod's release version. Corresponds to the [`version`][ModRelease#structfield.version]
+    /// field of a [`ModRelease`].
     ///
     /// [ModRelease]: super::ModRelease
     pub mod_version: HumanVersion,
@@ -82,16 +82,16 @@ pub struct GameMod {
     pub zip_checksum: String,
 }
 
-/// An instance of a [FactorioMod's](super::FactorioMod) release.
+/// An instance of a [`FactorioMod`'s](super::FactorioMod) release.
 ///
-/// Uses the [factorio_mod](#structfield.factorio_mod) and [version](#structfield.version) fields as
-/// indices when querying the cache database.
+/// Uses the [`factorio_mod`](#structfield.factorio_mod) and [`version`](#structfield.version)
+/// fields as indices when querying the cache database.
 #[derive(Debug, PartialEq, Model)]
 pub struct ModRelease {
-    /// The mod's name. Corresponds to the [name][FactorioMod#structfield.name] field of a
-    /// [FactorioMod].
+    /// The mod's name. Corresponds to the [`name`][FactorioMod#structfield.name] field of a
+    /// [`FactorioMod`].
     ///
-    /// [FactorioMod]: super::FactorioMod
+    /// [`FactorioMod`]: super::FactorioMod
     #[index]
     pub factorio_mod: String,
     /// The release's version.
@@ -106,21 +106,21 @@ pub struct ModRelease {
     pub factorio_version: HumanVersion,
 }
 
-/// A [ModRelease's](crate::cache::models::ModRelease) dependency to another mod.
+/// A [`ModRelease`'s](crate::cache::models::ModRelease) dependency to another mod.
 ///
-/// Uses the [release_mod_name](#structfield.release_mod_name) and
-/// [release_version](#structfield.release_version) fields as indices when querying the cache
+/// Uses the [`release_mod_name`](#structfield.release_mod_name) and
+/// [`release_version`](#structfield.release_version) fields as indices when querying the cache
 /// database.
 #[derive(Debug, PartialEq, Model)]
 pub struct ReleaseDependency {
     /// The mod's name this dependency is of. Corresponds to the
-    /// [name][FactorioMod#structfield.name] field of a [FactorioMod].
+    /// [`name`][FactorioMod#structfield.name] field of a [`FactorioMod`].
     ///
     /// [FactorioMod]: super::FactorioMod
     #[index]
     pub release_mod_name: String,
     /// The version of the release this dependency is of. Corresponds to the
-    /// [version][ModRelease#structfield.version] of a [ModRelease].
+    /// [`version`][ModRelease#structfield.version] of a [`ModRelease`].
     ///
     /// [ModRelease]: super::ModRelease
     #[index]

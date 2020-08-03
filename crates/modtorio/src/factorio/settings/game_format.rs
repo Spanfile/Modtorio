@@ -1,13 +1,22 @@
+//! Provides the [`ServerSettingsGameFormat`](ServerSettingsGameFormat) struct and
+//! [`GameFormatConversion`](GameFormatConversion) trait used to translate a Factorio server's
+//! `server-settings.json` into Modtorio's [`ServerSettings`](super::ServerSettings) and vice versa.
+
 use serde::{Deserialize, Serialize};
 
+/// Defines the functions used to convert a value into the kind used in a `server-settings.json`
+/// file and vice versa.
 pub trait GameFormatConversion
 where
     Self: Sized,
 {
+    /// Creates a new instance of `Self` from a given `ServerSettingsGameFormat` struct.
     fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self>;
+    /// Modifies an existing `ServerSettingsGameFormat` struct with self's own settings.
     fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()>;
 }
 
+/// Stores a server's settings in the same structure as its `server-settings.json` file.
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct ServerSettingsGameFormat {
     pub name: String,

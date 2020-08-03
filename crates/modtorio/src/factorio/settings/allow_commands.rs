@@ -1,10 +1,19 @@
+//! Provides the [`AllowCommands`](AllowCommands) enum which corresponds to the `allow_commands`
+//! field.
+
 use super::{GameFormatConversion, ServerSettingsGameFormat};
 use serde::{Deserialize, Serialize};
 
+/// The string-value for the [`Yes`](./enum.AllowCommands.html#variant.Yes) variant
 const YES_GAME_VALUE: &str = "true";
+/// The string-value for the [`No`](./enum.AllowCommands.html#variant.No) variant
 const NO_GAME_VALUE: &str = "false";
+/// The string-value for the [`AdminsOnly`](./enum.AllowCommands.html#variant.AdminsOnly) variant
 const ADMINS_ONLY_GAME_VALUE: &str = "admins-only";
 
+/// Represents the `allow_commands` field.
+///
+/// Defaults to `AdminsOnly`.
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub enum AllowCommands {
     Yes,

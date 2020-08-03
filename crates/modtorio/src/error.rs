@@ -1,3 +1,5 @@
+//! Provides all error types the program uses.
+
 use crate::{mod_common::Dependency, util::HumanVersion};
 use std::path::PathBuf;
 use thiserror::Error;
@@ -118,7 +120,9 @@ pub enum DependencyParsingError {
     InvalidVersionRequirementString(#[from] HumanVersionError),
 }
 
-/// Represents all types of errors that can occur when parsing HumanVersions
+/// Represents all types of errors that can occur when parsing [`HumanVersion`s][HumanVersion].
+///
+/// [HumanVersion]: crate::util::HumanVersion
 #[derive(Debug, Error)]
 pub enum HumanVersionError {
     /// A component of a given version string isn't an integer.

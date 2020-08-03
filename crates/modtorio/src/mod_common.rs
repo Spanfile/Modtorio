@@ -1,4 +1,4 @@
-//! Provides the [Mod](Mod) object and various tools to work with Factorio mods.
+//! Provides the [`Mod`](Mod) object and various tools to work with Factorio mods.
 
 mod dependency;
 mod info;
@@ -37,18 +37,18 @@ pub struct Mod {
     zip_checksum: Arc<Mutex<Option<String>>>,
 }
 
-/// The result of a mod download.
+/// The result of a mod zip archive download.
 #[derive(Debug)]
 pub enum DownloadResult {
-    /// The downloaded mod is entirely new.
+    /// The downloaded archive is entirely new.
     New,
-    /// The downloaded mod is the same as its previous install.
+    /// The downloaded archive is the same as its previous install.
     Unchanged,
-    /// The downloaded mod replaced an older install.
+    /// The downloaded archive replaced an older install.
     Replaced {
         /// The older install's version.
         old_version: HumanVersion,
-        /// The older install's mod zip archive's filesystem path.
+        /// The older install's archive's filesystem path.
         old_archive: String,
     },
 }
@@ -263,7 +263,7 @@ impl Mod {
             self.cache.set_mod_release(new_mod_release).await?;
 
             let mut new_release_dependencies = Vec::new();
-            for dependency in release.dependencies().into_iter() {
+            for dependency in release.dependencies() {
                 new_release_dependencies.push(models::ReleaseDependency {
                     release_mod_name: self.name().await,
                     release_version: release.version(),
@@ -288,6 +288,7 @@ impl Mod {
     }
 
     /// Fetch the latest info from portal
+    #[allow(dead_code)]
     pub async fn fetch_portal_info(&self) -> anyhow::Result<()> {
         trace!("Fetcing portal info for '{}'", self.name().await);
 
@@ -296,6 +297,7 @@ impl Mod {
     }
 
     /// Fetch the latest info from cache
+    #[allow(dead_code)]
     pub async fn fetch_cache_info(&self) -> anyhow::Result<()> {
         trace!("Fetcing cache info for '{}'", self.name().await);
 
@@ -407,6 +409,7 @@ impl Mod {
     }
 }
 
+#[allow(dead_code)]
 impl Mod {
     async fn populate_info_from_zip(&self, path: PathBuf) -> anyhow::Result<()> {
         *self.zip_path.lock().await = Some(path.clone());
@@ -461,12 +464,12 @@ impl Mod {
 
     pub async fn contact(&self) -> Option<String> {
         let info = self.info.lock().await;
-        info.contact().map(|c| c.to_string())
+        info.contact().map(std::string::ToString::to_string)
     }
 
     pub async fn homepage(&self) -> Option<String> {
         let info = self.info.lock().await;
-        info.homepage().map(|c| c.to_string())
+        info.homepage().map(std::string::ToString::to_string)
     }
 
     pub async fn title(&self) -> String {
@@ -476,7 +479,7 @@ impl Mod {
 
     pub async fn summary(&self) -> Option<String> {
         let info = self.info.lock().await;
-        info.summary().map(|s| s.to_string())
+        info.summary().map(std::string::ToString::to_string)
     }
 
     pub async fn description(&self) -> String {
@@ -486,7 +489,7 @@ impl Mod {
 
     pub async fn changelog(&self) -> Option<String> {
         let info = self.info.lock().await;
-        info.changelog().map(|s| s.to_string())
+        info.changelog().map(std::string::ToString::to_string)
     }
 
     pub async fn own_version(&self) -> anyhow::Result<HumanVersion> {

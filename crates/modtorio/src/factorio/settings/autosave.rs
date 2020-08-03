@@ -1,11 +1,18 @@
+//! Provides the [Autosave](Autosave) struct which contains a server's autosave settings.
+
 use super::{GameFormatConversion, ServerSettingsGameFormat};
 use serde::{Deserialize, Serialize};
 
+/// Contains a server's autosave settings.
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct Autosave {
+    /// Corresponds to the `autosave_interval` field. Defaults to 5.
     pub interval: u64,
+    /// Corresponds to the `autosave_slots` field. Defaults to 5.
     pub slots: u64,
+    /// Corresponds to the `autosave_only_on_server` field. Defaults to `true`.
     pub only_on_server: bool,
+    /// Corresponds to the `non_blocking_saving` field. Defaults to `false`.
     pub non_blocking: bool,
 }
 

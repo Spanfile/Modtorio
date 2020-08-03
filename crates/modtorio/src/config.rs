@@ -1,3 +1,5 @@
+//! Provides the [`Config`](Config) object, a collection of configuration values for the program.
+
 mod log_level;
 
 use crate::util;
@@ -7,45 +9,64 @@ pub use log_level::LogLevel;
 use serde::Deserialize;
 use serde_with::with_prefix;
 
+/// The prefix used with every environment value related to the program configuration.
 const APP_PREFIX: &str = "MODTORIO_";
 
+// TODO: hide these from the docs. a simple #[doc(hidden)] doesn't seem to work
 with_prefix!(prefix_portal "portal_");
 with_prefix!(prefix_log "log_");
 with_prefix!(prefix_cache "cache_");
 
+/// A collection of configuration values.
+///
+/// A `Config` is built from the environment variables using the [`from_env`](#method.from_env)
+/// function.
 #[derive(Debug, Deserialize)]
 pub struct Config {
+    /// Configuration values related to the mod portal.
     #[serde(flatten, with = "prefix_portal")]
     pub portal: PortalConfig,
+    /// Configuration values related to logging.
     #[serde(flatten, with = "prefix_log")]
     pub log: LogConfig,
     // TODO: these with_prefix things break being able to serialise into anything but strings or
     // enums..?
     // #[serde(flatten, with = "prefix_cache")]
     // pub cache: CacheConfig,
+    /// The cache entry expiry in seconds. Defaults to 3600 seconds (1 hour).
     #[serde(default = "default_cache_expiry")]
     pub cache_expiry: u64,
 }
 
+/// Configuration values related to the mod portal.
 #[derive(Debug, Deserialize)]
 pub struct PortalConfig {
+    /// The username to use with the mod portal.
     pub username: String,
+    /// The token to use with the mod portal.
     pub token: String,
 }
 
+/// Configuration values related logging.
 #[derive(Debug, Deserialize)]
 pub struct LogConfig {
+    /// The log level to use.
     #[serde(default)]
     pub level: LogLevel,
 }
 
+/// Configuration values related to the program cache.
 #[derive(Debug, Deserialize)]
 pub struct CacheConfig {
+    /// The cache entry expiry in seconds. Defaults to 3600 seconds (1 hour).
     #[serde(default = "default_cache_expiry")]
     pub expiry: u64,
 }
 
 impl Config {
+    /// Builds a new `Config` object from the current environment variables prefixed by
+    /// [`APP_PREFIX`](./constant.APP_PREFIX.html). Returns an error if the config object fails to
+    /// be deserialized from the environment variables.
     pub fn from_env() -> anyhow::Result<Config> {
         Ok(envy::prefixed(APP_PREFIX)
             .from_env::<Config>()
@@ -57,12 +78,14 @@ impl Config {
             })?)
     }
 
+    /// Prints debug information about the environment variables and self.
     pub fn debug_values(&self) {
         debug!("{:?}", util::dump_env_lines(APP_PREFIX));
         debug!("{:?}", self);
     }
 }
 
+#[doc(hidden)]
 fn default_cache_expiry() -> u64 {
     3600
 }

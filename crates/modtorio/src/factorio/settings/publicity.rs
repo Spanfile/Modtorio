@@ -1,31 +1,51 @@
-use super::{GameFormatConversion, Limit, ServerSettingsGameFormat};
+//! Provides the object which corresponds to a Factorio server's settings about publicity.
+
+use super::{GameFormatConversion, ServerSettingsGameFormat};
+use crate::util::Limit;
 use serde::{Deserialize, Serialize};
 
+/// Represents the `password` and `token` fields.
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
 pub enum Credential {
     Password(String),
     Token(String),
 }
 
+/// Represents the combination of the factorio.com login credential settings (`username` and either
+/// credential) together with `visibility.public` being `true`.
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
 pub struct PublicVisibility {
     pub username: String,
     pub credential: Credential,
 }
 
+/// Contains a server's player limit settings.
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct PlayerLimit {
+    /// Corresponds to the `max_players` field. Defaults to `Limit::Unlimited` (value of 0 in
+    /// `server-settings.json`).
     pub max: Limit,
+    /// Corresponds to the `ignore_player_limit_for_returning_players` field. Defaults to `false`.
     pub ignore_for_returning: bool,
+    /// Corresponds to the `afk_autokick_interval` field. Defaults to `Limit::Limited(5)` (value of
+    /// 5 in `server-settings.json`).
     pub autokick: Limit,
 }
 
+/// Contains a server's publicity settings.
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct Publicity {
+    /// Corresponds to the `visiblity.public` field. Defaults to
+    /// `Some(PublicVisiblity::default())`. A value of `Some(...)` corresponds to
+    /// `visibility.public` being `true` and `None` corresponds to the field being `false`.
     pub public: Option<PublicVisibility>,
+    /// Corresponds to the `visibility.lan` field. Defaults to `true`.
     pub lan: bool,
+    /// Corresponds to the `require_user_verification` field. Defaults to `true`.
     pub require_user_verification: bool,
+    /// Corresponds to the player limit fields. Defaults to `PlayerLimit`'s default.
     pub player_limit: PlayerLimit,
+    /// Corresponds to the `game_password` field. Defaults to an empty string.
     pub password: String,
 }
 
@@ -66,10 +86,10 @@ impl GameFormatConversion for Publicity {
             public: if game_format.visibility.public {
                 Some(PublicVisibility {
                     username: game_format.username.clone(),
-                    credential: if !game_format.token.is_empty() {
-                        Credential::Token(game_format.token.clone())
-                    } else {
+                    credential: if game_format.token.is_empty() {
                         Credential::Password(game_format.password.clone())
+                    } else {
+                        Credential::Token(game_format.token.clone())
                     },
                 })
             } else {

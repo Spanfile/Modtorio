@@ -1,3 +1,6 @@
+//! Provides the [`PathExt`](PathExt) trait which provides several commonly used functions on paths
+//! and path-like objects.
+
 use crate::error::PathError;
 use std::path::Path;
 

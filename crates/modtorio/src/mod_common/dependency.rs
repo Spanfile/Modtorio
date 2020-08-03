@@ -1,4 +1,4 @@
-//! Provides the [Dependency](Dependency) object which is used to model a [Mod](super::Mod)'s
+//! Provides the [`Dependency`](Dependency) object which is used to model a [`Mod`](super::Mod)'s
 //! depdendency on another mod.
 
 use crate::{cache, error::DependencyParsingError, util::HumanVersionReq};
@@ -27,7 +27,7 @@ pub enum Requirement {
     Incompatible,
 }
 
-/// A [Mod](super::Mod)'s dependency on another.
+/// A [`Mod`'s](super::Mod) dependency on another.
 ///
 /// Consists of a requirement, the dependent mod's name and its optional version requirement.
 ///
@@ -39,7 +39,7 @@ pub enum Requirement {
 ///   (incompatible) or empty, in which case it is assumed to be mandatory.
 /// * The `name` component is required.
 /// * The `version-requirement` is optional. It is a
-///   [HumanVersionReq](crate::util::HumanVersionReq).
+///   [`HumanVersionReq`](crate::util::HumanVersionReq).
 ///
 /// Examples of valid dependency strings:
 /// * A mandatory dependency: `cool-mod >= 1.0.0`.
@@ -84,7 +84,7 @@ impl FromStr for Dependency {
         let requirement = captures
             .get(1)
             .map(|c| c.as_str())
-            .map_or(Ok(Requirement::Mandatory), |s| s.parse::<Requirement>())?;
+            .map_or(Ok(Requirement::Mandatory), str::parse)?;
 
         let name = captures
             .get(2)

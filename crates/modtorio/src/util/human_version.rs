@@ -1,7 +1,7 @@
 //! Because not all versions are exactly semver. Humans can think of so many more credible formats
-//! that look like semver but aren't. Provides [HumanVersion] which represents a single version (for
-//! example `1.0.0`) and [HumanVersionReq] which represents a version requirement (for example `>=
-//! 1.0.0`).
+//! that look like semver but aren't. Provides [`HumanVersion`](HumanVersion) which represents a
+//! single version (for example `1.0.0`) and [`HumanVersionReq`](HumanVersionReq) which represents a
+//! version requirement (for example `>= 1.0.0`).
 
 use crate::error::HumanVersionError;
 use lazy_static::lazy_static;
@@ -32,8 +32,8 @@ pub enum Comparator {
 /// A human-friendly semver-like version. Acts like semver, but is a lot more lenient on the exact
 /// format of the version string.
 ///
-/// Consists of three components, [major](#structfield.major), [minor](#structfield.minor) and
-/// [patch](#structfield.patch). Each is a 64-bit unsigned integer.
+/// Consists of three components, [`major`](#structfield.major), [`minor`](#structfield.minor) and
+/// [`patch`](#structfield.patch). Each is a 64-bit unsigned integer.
 ///
 /// # Parsing from a string
 ///
@@ -41,7 +41,7 @@ pub enum Comparator {
 /// restrictions and allowances apply:
 /// * The `major` component is required.
 /// * The `minor` and `patch` components are optional. If they're missing, they're defaulted to `0`.
-/// * Each component has to be in the range of `0` to [u64::MAX](std::u64::MAX).
+/// * Each component has to be in the range of `0` to [`u64::MAX`](std::u64::MAX).
 /// * Each component may have an indefinite amount of leading zeroes.
 ///
 /// Examples of valid human version strings:
@@ -64,8 +64,8 @@ pub struct HumanVersion {
 ///
 /// A `HumanVersionReq` can be parsed from a string in the form of `comparator version`. The
 /// following restrictions and allowances apply:
-/// * The `comparator` is one of the possible [Comparators](super::Comparator).
-/// * The `version` is a valid [HumanVersion](super::HumanVersion).
+/// * The `comparator` is one of the possible [`Comparator`s](super::Comparator).
+/// * The `version` is a valid [`HumanVersion`](super::HumanVersion).
 /// * There may be zero or more white spaces between the `comparator` and the `version` components.
 ///
 /// Examples of valid human version requirement strings:

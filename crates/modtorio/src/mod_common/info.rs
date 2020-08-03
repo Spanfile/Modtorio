@@ -1,4 +1,4 @@
-//! Provides structured objects of a Factorio mod's metadata information, both from the mod zip
+//! Provides structured objects of a mod's metadata information, both from the mod zip
 //! archive and the mod portal.
 
 use super::Dependency;
@@ -427,16 +427,15 @@ impl Info {
     /// info object.
     #[allow(dead_code)]
     pub async fn populate_from_cache(&mut self, cache: &'_ Cache) -> anyhow::Result<()> {
-        match cache.get_factorio_mod(self.name.clone()).await? {
-            Some(cache_mod) => self.populate_with_cache_object(cache, cache_mod).await,
-            None => {
-                trace!(
-                    "Mod '{}' not in cache while trying to load it from cache",
-                    self.name
-                );
+        if let Some(cache_mod) = cache.get_factorio_mod(self.name.clone()).await? {
+            self.populate_with_cache_object(cache, cache_mod).await
+        } else {
+            trace!(
+                "Mod '{}' not in cache while trying to load it from cache",
+                self.name
+            );
 
-                Err(ModError::ModNotInCache.into())
-            }
+            Err(ModError::ModNotInCache.into())
         }
     }
 }

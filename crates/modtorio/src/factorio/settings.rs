@@ -1,8 +1,10 @@
+//! Provides the [`ServerSettings`](ServerSettings) object used to interact with a server's
+//! settings.
+
 mod allow_commands;
 mod autosave;
 mod game_format;
 mod information;
-mod limit;
 mod pause;
 mod publicity;
 mod traffic;
@@ -11,18 +13,12 @@ use allow_commands::AllowCommands;
 use autosave::Autosave;
 use game_format::{GameFormatConversion, ServerSettingsGameFormat};
 use information::Information;
-use limit::Limit;
 use pause::Pause;
 use publicity::Publicity;
 use serde::{Deserialize, Serialize};
 use traffic::Traffic;
 
-#[derive(Deserialize, Serialize, Debug, PartialEq)]
-pub struct Range {
-    pub min: u64,
-    pub max: u64,
-}
-
+/// Stores a server's settings in a structured manner.
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct ServerSettings {
     pub information: Information,
@@ -33,6 +29,7 @@ pub struct ServerSettings {
     pub traffic: Traffic,
 }
 
+#[allow(dead_code)]
 impl ServerSettings {
     pub fn from_game_json(json: &str) -> anyhow::Result<Self> {
         let game_format = serde_json::from_str(json)?;
@@ -73,6 +70,7 @@ impl GameFormatConversion for ServerSettings {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::util::{Limit, Range};
 
     #[test]
     fn from_game_format() -> anyhow::Result<()> {

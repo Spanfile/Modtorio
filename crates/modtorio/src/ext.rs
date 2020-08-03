@@ -1,3 +1,5 @@
+//! Provides extension traits of commonly used functions on various objects.
+
 mod path_ext;
 mod response_ext;
 mod zip_ext;

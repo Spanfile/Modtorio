@@ -1,3 +1,6 @@
+//! The whole point. Provides the [`Factorio`](Factorio) struct used to interact with a single
+//! instance of a Factorio server.
+
 mod mods;
 mod settings;
 
@@ -12,19 +15,29 @@ use std::{
 };
 use tokio::sync::Mutex;
 
+/// The file name of the JSON file used to store a Factorio server's settings.
 const SERVER_SETTINGS_FILENAME: &str = "server-settings.json";
+/// The path relative to the Factorio server's root directory where the server's mods are stored.
 const MODS_PATH: &str = "mods/";
 
+/// The type used to identify games in the program cache.
 pub type GameCacheId = i64;
 
+/// Represents a single Factorio server instance.
+///
+/// Built using an [`Importer`](Importer).
 pub struct Factorio {
+    /// The server's settings.
     pub settings: ServerSettings,
+    /// The server's mods.
     pub mods: Mods,
     root: PathBuf,
     cache_id: Mutex<Option<GameCacheId>>,
     cache: Arc<Cache>,
 }
 
+/// Builds a new instance of a [`Factorio`](Factorio) server by importing its information from the
+/// filesystem or from the program cache.
 pub struct Importer {
     root: PathBuf,
     settings: PathBuf,
@@ -32,6 +45,7 @@ pub struct Importer {
 }
 
 impl Factorio {
+    /// Updates all information about this game instance in the program cache.
     pub async fn update_cache(&self) -> anyhow::Result<()> {
         let mut cache_id = self.cache_id.lock().await;
 
@@ -71,6 +85,8 @@ impl Factorio {
 }
 
 impl Importer {
+    /// Returns a new `Importer` using a certain path as the new Factorio server instance's root
+    /// directory.
     pub fn from_root<P>(root: P) -> Self
     where
         P: AsRef<Path>,
@@ -82,6 +98,7 @@ impl Importer {
         }
     }
 
+    /// Returns a new `Importer` with information from a cached `Game`.
     pub fn from_cache(cached_game: &models::Game) -> Self {
         Self {
             root: PathBuf::from(&cached_game.path),
@@ -90,6 +107,7 @@ impl Importer {
         }
     }
 
+    /// Specify a custom file to read the server's settings from.
     #[allow(dead_code)]
     pub fn with_server_settings<P>(self, settings: P) -> Self
     where
@@ -101,6 +119,7 @@ impl Importer {
         }
     }
 
+    /// Finalise the builder and return the imported Factorio server instance.
     pub async fn import<'a>(
         self,
         config: Arc<Config>,
