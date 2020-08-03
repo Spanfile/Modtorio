@@ -147,12 +147,7 @@ impl Mods {
                 "Ensuring '{}'s dependencies are met...",
                 fact_mod.title().await
             );
-            missing.extend(
-                self.ensure_single_dependencies(fact_mod)
-                    .await?
-                    .into_iter()
-                    .map(|m| m),
-            );
+            missing.extend(self.ensure_single_dependencies(fact_mod).await?.into_iter());
         }
 
         if !missing.is_empty() {

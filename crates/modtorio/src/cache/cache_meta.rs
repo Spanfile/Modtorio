@@ -1,3 +1,8 @@
+//! Program cache meta information. Used to store metadata about the program and cache itself with a
+//! [CacheMetaValue].
+//!
+//! [CacheMetaValue]: CacheMetaValue
+
 use derive::Model;
 use rusqlite::{
     types::{self, FromSql},
@@ -7,11 +12,23 @@ use std::str::FromStr;
 use strum_macros::{Display, EnumString};
 use types::{FromSqlError, FromSqlResult, ToSqlOutput, ValueRef};
 
+/// A meta value's field identifier. Derives [EnumString] and
+/// [Display] to allow converting the enum to/from a string. Implements
+/// [ToSql] and [FromSql] which use the to/from string
+/// functions.
+///
+/// [EnumString]: strum_macros::EnumString
+/// [Display]: strum_macros::Display
+/// [ToSql]: rusqlite::ToSql
+/// [FromSql]: rusqlite::types::FromSql
 #[derive(Debug, PartialEq, Copy, Clone, EnumString, Display)]
 pub enum CacheMetaField {
+    /// The current cache database schema's checksum.
     SchemaChecksum,
 }
 
+/// A meta value for the program cache. Consists of a `CacheMetaField` field identifier and an
+/// optional `String` value. Derives `Model` with the table name `_meta`.
 #[derive(Debug, Model)]
 #[table_name = "_meta"]
 pub struct CacheMetaValue {

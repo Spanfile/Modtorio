@@ -1,3 +1,10 @@
+//! The program cache. Used to store various values to speed up the program flow; for example game
+//! mod information to avoid reading each mod every time the program is started.
+//!
+//! Uses an SQLite database as the filesystem store through the [rusqlite] driver.
+//!
+//! [rusqlite]: rusqlite
+
 mod cache_meta;
 pub mod models;
 
@@ -12,9 +19,18 @@ use std::{
 };
 use tokio::task;
 
+/// The default cache database file path.
 const DB_PATH: &str = "modtorio.db";
+/// The default cache database schema string.
 const SCHEMA: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema.sql"));
 
+/// The program cache. Provides functions to read and write different [models][Models] to the
+/// program cache.
+///
+/// The cache object is built using a [CacheBuilder].
+///
+/// [Models]: modtorio::cache::models
+/// [CacheBuilder]: CacheBuilder
 pub struct Cache {
     conn: Arc<Mutex<Connection>>,
 }
