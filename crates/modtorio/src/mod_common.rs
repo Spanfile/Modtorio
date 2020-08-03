@@ -1,3 +1,5 @@
+//! Provides the [Mod](Mod) object and various tools to work with Factorio mods.
+
 mod dependency;
 mod info;
 
@@ -21,6 +23,11 @@ use tokio::{sync::Mutex, task};
 pub use dependency::{Dependency, Requirement};
 pub use info::Release;
 
+/// A Factorio mod.
+///
+/// Consists of a combination of mod information from both a mod zip archive and the mod portal.
+/// Provides functions to build, download and update mods from the [program cache](crate::cache),
+/// zip archives and the [mod portal](crate::mod_portal).
 pub struct Mod {
     info: Mutex<Info>,
     config: Arc<Config>,
@@ -30,24 +37,41 @@ pub struct Mod {
     zip_checksum: Arc<Mutex<Option<String>>>,
 }
 
+/// The result of a mod download.
 #[derive(Debug)]
 pub enum DownloadResult {
+    /// The downloaded mod is entirely new.
     New,
+    /// The downloaded mod is the same as its previous install.
     Unchanged,
+    /// The downloaded mod replaced an older install.
     Replaced {
+        /// The older install's version.
         old_version: HumanVersion,
+        /// The older install's mod zip archive's filesystem path.
         old_archive: String,
     },
 }
 
+/// The available checksum algorithms.
 enum ChecksumAlgorithm {
     BLAKE2b,
     SHA1,
 }
 
+/// The default checksum algorithm to use to verifying cached mods.
 const CACHE_ZIP_CHECKSUM_ALGO: ChecksumAlgorithm = ChecksumAlgorithm::BLAKE2b;
+/// The algorithm used to verify downloaded mods from the mod portal. This is dictated by what the
+/// mod portal returns as a checksum.
 const DOWNLOADED_ZIP_CHECKSUM_ALGO: ChecksumAlgorithm = ChecksumAlgorithm::SHA1;
 
+/// Calculates a mod zip archive's checksum using the given checksum algorithm and returns it as a
+/// `Result<String>`.
+///
+/// The checksum is calculated in a blocking thread with `task::spawn_blocking`. The function will
+/// return an error if:
+/// * The task spawning fails
+/// * The checksum function fails
 async fn calculate_zip_checksum<P>(algorithm: ChecksumAlgorithm, zip: P) -> anyhow::Result<String>
 where
     P: AsRef<Path>,
@@ -72,6 +96,13 @@ where
     Ok(result)
 }
 
+/// Verifies that a given `GameMod`'s corresponding zip archive exists and is valid.
+///
+/// Returns `Ok(())` if the zip archive passes the validity checks, otherwise returns an `Err()`
+/// containing a variant of `ModError` that describes which part of the check failed.
+///
+/// The validity check will:
+/// * Ensure the zip archive's checksum matches what is cached
 async fn verify_zip<P>(game_mod: &models::GameMod, mods_root_path: P) -> anyhow::Result<()>
 where
     P: AsRef<Path>,

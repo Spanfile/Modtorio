@@ -1,3 +1,8 @@
+//! Because not all versions are exactly semver. Humans can think of so many more credible formats
+//! that look like semver but aren't. Provides [HumanVersion] which represents a single version (for
+//! example `1.0.0`) and [HumanVersionReq] which represents a version requirement (for example `>=
+//! 1.0.0`).
+
 use crate::error::HumanVersionError;
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -9,15 +14,41 @@ use serde::{de, de::Visitor, Deserialize};
 use std::{fmt, fmt::Display, str::FromStr};
 use types::{FromSql, FromSqlError, FromSqlResult, Value, ValueRef};
 
+/// A version comparator.
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Comparator {
+    /// The greater-or-equal `>=` comparator.
     GreaterOrEqual,
+    /// The greater `>` comparator.
     Greater,
+    /// The equal `=` comparator.
     Equal,
+    /// The less `<` comparator.
     Less,
+    /// The less-or-equal `<=` comparator.
     LessOrEqual,
 }
 
+/// A human-friendly semver-like version. Acts like semver, but is a lot more lenient on the exact
+/// format of the version string.
+///
+/// Consists of three components, [major](#structfield.major), [minor](#structfield.minor) and
+/// [patch](#structfield.patch). Each is a 64-bit unsigned integer.
+///
+/// # Parsing from a string
+///
+/// A `HumanVersion` can be parsed from a string in the form of `major.minor.patch`. The following
+/// restrictions and allowances apply:
+/// * The `major` component is required.
+/// * The `minor` and `patch` components are optional. If they're missing, they're defaulted to `0`.
+/// * Each component has to be in the range of `0` to [u64::MAX](std::u64::MAX).
+/// * Each component may have an indefinite amount of leading zeroes.
+///
+/// Examples of valid human version strings:
+/// * `1.0.0`
+/// * `1.0`
+/// * `1`
+/// * `01.02.03`
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
 pub struct HumanVersion {
     pub major: u64,
@@ -25,6 +56,21 @@ pub struct HumanVersion {
     pub patch: u64,
 }
 
+/// A human-friendly version requirement.
+///
+/// Consists of a `HumanVersion` component and a `Comparator`.
+///
+/// # Parsing from a string
+///
+/// A `HumanVersionReq` can be parsed from a string in the form of `comparator version`. The
+/// following restrictions and allowances apply:
+/// * The `comparator` is one of the possible [Comparators](super::Comparator).
+/// * The `version` is a valid [HumanVersion](super::HumanVersion).
+/// * There may be zero or more white spaces between the `comparator` and the `version` components.
+///
+/// Examples of valid human version requirement strings:
+/// * `>= 1.0.0`
+/// * `< 1.0`
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct HumanVersionReq {
     pub comparator: Comparator,
@@ -32,6 +78,7 @@ pub struct HumanVersionReq {
 }
 
 impl HumanVersion {
+    /// Checks whether this version meets a `HumanVersionReq` requirement.
     pub fn meets(self, requirement: HumanVersionReq) -> bool {
         match requirement.comparator {
             Comparator::GreaterOrEqual => self >= requirement.version,

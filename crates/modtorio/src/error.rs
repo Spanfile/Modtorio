@@ -85,6 +85,7 @@ pub enum ModError {
     /// Returned when trying to load an uncached mod from the cache.
     #[error("Mod not in cache")]
     ModNotInCache,
+    // TODO: separate this error into not-installed and not-fetched-from-portal
     /// A mod doesn't contain all info when expected, i.e. it hasn't been populated
     /// from the portal or the zip archive.
     #[error("Missing info (is the mod installed?)")]

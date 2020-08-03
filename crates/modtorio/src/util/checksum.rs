@@ -1,8 +1,11 @@
+//! Provides several functions to calculate checksums of various things with different algorithms.
+
 use blake2::Blake2b;
 use digest::Digest;
 use sha1::Sha1;
 use std::path::Path;
 
+/// Calculates the checksum of a file using the BLAKE2b algorithm.
 pub fn blake2b_file<P>(path: P) -> anyhow::Result<String>
 where
     P: AsRef<Path>,
@@ -16,6 +19,7 @@ where
     Ok(hex::encode(&result[..]))
 }
 
+/// Calculates the checksum of a string using the BLAKE2b algorithm.
 pub fn blake2b_string(value: &str) -> String {
     let mut hasher = Blake2b::new();
     hasher.update(value);
@@ -23,6 +27,7 @@ pub fn blake2b_string(value: &str) -> String {
     hex::encode(&result[..])
 }
 
+/// Calculates the checksum of a file using the SHA1 algorithm.
 pub fn sha1_file<P>(path: P) -> anyhow::Result<String>
 where
     P: AsRef<Path>,

@@ -1,3 +1,6 @@
+//! Provides the [Dependency](Dependency) object which is used to model a [Mod](super::Mod)'s
+//! depdendency on another mod.
+
 use crate::{cache, error::DependencyParsingError, util::HumanVersionReq};
 use lazy_static::lazy_static;
 use regex::Regex;
@@ -8,16 +11,40 @@ use rusqlite::{
 use serde::{de, de::Visitor, Deserialize};
 use std::{fmt, str::FromStr};
 
+#[doc(hidden)]
 const DEPENDENCY_PARSER_REGEX: &str = r"(\?|!|\(\?\))? ?([^>=<]+)( ?[>=<]{1,2} ?[\d\.]*)?$";
 
+/// A dependency requirement level.
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub enum Requirement {
+    /// The mandatory requirement (an empty string; no requirement specified).
     Mandatory = 0,
+    /// The optional requirement `?`
     Optional,
+    /// The optional and hidden requirement `(?)`
     OptionalHidden,
+    /// The incompatible requirement `!`
     Incompatible,
 }
 
+/// A [Mod](super::Mod)'s dependency on another.
+///
+/// Consists of a requirement, the dependent mod's name and its optional version requirement.
+///
+/// # Parsing from a string
+///
+/// A `Dependency` can be parsed from a string in the form of `requirement name
+/// version-requirement`. The following restrictions and allowances apply:
+/// * The `requirement` component can be one of `?` (optional), `(?)` (optional hidden), `!`
+///   (incompatible) or empty, in which case it is assumed to be mandatory.
+/// * The `name` component is required.
+/// * The `version-requirement` is optional. It is a
+///   [HumanVersionReq](crate::util::HumanVersionReq).
+///
+/// Examples of valid dependency strings:
+/// * A mandatory dependency: `cool-mod >= 1.0.0`.
+/// * An optional dependency without a specific version requirement: `?cool-mod`.
+/// * An incompatible mod without a specific version requirement: `!evil-mod`.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Dependency {
     requirement: Requirement,
@@ -26,14 +53,17 @@ pub struct Dependency {
 }
 
 impl Dependency {
+    /// Returns the dependent mod's name.
     pub fn name(&self) -> &str {
         &self.name
     }
 
+    /// Returns the dependency requirement.
     pub fn requirement(&self) -> Requirement {
         self.requirement
     }
 
+    /// Returns the dependent mod's version, if any.
     pub fn version(&self) -> Option<HumanVersionReq> {
         self.version
     }
