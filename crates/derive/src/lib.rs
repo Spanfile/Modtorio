@@ -37,6 +37,7 @@ struct MacroField {
 }
 
 /// Implements functions to build SQL queries and parameters based on a given model struct.
+///
 /// The implemented functions are:
 ///  * `select()` returns an SQL query string that selects rows based on the marked index (or
 ///    indices)

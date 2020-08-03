@@ -1,8 +1,11 @@
-//! The program cache. Used to store various values to speed up the program flow; for example game
-//! mod information to avoid reading each mod every time the program is started.
+//! Provides the [Cache] object and object [models][Models] used to store various values to
+//! speed up the program flow; for example game mod information to avoid reading each mod from the
+//! filesystem every time the program is started.
 //!
 //! Uses an SQLite database as the filesystem store through the [rusqlite] driver.
 //!
+//! [Models]: models
+//! [Cache]: Cache
 //! [rusqlite]: rusqlite
 
 mod cache_meta;
@@ -29,12 +32,32 @@ const SCHEMA: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema.s
 ///
 /// The cache object is built using a [CacheBuilder].
 ///
-/// [Models]: modtorio::cache::models
+/// Each asynchronous function that interacts with the cache database will run their work on a
+/// blocking thread in the background.
+///
+/// [Models]: crate::cache::models
 /// [CacheBuilder]: CacheBuilder
 pub struct Cache {
+    /// The SQLite connection.
     conn: Arc<Mutex<Connection>>,
 }
 
+/// Builds a [Cache] object using the builder pattern.
+///
+/// A default cache can be built simply.
+/// ```no_run
+/// let cache = CacheBuilder::new().build();
+/// ```
+///
+/// Other values than the defaults can be provided with their corresponding functions.
+/// ```no_run
+/// let cache = CacheBuilder::new()
+///     .with_db_path("other-db-than-default.db")
+///     .with_schema("other-schema-than-default")
+///     .build();
+/// ```
+///
+/// [Cache]: super::Cache
 #[derive(Debug)]
 pub struct CacheBuilder {
     db_path: PathBuf,
@@ -42,6 +65,7 @@ pub struct CacheBuilder {
 }
 
 impl CacheBuilder {
+    /// Returns a new CacheBuilder with each field filled with its default value.
     pub fn new() -> Self {
         Self {
             db_path: PathBuf::from(DB_PATH),
@@ -49,6 +73,8 @@ impl CacheBuilder {
         }
     }
 
+    /// Specify a custom filesystem path used to store the database file.
+    #[allow(dead_code)]
     pub fn with_db_path<P>(self, path: P) -> Self
     where
         P: AsRef<Path>,
@@ -59,10 +85,20 @@ impl CacheBuilder {
         }
     }
 
+    /// Specify a custom schema used to build the database.
+    #[allow(dead_code)]
     pub fn with_schema(self, schema: String) -> Self {
         Self { schema, ..self }
     }
 
+    /// Finalise the builder and return the built cache object.
+    ///
+    /// During building the schema's checksum will be calculated and, if the cache database already
+    /// exists in the filesystem, compared against the existing stored checksum. If there's a
+    /// mismatch, the schema will be applied over the existing database, deleting all data
+    /// inside it. The new schema checksum will be then stored in the cache [metadata].
+    ///
+    /// [metadata]: crate::cache::cache_meta
     pub async fn build(self) -> anyhow::Result<Cache> {
         let encoded_checksum = util::checksum::blake2b_string(&self.schema);
         trace!("Cache database schema checksum: {}", encoded_checksum);
@@ -95,11 +131,17 @@ impl CacheBuilder {
     }
 }
 
-async fn checksum_matches_meta(cache: &Cache, encoded_checksum: &str) -> anyhow::Result<bool> {
+/// Compares a given cache schema checksum string to what a given cache's metadata possibly
+/// contains. Returns a `Result<bool>` corresponding to whether the cache's existing schema checksum
+/// matches the wanted one. Returns `Ok(false)` if the cache doesn't contain the [schema checksum
+/// field][CacheMetaField]. Returns an error if reading the database meta table fails.
+///
+/// [CacheMetaField]: cache_meta::CacheMetaField#variant.SchemaChecksum
+async fn checksum_matches_meta(cache: &Cache, wanted_checksum: &str) -> anyhow::Result<bool> {
     if let Some(metavalue) = cache.get_meta(CacheMetaField::SchemaChecksum).await? {
-        if let Some(checksum) = metavalue.value {
-            trace!("Got existing schema checksum: {}", checksum);
-            return Ok(checksum == encoded_checksum);
+        if let Some(existing_checksum) = metavalue.value {
+            trace!("Got existing schema checksum: {}", existing_checksum);
+            return Ok(wanted_checksum == existing_checksum);
         }
     }
 
@@ -107,6 +149,7 @@ async fn checksum_matches_meta(cache: &Cache, encoded_checksum: &str) -> anyhow:
 }
 
 impl Cache {
+    /// Applies a given schema to the database.
     async fn apply_schema(&self, schema: String) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
         let result = task::spawn_blocking(move || -> anyhow::Result<()> {
@@ -121,6 +164,16 @@ impl Cache {
     }
 }
 
+/// Accepts a reference to an `Arc<Mutex<Connection>>` and a block where that reference can be used
+/// to access the database connection. The block will run a blocking thread with
+/// `task::spawn_blocking`. Returns what the given block returns.
+///
+/// ```no_run
+/// let conn = &self.conn;
+/// sql!(conn => {
+///     // use conn
+/// })
+/// ```
 macro_rules! sql {
     ($conn:ident => $b:block) => {
         Ok({
@@ -135,6 +188,7 @@ macro_rules! sql {
 }
 
 impl Cache {
+    /// Begins a new transaction in the database with `BEGIN TRANSACTION;`.
     pub fn begin_transaction(&self) -> anyhow::Result<()> {
         debug!("Beginning new cache transaction");
         Ok(self
@@ -144,11 +198,13 @@ impl Cache {
             .execute_batch("BEGIN TRANSACTION")?)
     }
 
+    /// Commits an ongoing transaction in the database with `COMMIT`;
     pub fn commit_transaction(&self) -> anyhow::Result<()> {
         debug!("Committing cache transaction");
         Ok(self.conn.lock().unwrap().execute_batch("COMMIT")?)
     }
 
+    /// Retrieves an optional meta value from the meta table with a given meta field.
     pub async fn get_meta(&self, field: CacheMetaField) -> anyhow::Result<Option<CacheMetaValue>> {
         let conn = &self.conn;
         sql!(conn => {
@@ -162,6 +218,7 @@ impl Cache {
         })
     }
 
+    /// Stores a meta value to the meta table.
     pub async fn set_meta(&self, value: CacheMetaValue) -> anyhow::Result<()> {
         let conn = &self.conn;
         sql!(conn => {
@@ -170,6 +227,7 @@ impl Cache {
         })
     }
 
+    /// Retrieves all stored games.
     pub async fn get_games(&self) -> anyhow::Result<Vec<Game>> {
         let conn = &self.conn;
         sql!(conn => {
@@ -186,6 +244,7 @@ impl Cache {
         })
     }
 
+    /// Retrieves all mods of a given game, identified by its cache ID.
     pub async fn get_mods_of_game(
         &self,
         game_cache_id: GameCacheId,
@@ -205,6 +264,7 @@ impl Cache {
         })
     }
 
+    /// Stores all the mods of a game. Will replace existing stored mods in the database.
     pub async fn set_mods_of_game(&self, mods: Vec<GameMod>) -> anyhow::Result<()> {
         let conn = &self.conn;
         sql!(conn => {
@@ -218,6 +278,7 @@ impl Cache {
         })
     }
 
+    /// Stores a new game.
     pub async fn insert_game(&self, new_game: Game) -> anyhow::Result<i64> {
         let conn = &self.conn;
         sql!(conn => {
@@ -228,6 +289,7 @@ impl Cache {
         })
     }
 
+    /// Updates an existing stored game.
     pub async fn update_game(&self, game: Game) -> anyhow::Result<()> {
         let conn = &self.conn;
         sql!(conn => {
@@ -240,6 +302,7 @@ impl Cache {
         })
     }
 
+    /// Retrieves an optional FactorioMod.
     pub async fn get_factorio_mod(
         &self,
         factorio_mod: String,
@@ -256,6 +319,7 @@ impl Cache {
         })
     }
 
+    /// Stores a single FactorioMod.
     pub async fn set_factorio_mod(&self, factorio_mod: models::FactorioMod) -> anyhow::Result<()> {
         let conn = &self.conn;
         sql!(conn => {
@@ -264,6 +328,7 @@ impl Cache {
         })
     }
 
+    /// Retrieves all releases of a FactorioMod.
     pub async fn get_mod_releases(&self, factorio_mod: String) -> anyhow::Result<Vec<ModRelease>> {
         let conn = &self.conn;
         sql!(conn => {
@@ -282,6 +347,7 @@ impl Cache {
         })
     }
 
+    /// Stores a single ModRelease.
     pub async fn set_mod_release(&self, release: ModRelease) -> anyhow::Result<()> {
         let conn = &self.conn;
         sql!(conn => {
@@ -290,6 +356,7 @@ impl Cache {
         })
     }
 
+    /// Retrieves all dependencies of a given ModRelease based on its mod's name and its version.
     pub async fn get_release_dependencies(
         &self,
         release_mod_name: String,
@@ -312,6 +379,7 @@ impl Cache {
         })
     }
 
+    /// Stores all given ReleaseDependencies.
     pub async fn set_release_dependencies(
         &self,
         dependencies: Vec<ReleaseDependency>,

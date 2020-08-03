@@ -51,7 +51,8 @@ impl Factorio {
             let new_id = self
                 .cache
                 .insert_game(models::Game {
-                    id: 0,
+                    id: 0, /* this ID is irrelevant as the actual ID will be dictated by the
+                            * database when inserting a new row */
                     path: self.root.get_str()?.to_string(),
                 })
                 .await?;
