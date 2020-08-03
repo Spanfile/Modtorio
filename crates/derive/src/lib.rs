@@ -112,22 +112,27 @@ fn run_macro(input: DeriveInput) -> Result<TokenStream, MacroError> {
         impl #ident {
             #params
 
+            /// Returns an SQL `SELECT`-clause that selects rows based on the model's marked indices.
             pub fn select() -> &'static str {
                 #select
             }
 
+            /// Returns an SQL `SELECT`-clause that selects all rows.
             pub fn select_all() -> &'static str {
                 #select_all
             }
 
+            /// Returns an SQL `REPLACE INTO`-clause that replaces a single row with all columns as values, except those marked with `#[ignore_in_all_params]`.
             pub fn replace_into() -> &'static str {
                 #replace_into
             }
 
+            /// Returns an SQL `INSERT INTO`-clause that inserts a single row with all columns as values, except those marked with `#[ignore_in_all_params]`.
             pub fn insert_into() -> &'static str {
                 #insert
             }
 
+            /// Returns an SQL `UPDATE`-clause that updates a single row with all columns as values except those marked with `#[ignore_in_all_params]`, selecting the row based on the model's marked indices.
             pub fn update() -> &'static str {
                 #update
             }
@@ -284,6 +289,7 @@ fn select_params_fn(fields: &[MacroField]) -> TokenStream {
     // to convert the unsized str object into the trait object (not gonna happen). I guess it'd be
     // possible to figure out a way to instead handle the special &str case but this is easier so...
     quote!(
+        /// Returns a vector of tuples consisting of a parameter name and its value based on the model's marked indices.
         #[allow(clippy::ptr_arg)]
         pub fn select_params<'a>(#(#fn_params),*) -> Vec<(&'static str, &'a dyn ::rusqlite::ToSql)> {
             vec![#(#sql_params),*]
@@ -306,6 +312,8 @@ fn all_params_fn(fields: &[MacroField]) -> TokenStream {
     }
 
     quote!(
+        /// Returns a vector of tuples consisting of a parameter name and its value based on each
+        /// field in the model. Fields marked with `#[ignore_in_all_params]` won't be returned.
         pub fn all_params<'a>(&'a self) -> Vec<(&'static str, &'a dyn ::rusqlite::ToSql)> {
             vec![#(#sql_params),*]
         }
