@@ -25,8 +25,8 @@ blake2 = "0.9.0"
 sha-1 = "0.9.1"
 hex = "0.4.2"
 thiserror = "1.0.20"
-# futures = "0.3.5"
 zip = "0.5.6"
+fern = "0.6.0"
 
 [dependencies.derive]
 path = "../derive"
@@ -34,13 +34,6 @@ path = "../derive"
 [dependencies.serde]
 version = "1.0.114"
 features = ["derive"]
-
-# [dependencies.zip]
-# git = "ssh://git@git.spans.me/Spanfile/zip-rs"
-
-[dependencies.fern]
-version = "0.6.0"
-features = ["colored"]
 
 [dependencies.reqwest]
 version = "0.10.6"
@@ -61,3 +54,8 @@ features = ["chrono"]
 [dependencies.digest]
 version = "0.9.0"
 features = ["alloc", "std"]
+
+[dependencies.clap]
+version = "3.0.0-beta.1"
+default-features = false
+features = ["std"]

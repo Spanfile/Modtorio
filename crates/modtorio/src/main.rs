@@ -10,6 +10,7 @@ mod log;
 mod mod_common;
 mod mod_portal;
 mod util;
+mod opts;
 
 use ::log::*;
 use cache::Cache;
@@ -17,6 +18,7 @@ use config::Config;
 use mod_portal::ModPortal;
 use std::sync::Arc;
 
+/// Location of the sample server used during development.
 const SAMPLE_GAME_DIRECTORY: &str = "./sample";
 
 #[tokio::main]

@@ -2,10 +2,7 @@
 
 use crate::config::Config;
 use chrono::Local;
-use fern::{
-    colors::{Color, ColoredLevelConfig},
-    Dispatch,
-};
+use fern::Dispatch;
 pub use log::{debug, error, info, trace, warn};
 
 /// The time format used in log messages.
@@ -13,10 +10,6 @@ const TIME_FORMAT: &str = "%y/%m/%d %H:%M:%S%.6f";
 
 /// Sets up the logging facade.
 pub fn setup_logging(config: &Config) -> anyhow::Result<()> {
-    let colors = ColoredLevelConfig::new()
-        .info(Color::Green)
-        .debug(Color::Magenta);
-
     Dispatch::new()
         .format(move |out, msg, record| {
             out.finish(format_args!(
@@ -24,7 +17,7 @@ pub fn setup_logging(config: &Config) -> anyhow::Result<()> {
                 // "[{}] [{}] {{{}}} {}",
                 // "[{} UTC] [{}] {}",
                 Local::now().format(TIME_FORMAT),
-                colors.color(record.level()),
+                record.level(),
                 // record.target(),
                 msg
             ))

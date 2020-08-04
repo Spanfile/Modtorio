@@ -1,4 +1,4 @@
-//! Provides the [`Config`](Config) object, a collection of configuration values for the program.
+//! The configuration framework for Modtorio.
 
 mod log_level;
 
