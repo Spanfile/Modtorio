@@ -1,24 +1,21 @@
 //! Provides functionality to set up a logging facade and print logging information for the program.
 
 use crate::config::Config;
-use chrono::Local;
 use fern::Dispatch;
 pub use log::{debug, error, info, trace, warn};
-
-/// The time format used in log messages.
-const TIME_FORMAT: &str = "%y/%m/%d %H:%M:%S%.6f";
+use std::time::Instant;
 
 /// Sets up the logging facade.
 pub fn setup_logging(config: &Config) -> anyhow::Result<()> {
+    let start = Instant::now();
     Dispatch::new()
         .format(move |out, msg, record| {
             out.finish(format_args!(
-                "[{}] [{}] {}",
-                // "[{}] [{}] {{{}}} {}",
+                "[{: >11.3}] [{: >5}] {}",
                 // "[{} UTC] [{}] {}",
-                Local::now().format(TIME_FORMAT),
+                // chrono::Utc::now().format(time_format),
+                start.elapsed().as_secs_f32(),
                 record.level(),
-                // record.target(),
                 msg
             ))
         })
