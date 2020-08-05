@@ -142,3 +142,9 @@ pub enum HumanVersionError {
     #[error("Missing version in requirement string: {0}")]
     MissingVersion(String),
 }
+
+#[derive(Debug, Error)]
+pub enum ConfigError {
+    #[error("Config file '{0}' does not exist")]
+    ConfigFileDoesNotExist(String),
+}

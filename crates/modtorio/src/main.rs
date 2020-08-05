@@ -1,5 +1,8 @@
 #![feature(drain_filter)]
 #![feature(async_closure)]
+#![warn(clippy::if_not_else)]
+#![warn(clippy::needless_pass_by_value)]
+// #![warn(clippy::pedantic)]
 
 mod cache;
 mod config;
@@ -9,25 +12,36 @@ mod factorio;
 mod log;
 mod mod_common;
 mod mod_portal;
-mod util;
 mod opts;
+mod util;
 
 use ::log::*;
 use cache::Cache;
 use config::Config;
 use mod_portal::ModPortal;
+use opts::Opts;
 use std::sync::Arc;
 
 /// Location of the sample server used during development.
 const SAMPLE_GAME_DIRECTORY: &str = "./sample";
 
+const VERSION: &str = env!("CARGO_PKG_VERSION");
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    dotenv::dotenv()?;
-    let config = Arc::new(Config::from_env()?);
+    let opts = Opts::get();
+    let config = Arc::new(Config::build(&opts)?);
 
     log::setup_logging(&config)?;
-    config.debug_values();
+    // config.debug_values();
+
+    debug!("{:?}", opts);
+    debug!("{:?}", util::dump_env_lines(config::APP_PREFIX));
+    debug!("{:?}", config);
+
+    log_program_information();
+
+    return Ok(());
 
     let cache = Arc::new(cache::Builder::new().build().await?);
     let portal = Arc::new(ModPortal::new(&config)?);
@@ -89,4 +103,8 @@ async fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn log_program_information() {
+    info!("Program version: {}", VERSION);
 }

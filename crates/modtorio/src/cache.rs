@@ -11,7 +11,7 @@
 mod cache_meta;
 pub mod models;
 
-use crate::{ext::PathExt, factorio::GameCacheId, util, util::HumanVersion};
+use crate::{config, ext::PathExt, factorio::GameCacheId, util, util::HumanVersion};
 pub use cache_meta::{Field, Value};
 use log::*;
 use models::*;
@@ -22,8 +22,6 @@ use std::{
 };
 use tokio::task;
 
-/// The default cache database file path.
-const DB_PATH: &str = "modtorio.db";
 /// The default cache database schema string.
 const SCHEMA: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema.sql"));
 
@@ -68,7 +66,7 @@ impl Builder {
     /// Returns a new Builder with each field filled with its default value.
     pub fn new() -> Self {
         Self {
-            db_path: PathBuf::from(DB_PATH),
+            db_path: PathBuf::from(config::DEFAULT_STORE_FILE_LOCATION),
             schema: String::from(SCHEMA),
         }
     }

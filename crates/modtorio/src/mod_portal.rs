@@ -47,8 +47,8 @@ impl ModPortal {
 
         Ok(Self {
             credentials: Credentials {
-                username: config.portal.username.clone(),
-                token: config.portal.token.clone(),
+                username: config.portal_username().to_owned(),
+                token: config.portal_token().to_owned(),
             },
             client,
         })

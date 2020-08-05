@@ -1,13 +1,21 @@
 use log::LevelFilter;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
+use strum_macros::{Display, EnumString, EnumVariantNames};
 
-#[derive(Debug, Deserialize, Eq, PartialEq)]
+#[derive(
+    Debug, Deserialize, Serialize, Eq, PartialEq, EnumString, Display, EnumVariantNames, Copy, Clone,
+)]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
+    #[strum(serialize = "trace")]
     Trace,
+    #[strum(serialize = "debug")]
     Debug,
+    #[strum(serialize = "info")]
     Info,
+    #[strum(serialize = "warn")]
     Warn,
+    #[strum(serialize = "error")]
     Error,
 }
 

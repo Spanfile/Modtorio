@@ -313,7 +313,7 @@ impl Mod {
         if let Some(cache_mod) = self.cache.get_factorio_mod(self.name().await).await? {
             let time_since_updated = Utc::now() - cache_mod.last_updated;
             let expired =
-                time_since_updated.to_std()? > Duration::from_secs(self.config.cache_expiry);
+                time_since_updated.to_std()? > Duration::from_secs(self.config.cache_expiry());
 
             trace!(
                 "Ensuring mod '{}' has portal info. Got cached mod: {:?}. Expired: {} (configured \
@@ -321,7 +321,7 @@ impl Mod {
                 self.name().await,
                 cache_mod,
                 expired,
-                self.config.cache_expiry,
+                self.config.cache_expiry(),
             );
 
             if !expired {

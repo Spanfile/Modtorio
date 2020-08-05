@@ -2,9 +2,11 @@
 
 pub mod checksum;
 mod human_version;
+mod log_level;
 
 use crate::ext::PathExt;
 pub use human_version::{Comparator, HumanVersion, HumanVersionReq};
+pub use log_level::LogLevel;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 

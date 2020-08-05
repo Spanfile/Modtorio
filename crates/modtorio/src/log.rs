@@ -19,7 +19,7 @@ pub fn setup_logging(config: &Config) -> anyhow::Result<()> {
                 msg
             ))
         })
-        .level(config.log.level.to_level_filter())
+        .level(config.log_level().to_level_filter())
         .level_for("hyper", log::LevelFilter::Info)
         .level_for("reqwest", log::LevelFilter::Info)
         .level_for("mio", log::LevelFilter::Info)
