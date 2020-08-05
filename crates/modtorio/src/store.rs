@@ -11,6 +11,7 @@ use tokio::task;
 
 /// The default store database schema string.
 const SCHEMA: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema.sql"));
+pub(crate) const MEMORY_STORE: &str = "_memory";
 
 pub struct Store {
     conn: Arc<Mutex<Connection>>,
@@ -24,8 +25,17 @@ impl Store {
         let encoded_checksum = util::checksum::blake2b_string(SCHEMA);
         trace!("Cache database schema checksum: {}", encoded_checksum);
 
-        let db_exists = opts.store.exists();
-        let conn = Connection::open(opts.store.get_str()?)?;
+        let store_location = opts.store.get_str()?;
+        let (store_file_exists, conn) = if store_location == MEMORY_STORE {
+            // when opening an in-memory database, it will initially be empty, i.e. it didn't exist
+            // beforehand
+            (false, Connection::open_in_memory()?)
+        } else {
+            (
+                opts.store.exists(),
+                Connection::open(opts.store.get_str()?)?,
+            )
+        };
         let conn = Arc::new(Mutex::new(conn));
 
         let cache = Cache {
@@ -33,12 +43,14 @@ impl Store {
         };
         let store = Store { conn, cache };
 
-        debug!("Cache database exists: {}", db_exists);
+        debug!("Using store location: {}", store_location);
+        debug!("Cache database exists: {}", store_file_exists);
 
-        let checksums_match = db_exists && checksum_matches_meta(&store, &encoded_checksum).await?;
+        let checksums_match =
+            store_file_exists && checksum_matches_meta(&store, &encoded_checksum).await?;
         debug!("Schema checksums match: {}", checksums_match);
 
-        if !db_exists || !checksums_match {
+        if !checksums_match {
             debug!("Applying database schema...");
             trace!("{}", SCHEMA);
 
@@ -62,6 +74,8 @@ impl Store {
 ///
 /// [Field]: store_meta::Field#variant.SchemaChecksum
 async fn checksum_matches_meta(store: &Store, wanted_checksum: &str) -> anyhow::Result<bool> {
+    // TODO: the checksum won't match if the _meta table doesn't exist - return false instead of the
+    // error
     if let Some(metavalue) = store.get_meta(store_meta::Field::SchemaChecksum).await? {
         if let Some(existing_checksum) = metavalue.value {
             trace!("Got existing schema checksum: {}", existing_checksum);

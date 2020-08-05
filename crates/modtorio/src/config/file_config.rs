@@ -5,9 +5,6 @@ use crate::{error::ConfigError, ext::PathExt, util::LogLevel};
 use serde::{Deserialize, Serialize};
 use std::{fs, path::Path};
 
-/// The default cache expiry time in seconds.
-const DEFAULT_CACHE_EXPIRY: u64 = 3600;
-
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct FileConfig {
     general: GeneralOptions,
@@ -62,7 +59,7 @@ impl FileConfig {
 impl Default for CacheOptions {
     fn default() -> Self {
         Self {
-            expiry: DEFAULT_CACHE_EXPIRY,
+            expiry: super::DEFAULT_CACHE_EXPIRY,
         }
     }
 }

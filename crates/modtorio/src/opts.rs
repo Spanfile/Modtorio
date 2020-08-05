@@ -34,7 +34,11 @@ impl Opts {
                     .long("store")
                     .value_name("FILE")
                     .default_value(config::DEFAULT_STORE_FILE_LOCATION)
-                    .help("Sets a custom program persistent store file")
+                    .help(
+                        "Sets a custom program persistent store file. The special value '_memory' \
+                         specifies an ephemeral in-memory store, which is primarily used for \
+                         debugging purposes.",
+                    )
                     .takes_value(true),
             )
             .arg(Arg::with_name("no-env").long("no-env").help(

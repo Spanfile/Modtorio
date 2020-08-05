@@ -14,6 +14,8 @@ use util::LogLevel;
 
 pub const DEFAULT_CONFIG_FILE_LOCATION: &str = "modtorio.toml";
 pub const DEFAULT_STORE_FILE_LOCATION: &str = "modtorio.db";
+/// The default cache expiry time in seconds.
+pub const DEFAULT_CACHE_EXPIRY: u64 = 3600;
 
 #[derive(Debug, Deserialize, Default)]
 pub struct Config {
@@ -89,64 +91,91 @@ impl Config {
     }
 }
 
-// #[cfg(test)]
-// mod tests {
-//     use super::*;
-//     use lazy_static::lazy_static;
-//     use std::{env, sync::Mutex};
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::ext::PathExt;
+    use lazy_static::lazy_static;
+    use std::{env, fs::File, io::Write, path::PathBuf, sync::Mutex};
+    use tempfile::Builder;
 
-//     // SO WHAT'S THIS THEN? when running tests with cargo, they all share the same set of
-//     // environment variables (cargo's) and cargo runs them all in parallel. this means the tests
-//     // *will* interfere with each other's environment variables. it'd be cool if each had their
-// own     // set but whatcha gonna do. SO TO FIX IT, you could just run all the test in series on a
-// single     // thread (cargo test -- --test-threads=1) but that fucks with other tests, slowing
-// things down.     // instead, all these tests lock this one dummy mutex when starting, and release
-// it when done,     // so these tests won't ever run in parallel but all other tests will.
-//     lazy_static! {
-//         static ref SERIAL_MUTEX: Mutex<()> = Mutex::new(());
-//     }
+    // when running tests with cargo, they all share the same set of environment variables (cargo's)
+    // and cargo runs them all in parallel. this means the tests *will* interfere with each other's
+    // environment variables. it'd be cool if each had their own set but whatcha gonna do. so to fix
+    // it, you could just run all the test in series on a single thread (cargo test --
+    // --test-threads=1) but that fucks with other tests, slowing things down. instead, all these
+    // tests lock this one dummy mutex when starting, and release it when done, so these tests won't
+    // ever run in parallel but all other tests will.
+    lazy_static! {
+        static ref SERIAL_MUTEX: Mutex<()> = Mutex::new(());
+    }
 
-//     const MODTORIO_LOG_LEVEL: &str = "MODTORIO_LOG_LEVEL";
-//     const MODTORIO_CACHE_EXPIRY: &str = "MODTORIO_CACHE_EXPIRY";
-//     const MODTORIO_PORTAL_USERNAME: &str = "MODTORIO_PORTAL_USERNAME";
-//     const MODTORIO_PORTAL_TOKEN: &str = "MODTORIO_PORTAL_TOKEN";
+    const MODTORIO_PORTAL_USERNAME: &str = "MODTORIO_PORTAL_USERNAME";
+    const MODTORIO_PORTAL_TOKEN: &str = "MODTORIO_PORTAL_TOKEN";
 
-//     #[test]
-//     fn config_from_env() {
-//         let _s = SERIAL_MUTEX.lock().expect("failed to lock serial mutex");
+    fn temp_config_file(contents: &str) -> (PathBuf, File) {
+        let named = Builder::new()
+            .prefix("modtorio")
+            .suffix(".conf")
+            .tempfile()
+            .expect("failed to open tempfile");
+        write!(&named, "{}", contents).expect("failed to write contents into tempfile");
+        (
+            named.path().to_path_buf(),
+            named.reopen().expect("failed to reopen tempfile"),
+        )
+    }
 
-//         env::set_var(MODTORIO_LOG_LEVEL, "trace");
-//         env::set_var(MODTORIO_CACHE_EXPIRY, "1");
-//         env::set_var(MODTORIO_PORTAL_USERNAME, "username");
-//         env::set_var(MODTORIO_PORTAL_TOKEN, "token");
+    #[tokio::test]
+    async fn full_config() {
+        let _s = SERIAL_MUTEX.lock().expect("failed to lock serial mutex");
 
-//         println!("{:?}", util::dump_env_lines(APP_PREFIX));
-//         let config = Config::from_env().unwrap();
-//         println!("{:?}", config);
+        let (conf_path, _f) = temp_config_file(
+            r#"
+            [general]
+            log_level = "trace"
+            [cache]
+            expiry = 1337
+        "#,
+        );
+        let opts = Opts::custom_args(&[
+            "modtorio",
+            "-c",
+            conf_path.get_str().expect("failed to get tempfile path"),
+            "--store",
+            crate::store::MEMORY_STORE,
+        ]);
+        let store = Store::build(&opts).await.unwrap();
 
-//         assert_eq!(config.log.level, LogLevel::Trace);
-//         assert_eq!(config.cache_expiry, 1);
-//         assert_eq!(config.portal.username, "username");
-//         assert_eq!(config.portal.token, "token");
-//     }
+        env::set_var(MODTORIO_PORTAL_USERNAME, "username");
+        env::set_var(MODTORIO_PORTAL_TOKEN, "token");
 
-//     #[test]
-//     fn default_config() {
-//         let _s = SERIAL_MUTEX.lock().expect("failed to lock serial mutex");
+        println!("{:?}", util::env::dump_lines(crate::APP_PREFIX));
+        let config = Config::build(&opts, &store).await.unwrap();
+        println!("{:?}", config);
 
-//         // expliclitly unset variables we're expecting aren't set to make sure any values from
-// other         // tests aren't carried over
-//         env::remove_var(MODTORIO_LOG_LEVEL);
-//         env::remove_var(MODTORIO_CACHE_EXPIRY);
+        assert_eq!(config.portal_username, "username");
+        assert_eq!(config.portal_token, "token");
+        assert_eq!(config.log_level, LogLevel::Trace);
+        assert_eq!(config.cache_expiry, 1337);
+    }
 
-//         env::set_var(MODTORIO_PORTAL_USERNAME, "value not needed in test");
-//         env::set_var(MODTORIO_PORTAL_TOKEN, "value not needed in test");
+    // #[tokio::test]
+    // async fn default_config() {
+    //     let _s = SERIAL_MUTEX.lock().expect("failed to lock serial mutex");
 
-//         println!("{:?}", util::dump_env_lines(APP_PREFIX));
-//         let config = Config::from_env().unwrap();
-//         println!("{:?}", config);
+    //     let opts = Opts::custom_args(&["--store", crate::store::MEMORY_STORE]);
+    //     let store = Store::build(&opts).await.unwrap();
 
-//         assert_eq!(config.cache_expiry, default_cache_expiry());
-//         assert_eq!(config.log.level, LogLevel::default());
-//     }
-// }
+    //     // remove variables possibly left over from other tests
+    //     env::remove_var(MODTORIO_PORTAL_USERNAME);
+    //     env::remove_var(MODTORIO_PORTAL_TOKEN);
+
+    //     println!("{:?}", util::env::dump_lines(crate::APP_PREFIX));
+    //     let config = Config::build(&opts, &store).await.unwrap();
+    //     println!("{:?}", config);
+
+    //     assert_eq!(config.cache_expiry, DEFAULT_CACHE_EXPIRY);
+    //     assert_eq!(config.log_level, LogLevel::default());
+    // }
+}
