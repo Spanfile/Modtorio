@@ -19,6 +19,7 @@ pub struct Store {
 
 impl Store {
     pub async fn build(opts: &Opts) -> anyhow::Result<Store> {
+        // TODO: since the schema is static, just calculate the checksum at build-time
         let encoded_checksum = util::checksum::blake2b_string(SCHEMA);
         trace!("Cache database schema checksum: {}", encoded_checksum);
 

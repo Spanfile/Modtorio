@@ -41,10 +41,12 @@ async fn main() -> anyhow::Result<()> {
     // config.debug_values();
 
     debug!("{:?}", opts);
-    debug!("{:?}", util::env::dump_lines(APP_PREFIX));
+    debug!("Env {:?}", util::env::dump_lines(APP_PREFIX));
     debug!("{:?}", config);
 
-    update_store_from_env(&store).await?;
+    if !opts.no_env {
+        update_store_from_env(&store).await?;
+    }
     log_program_information();
 
     return Ok(());

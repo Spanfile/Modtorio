@@ -10,6 +10,7 @@ use std::path::PathBuf;
 pub struct Opts {
     pub config: PathBuf,
     pub store: PathBuf,
+    pub no_env: bool,
 }
 
 impl Opts {
@@ -36,6 +37,10 @@ impl Opts {
                     .help("Sets a custom program persistent store file")
                     .takes_value(true),
             )
+            .arg(Arg::with_name("no-env").long("no-env").help(
+                "Skip loading configuration values from the environment variables. Primarily used \
+                 for debugging purposes.",
+            ))
     }
 
     /// Returns a new `Opts` object from a given set of matched command line parameters.
@@ -49,6 +54,7 @@ impl Opts {
                 .value_of_os("store")
                 .expect("store option has no value")
                 .into(),
+            no_env: matches.is_present("no-env"),
         }
     }
 

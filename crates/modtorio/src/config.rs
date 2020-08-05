@@ -81,8 +81,12 @@ impl Config {
         let store = Config::get_store_config(store).await?;
         let config = store.apply_to_config(config);
 
-        let env = Config::get_env_config()?;
-        let config = env.apply_to_config(config);
+        let config = if opts.no_env {
+            config
+        } else {
+            let env = Config::get_env_config()?;
+            env.apply_to_config(config)
+        };
 
         Ok(config)
     }
