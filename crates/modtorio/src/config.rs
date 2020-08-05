@@ -4,11 +4,11 @@ mod env_config;
 mod file_config;
 mod store_config;
 
-use crate::{error::ConfigError, opts::Opts, store::Store, util};
+use crate::{store::Store, util};
 use env_config::EnvConfig;
 use file_config::FileConfig;
 use serde::Deserialize;
-use std::path::Path;
+use std::io::Read;
 use store_config::StoreConfig;
 use util::LogLevel;
 
@@ -25,21 +25,14 @@ pub struct Config {
     cache_expiry: u64,
 }
 
-impl Config {
-    fn get_file_config<P>(path: P) -> anyhow::Result<FileConfig>
-    where
-        P: AsRef<Path>,
-    {
-        match FileConfig::from_config_file(path.as_ref()) {
-            Ok(file) => Ok(file),
-            Err(e) => {
-                if let Some(ConfigError::ConfigFileDoesNotExist(_)) = e.downcast_ref() {
-                    FileConfig::new_config_file(path.as_ref())?;
-                    FileConfig::from_config_file(path.as_ref())
-                } else {
-                    Err(e)
-                }
-            }
+pub struct Builder {
+    config: Config,
+}
+
+impl Builder {
+    pub fn new() -> Builder {
+        Builder {
+            config: Config::default(),
         }
     }
 
@@ -51,29 +44,36 @@ impl Config {
         Ok(EnvConfig::from_env()?)
     }
 
-    async fn get_store_config(store: &Store) -> anyhow::Result<StoreConfig> {
-        Ok(StoreConfig::from_store(store).await?)
+    pub fn with_config_file<R>(self, file: &mut R) -> anyhow::Result<Self>
+    where
+        R: Read,
+    {
+        let file_config = FileConfig::from_file(file)?;
+        Ok(Builder {
+            config: file_config.apply_to_config(self.config),
+        })
     }
 
-    pub async fn build(opts: &Opts, store: &Store) -> anyhow::Result<Self> {
-        let config = Config::default();
-
-        let file = Config::get_file_config(&opts.config)?;
-        let config = file.apply_to_config(config);
-
-        let store = Config::get_store_config(store).await?;
-        let config = store.apply_to_config(config);
-
-        let config = if opts.no_env {
-            config
-        } else {
-            let env = Config::get_env_config()?;
-            env.apply_to_config(config)
-        };
-
-        Ok(config)
+    pub fn with_env(self) -> anyhow::Result<Self> {
+        let env_config = Builder::get_env_config()?;
+        Ok(Builder {
+            config: env_config.apply_to_config(self.config),
+        })
     }
 
+    pub async fn with_store(self, store: &Store) -> anyhow::Result<Self> {
+        let store_config = StoreConfig::from_store(store).await?;
+        Ok(Builder {
+            config: store_config.apply_to_config(self.config),
+        })
+    }
+
+    pub fn build(self) -> Config {
+        self.config
+    }
+}
+
+impl Config {
     pub fn log_level(&self) -> LogLevel {
         self.log_level
     }
