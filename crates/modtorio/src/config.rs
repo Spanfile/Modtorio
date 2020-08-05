@@ -24,26 +24,6 @@ pub struct Config {
 }
 
 impl Config {
-    // /// Builds a new `Config` object from the current environment variables prefixed by
-    // /// [`APP_PREFIX`](./constant.APP_PREFIX.html). Returns an error if the config object fails
-    // to /// be deserialized from the environment variables.
-    // pub fn from_env() -> anyhow::Result<Config> {
-    //     Ok(envy::prefixed(APP_PREFIX)
-    //         .from_env::<Config>()
-    //         .with_context(|| {
-    //             format!(
-    //                 "Failed to load config from environment variables:\n{}",
-    //                 util::dump_env(APP_PREFIX)
-    //             )
-    //         })?)
-    // }
-
-    // /// Prints debug information about the environment variables and self.
-    // pub fn debug_values(&self) {
-    //     debug!("{:?}", util::dump_env_lines(APP_PREFIX));
-    //     debug!("{:?}", self);
-    // }
-
     fn get_file_config<P>(path: P) -> anyhow::Result<FileConfig>
     where
         P: AsRef<Path>,
@@ -52,7 +32,8 @@ impl Config {
             Ok(file) => Ok(file),
             Err(e) => {
                 if let Some(ConfigError::ConfigFileDoesNotExist(_)) = e.downcast_ref() {
-                    FileConfig::new_config_file(path.as_ref())
+                    FileConfig::new_config_file(path.as_ref())?;
+                    FileConfig::from_config_file(path.as_ref())
                 } else {
                     Err(e)
                 }
