@@ -4,12 +4,12 @@ use anyhow::Context;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize, Default)]
-pub struct Env {
+pub struct EnvConfig {
     pub portal_username: String,
     pub portal_token: String,
 }
 
-impl Env {
+impl EnvConfig {
     pub fn from_env() -> anyhow::Result<Self> {
         Ok(envy::prefixed(APP_PREFIX)
             .from_env::<Self>()

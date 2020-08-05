@@ -9,7 +9,7 @@ use std::{fs, path::Path};
 const DEFAULT_CACHE_EXPIRY: u64 = 3600;
 
 #[derive(Debug, Deserialize, Serialize, Default)]
-pub struct File {
+pub struct FileConfig {
     general: GeneralOptions,
     cache: CacheOptions,
 }
@@ -24,7 +24,7 @@ pub struct CacheOptions {
     expiry: u64,
 }
 
-impl File {
+impl FileConfig {
     /// Attempts to create a new `File` object from a given path to a config file.
     ///
     /// Returns [`ConfigError::ConfigFileDoesNotExist`](crate::error::ConfigError::

@@ -1,14 +1,15 @@
 //! The configuration framework for Modtorio.
 
-mod env;
-mod file;
+mod env_config;
+mod file_config;
+mod store_config;
 
-use crate::{error::ConfigError, opts::Opts, util};
-use env::Env;
-use file::File;
-use log::*;
+use crate::{error::ConfigError, opts::Opts, store::Store, util};
+use env_config::EnvConfig;
+use file_config::FileConfig;
 use serde::Deserialize;
 use std::path::Path;
+use store_config::StoreConfig;
 use util::LogLevel;
 
 /// The prefix used with every environment value related to the program configuration.
@@ -45,15 +46,15 @@ impl Config {
     //     debug!("{:?}", self);
     // }
 
-    fn get_file<P>(path: P) -> anyhow::Result<File>
+    fn get_file_config<P>(path: P) -> anyhow::Result<FileConfig>
     where
         P: AsRef<Path>,
     {
-        match File::from_config_file(path.as_ref()) {
+        match FileConfig::from_config_file(path.as_ref()) {
             Ok(file) => Ok(file),
             Err(e) => {
                 if let Some(ConfigError::ConfigFileDoesNotExist(_)) = e.downcast_ref() {
-                    File::new_config_file(path.as_ref())
+                    FileConfig::new_config_file(path.as_ref())
                 } else {
                     Err(e)
                 }
@@ -61,21 +62,28 @@ impl Config {
         }
     }
 
-    fn get_env() -> anyhow::Result<Env> {
+    fn get_env_config() -> anyhow::Result<EnvConfig> {
         if cfg!(debug_assertions) {
             dotenv::dotenv()?;
         }
 
-        Ok(Env::from_env()?)
+        Ok(EnvConfig::from_env()?)
     }
 
-    pub fn build(opts: &Opts) -> anyhow::Result<Self> {
+    async fn get_store_config(store: &Store) -> anyhow::Result<StoreConfig> {
+        Ok(StoreConfig::from_store(store).await?)
+    }
+
+    pub async fn build(opts: &Opts, store: &Store) -> anyhow::Result<Self> {
         let config = Config::default();
 
-        let file = Config::get_file(&opts.config)?;
+        let file = Config::get_file_config(&opts.config)?;
         let config = file.apply_to_config(config);
 
-        let env = Config::get_env()?;
+        let store = Config::get_store_config(store).await?;
+        let config = store.apply_to_config(config);
+
+        let env = Config::get_env_config()?;
         let config = env.apply_to_config(config);
 
         Ok(config)

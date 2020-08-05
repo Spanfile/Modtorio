@@ -1,15 +1,12 @@
 pub mod cache;
-mod store_meta;
+pub mod option;
+pub mod store_meta;
 
-use crate::{config, ext::PathExt, util};
+use crate::{ext::PathExt, opts::Opts, util};
 pub use cache::Cache;
 use log::*;
 use rusqlite::{Connection, OptionalExtension};
-use std::{
-    path::{Path, PathBuf},
-    sync::{Arc, Mutex},
-};
-use store_meta::{Field, Value};
+use std::sync::{Arc, Mutex};
 use tokio::task;
 
 /// The default store database schema string.
@@ -20,52 +17,13 @@ pub struct Store {
     pub cache: Cache,
 }
 
-pub struct Builder {
-    store_path: PathBuf,
-    schema: String,
-}
-
-impl Builder {
-    /// Returns a new Builder with each field filled with its default value.
-    pub fn new() -> Self {
-        Self {
-            store_path: PathBuf::from(config::DEFAULT_STORE_FILE_LOCATION),
-            schema: String::from(SCHEMA),
-        }
-    }
-
-    /// Specify a custom filesystem path used to store the database file.
-    #[allow(dead_code)]
-    pub fn with_db_path<P>(self, path: P) -> Self
-    where
-        P: AsRef<Path>,
-    {
-        Self {
-            store_path: PathBuf::from(path.as_ref()),
-            ..self
-        }
-    }
-
-    /// Specify a custom schema used to build the database.
-    #[allow(dead_code)]
-    pub fn with_schema(self, schema: String) -> Self {
-        Self { schema, ..self }
-    }
-
-    /// Finalise the builder and return the built store object.
-    ///
-    /// During building the schema's checksum will be calculated and, if the store database already
-    /// exists in the filesystem, compared against the existing stored checksum. If there's a
-    /// mismatch, the schema will be applied over the existing database, deleting all data
-    /// inside it. The new schema checksum will be then stored in the store [metadata].
-    ///
-    /// [metadata]: store_meta
-    pub async fn build(self) -> anyhow::Result<Store> {
-        let encoded_checksum = util::checksum::blake2b_string(&self.schema);
+impl Store {
+    pub async fn build(opts: &Opts) -> anyhow::Result<Store> {
+        let encoded_checksum = util::checksum::blake2b_string(SCHEMA);
         trace!("Cache database schema checksum: {}", encoded_checksum);
 
-        let db_exists = self.store_path.exists();
-        let conn = Connection::open(self.store_path.get_str()?)?;
+        let db_exists = opts.store.exists();
+        let conn = Connection::open(opts.store.get_str()?)?;
         let conn = Arc::new(Mutex::new(conn));
 
         let cache = Cache {
@@ -80,12 +38,12 @@ impl Builder {
 
         if !db_exists || !checksums_match {
             debug!("Applying database schema...");
-            trace!("{}", self.schema);
+            trace!("{}", SCHEMA);
 
-            store.apply_schema(self.schema).await?;
+            store.apply_schema(SCHEMA).await?;
             store
-                .set_meta(Value {
-                    field: Field::SchemaChecksum,
+                .set_meta(store_meta::Value {
+                    field: store_meta::Field::SchemaChecksum,
                     value: Some(encoded_checksum),
                 })
                 .await?;
@@ -102,7 +60,7 @@ impl Builder {
 ///
 /// [Field]: store_meta::Field#variant.SchemaChecksum
 async fn checksum_matches_meta(store: &Store, wanted_checksum: &str) -> anyhow::Result<bool> {
-    if let Some(metavalue) = store.get_meta(Field::SchemaChecksum).await? {
+    if let Some(metavalue) = store.get_meta(store_meta::Field::SchemaChecksum).await? {
         if let Some(existing_checksum) = metavalue.value {
             trace!("Got existing schema checksum: {}", existing_checksum);
             return Ok(wanted_checksum == existing_checksum);
@@ -138,8 +96,9 @@ macro_rules! sql {
 
 impl Store {
     /// Applies a given schema to the database.
-    async fn apply_schema(&self, schema: String) -> anyhow::Result<()> {
+    async fn apply_schema(&self, schema: &str) -> anyhow::Result<()> {
         let conn = Arc::clone(&self.conn);
+        let schema = String::from(schema);
         let result = task::spawn_blocking(move || -> anyhow::Result<()> {
             conn.lock()
                 .unwrap()
@@ -168,13 +127,16 @@ impl Store {
     }
 
     /// Retrieves an optional meta value from the meta table with a given meta field.
-    pub async fn get_meta(&self, field: Field) -> anyhow::Result<Option<Value>> {
+    pub async fn get_meta(
+        &self,
+        field: store_meta::Field,
+    ) -> anyhow::Result<Option<store_meta::Value>> {
         let conn = &self.conn;
         sql!(conn => {
-            let mut stmt = conn.prepare(Value::select())?;
+            let mut stmt = conn.prepare(store_meta::Value::select())?;
 
             Ok(stmt
-                .query_row_named(&Value::select_params(&field), |row| {
+                .query_row_named(&store_meta::Value::select_params(&field), |row| {
                     Ok(row.into())
                 })
                 .optional()?)
@@ -182,10 +144,33 @@ impl Store {
     }
 
     /// Stores a meta value to the meta table.
-    pub async fn set_meta(&self, value: Value) -> anyhow::Result<()> {
+    pub async fn set_meta(&self, value: store_meta::Value) -> anyhow::Result<()> {
         let conn = &self.conn;
         sql!(conn => {
-            conn.execute_named(Value::replace_into(), &value.all_params())?;
+            conn.execute_named(store_meta::Value::replace_into(), &value.all_params())?;
+            Ok(())
+        })
+    }
+
+    /// Retrieves an option value from the option table with a given option field.
+    pub async fn get_option(&self, field: option::Field) -> anyhow::Result<Option<option::Value>> {
+        let conn = &self.conn;
+        sql!(conn => {
+            let mut stmt = conn.prepare(option::Value::select())?;
+
+            Ok(stmt
+                .query_row_named(&option::Value::select_params(&field), |row| {
+                    Ok(row.into())
+                })
+                .optional()?)
+        })
+    }
+
+    /// Stores an option value to the options table.
+    pub async fn set_option(&self, value: option::Value) -> anyhow::Result<()> {
+        let conn = &self.conn;
+        sql!(conn => {
+            conn.execute_named(option::Value::replace_into(), &value.all_params())?;
             Ok(())
         })
     }

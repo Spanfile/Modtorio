@@ -5,6 +5,13 @@ CREATE TABLE IF NOT EXISTS "_meta" (
 	PRIMARY KEY("field")
 );
 
+DROP TABLE IF EXISTS "options";
+CREATE TABLE IF NOT EXISTS "options" (
+	"field" TEXT NOT NULL,
+	"value" TEXT,
+	PRIMARY KEY("field")
+);
+
 DROP TABLE IF EXISTS "factorio_mod";
 CREATE TABLE IF NOT EXISTS "factorio_mod" (
 	"name"	TEXT NOT NULL,

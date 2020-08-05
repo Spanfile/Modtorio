@@ -20,6 +20,7 @@ use config::Config;
 use mod_portal::ModPortal;
 use opts::Opts;
 use std::sync::Arc;
+use store::Store;
 
 /// Location of the sample server used during development.
 const SAMPLE_GAME_DIRECTORY: &str = "./sample";
@@ -29,7 +30,8 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let opts = Opts::get();
-    let config = Arc::new(Config::build(&opts)?);
+    let store = Arc::new(Store::build(&opts).await?);
+    let config = Arc::new(Config::build(&opts, &store).await?);
 
     log::setup_logging(&config)?;
     // config.debug_values();
@@ -40,9 +42,6 @@ async fn main() -> anyhow::Result<()> {
 
     log_program_information();
 
-    return Ok(());
-
-    let store = Arc::new(store::Builder::new().build().await?);
     let portal = Arc::new(ModPortal::new(&config)?);
 
     // let factorio = Arc::new(
