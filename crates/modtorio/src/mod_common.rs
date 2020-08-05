@@ -4,10 +4,10 @@ mod dependency;
 mod info;
 
 use crate::{
-    cache::models,
     error::ModError,
+    store::{cache::models, Store},
     util::{self, HumanVersion},
-    Cache, Config, ModPortal,
+    Config, ModPortal,
 };
 use bytesize::ByteSize;
 use chrono::Utc;
@@ -32,7 +32,7 @@ pub struct Mod {
     info: Mutex<Info>,
     config: Arc<Config>,
     portal: Arc<ModPortal>,
-    cache: Arc<Cache>,
+    store: Arc<Store>,
     zip_path: Arc<Mutex<Option<PathBuf>>>,
     zip_checksum: Arc<Mutex<Option<String>>>,
 }
@@ -135,18 +135,19 @@ impl Mod {
         mods_root_path: P,
         config: Arc<Config>,
         portal: Arc<ModPortal>,
-        cache: Arc<Cache>,
+        store: Arc<Store>,
     ) -> anyhow::Result<Mod>
     where
         P: AsRef<Path>,
     {
         debug!("Creating mod from cached: {:?}", game_mod);
-        let factorio_mod = cache
+        let factorio_mod = store
+            .cache
             .get_factorio_mod(game_mod.factorio_mod.clone())
             .await?
             .ok_or(ModError::ModNotInCache)?;
         let info =
-            Mutex::new(Info::from_cache(factorio_mod, game_mod.mod_version, cache.as_ref()).await?);
+            Mutex::new(Info::from_cache(factorio_mod, game_mod.mod_version, store.as_ref()).await?);
 
         debug!(
             "Verifying mod '{}' zip ({}) against cache...",
@@ -160,7 +161,7 @@ impl Mod {
             info,
             config,
             portal,
-            cache,
+            store,
             zip_path: Arc::new(Mutex::new(Some(zip_path))),
             zip_checksum: Arc::new(Mutex::new(Some(game_mod.zip_checksum.clone()))),
         })
@@ -170,7 +171,7 @@ impl Mod {
         path: P,
         config: Arc<Config>,
         portal: Arc<ModPortal>,
-        cache: Arc<Cache>,
+        store: Arc<Store>,
     ) -> anyhow::Result<Mod>
     where
         P: AsRef<Path>,
@@ -183,7 +184,7 @@ impl Mod {
             info,
             config,
             portal,
-            cache,
+            store,
             zip_path: Arc::new(Mutex::new(Some(path.as_ref().to_owned()))),
             zip_checksum: Arc::new(Mutex::new(Some(zip_checksum))),
         })
@@ -193,7 +194,7 @@ impl Mod {
         name: &str,
         config: Arc<Config>,
         portal: Arc<ModPortal>,
-        cache: Arc<Cache>,
+        store: Arc<Store>,
     ) -> anyhow::Result<Mod> {
         debug!("Creating mod from portal: '{}'", name);
         let info = Mutex::new(Info::from_portal(name, portal.as_ref()).await?);
@@ -202,7 +203,7 @@ impl Mod {
             info,
             config,
             portal,
-            cache,
+            store,
             zip_path: Arc::new(Mutex::new(None)),
             zip_checksum: Arc::new(Mutex::new(None)),
         })
@@ -243,7 +244,7 @@ impl Mod {
         };
 
         // trace!("'{}' cached mod: {:?}", self.name().await, new_factorio_mod);
-        self.cache.set_factorio_mod(new_factorio_mod).await?;
+        self.store.cache.set_factorio_mod(new_factorio_mod).await?;
 
         for release in self.releases().await? {
             let new_mod_release = models::ModRelease {
@@ -260,7 +261,7 @@ impl Mod {
             //     release.version(),
             //     new_mod_release
             // );
-            self.cache.set_mod_release(new_mod_release).await?;
+            self.store.cache.set_mod_release(new_mod_release).await?;
 
             let mut new_release_dependencies = Vec::new();
             for dependency in release.dependencies() {
@@ -279,7 +280,8 @@ impl Mod {
             //     release.version(),
             //     new_release_dependencies
             // );
-            self.cache
+            self.store
+                .cache
                 .set_release_dependencies(new_release_dependencies)
                 .await?;
         }
@@ -302,7 +304,7 @@ impl Mod {
         trace!("Fetcing cache info for '{}'", self.name().await);
 
         let mut info = self.info.lock().await;
-        info.populate_from_cache(self.cache.as_ref()).await
+        info.populate_from_cache(self.store.as_ref()).await
     }
 
     /// Load the potentially missing portal info by first reading it from cache, and then fetching
@@ -310,7 +312,7 @@ impl Mod {
     pub async fn ensure_portal_info(&self) -> anyhow::Result<()> {
         trace!("Ensuring info for '{}'", self.name().await);
 
-        if let Some(cache_mod) = self.cache.get_factorio_mod(self.name().await).await? {
+        if let Some(cache_mod) = self.store.cache.get_factorio_mod(self.name().await).await? {
             let time_since_updated = Utc::now() - cache_mod.last_updated;
             let expired =
                 time_since_updated.to_std()? > Duration::from_secs(self.config.cache_expiry());
@@ -326,7 +328,7 @@ impl Mod {
 
             if !expired {
                 let mut info = self.info.lock().await;
-                info.populate_with_cache_object(self.cache.as_ref(), cache_mod)
+                info.populate_with_cache_object(self.store.as_ref(), cache_mod)
                     .await?;
 
                 return Ok(());

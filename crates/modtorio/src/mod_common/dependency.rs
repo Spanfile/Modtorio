@@ -1,7 +1,7 @@
 //! Provides the [`Dependency`](Dependency) object which is used to model a [`Mod`](super::Mod)'s
 //! depdendency on another mod.
 
-use crate::{cache, error::DependencyParsingError, util::HumanVersionReq};
+use crate::{error::DependencyParsingError, store::cache, util::HumanVersionReq};
 use lazy_static::lazy_static;
 use regex::Regex;
 use rusqlite::{

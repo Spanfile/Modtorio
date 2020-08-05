@@ -4,7 +4,11 @@
 mod mods;
 mod settings;
 
-use crate::{cache::models, ext::PathExt, Cache, Config, ModPortal};
+use crate::{
+    ext::PathExt,
+    store::{cache::models, Store},
+    Config, ModPortal,
+};
 use log::*;
 use mods::{Mods, ModsBuilder};
 use settings::ServerSettings;
@@ -33,7 +37,7 @@ pub struct Factorio {
     pub mods: Mods,
     root: PathBuf,
     cache_id: Mutex<Option<GameCacheId>>,
-    cache: Arc<Cache>,
+    store: Arc<Store>,
 }
 
 /// Builds a new instance of a [`Factorio`](Factorio) server by importing its information from the
@@ -49,10 +53,11 @@ impl Factorio {
     pub async fn update_cache(&self) -> anyhow::Result<()> {
         let mut cache_id = self.cache_id.lock().await;
 
-        self.cache.begin_transaction()?;
+        self.store.begin_transaction()?;
 
         let id = if let Some(c) = *cache_id {
-            self.cache
+            self.store
+                .cache
                 .update_game(models::Game {
                     id: c,
                     path: self.root.get_str()?.to_string(),
@@ -63,6 +68,7 @@ impl Factorio {
             c
         } else {
             let new_id = self
+                .store
                 .cache
                 .insert_game(models::Game {
                     id: 0, /* this ID is irrelevant as the actual ID will be dictated by the
@@ -77,7 +83,7 @@ impl Factorio {
         };
 
         self.mods.update_cache(id).await?;
-        self.cache.commit_transaction()?;
+        self.store.commit_transaction()?;
 
         info!("Game ID {} cached updated", id);
         Ok(())
@@ -124,7 +130,7 @@ impl Importer {
         self,
         config: Arc<Config>,
         portal: Arc<ModPortal>,
-        cache: Arc<Cache>,
+        store: Arc<Store>,
     ) -> anyhow::Result<Factorio> {
         let mut settings_path = self.root.clone();
         settings_path.push(self.settings);
@@ -139,10 +145,10 @@ impl Importer {
 
         Ok(Factorio {
             settings: ServerSettings::from_game_json(&fs::read_to_string(settings_path)?)?,
-            mods: mods.build(config, portal, Arc::clone(&cache)).await?,
+            mods: mods.build(config, portal, Arc::clone(&store)).await?,
             root: self.root,
             cache_id: Mutex::new(self.game_cache_id),
-            cache,
+            store,
         })
     }
 }

@@ -4,7 +4,6 @@
 #![warn(clippy::needless_pass_by_value)]
 // #![warn(clippy::pedantic)]
 
-mod cache;
 mod config;
 mod error;
 mod ext;
@@ -13,10 +12,10 @@ mod log;
 mod mod_common;
 mod mod_portal;
 mod opts;
+mod store;
 mod util;
 
 use ::log::*;
-use cache::Cache;
 use config::Config;
 use mod_portal::ModPortal;
 use opts::Opts;
@@ -43,7 +42,7 @@ async fn main() -> anyhow::Result<()> {
 
     return Ok(());
 
-    let cache = Arc::new(cache::Builder::new().build().await?);
+    let store = Arc::new(store::Builder::new().build().await?);
     let portal = Arc::new(ModPortal::new(&config)?);
 
     // let factorio = Arc::new(
@@ -52,7 +51,7 @@ async fn main() -> anyhow::Result<()> {
     //         .await?,
     // );
 
-    let cached_games = cache.get_games().await?;
+    let cached_games = store.cache.get_games().await?;
     let mut games = Vec::new();
     debug!("Got cached games: {:?}", cached_games);
 
@@ -63,7 +62,7 @@ async fn main() -> anyhow::Result<()> {
         );
 
         let game = factorio::Importer::from_cache(cached_game)
-            .import(Arc::clone(&config), Arc::clone(&portal), Arc::clone(&cache))
+            .import(Arc::clone(&config), Arc::clone(&portal), Arc::clone(&store))
             .await?;
 
         info!(
@@ -84,7 +83,7 @@ async fn main() -> anyhow::Result<()> {
 
         games.push(
             factorio::Importer::from_root(SAMPLE_GAME_DIRECTORY)
-                .import(Arc::clone(&config), Arc::clone(&portal), Arc::clone(&cache))
+                .import(Arc::clone(&config), Arc::clone(&portal), Arc::clone(&store))
                 .await?,
         );
     }

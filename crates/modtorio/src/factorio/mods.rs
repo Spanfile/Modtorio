@@ -5,12 +5,12 @@ mod mods_builder;
 
 use super::GameCacheId;
 use crate::{
-    cache::models,
     error::ModError,
     ext::PathExt,
     mod_common::{DownloadResult, Mod, Requirement},
+    store::{cache::models, Store},
     util::HumanVersion,
-    Cache, Config, ModPortal,
+    Config, ModPortal,
 };
 pub use mods_builder::ModsBuilder;
 
@@ -28,7 +28,7 @@ pub struct Mods {
     mods: HashMap<String, Arc<Mod>>,
     config: Arc<Config>,
     portal: Arc<ModPortal>,
-    cache: Arc<Cache>,
+    store: Arc<Store>,
 }
 
 impl Mods {
@@ -82,7 +82,8 @@ impl Mods {
             info!("Updated cache for {}", mod_display);
         }
 
-        self.cache
+        self.store
+            .cache
             .set_mods_of_game(new_game_mods.into_inner())
             .await?;
         info!("Updated game ID {}'s cached mods", game_id);
@@ -243,7 +244,7 @@ impl Mods {
                         name,
                         Arc::clone(&self.config),
                         Arc::clone(&self.portal),
-                        Arc::clone(&self.cache),
+                        Arc::clone(&self.store),
                     )
                     .await?,
                 );

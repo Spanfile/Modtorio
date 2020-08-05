@@ -1,5 +1,5 @@
-//! Program cache meta information. Used to store metadata about the program and cache itself with a
-//! [`Value`].
+//! Program store meta information. Used to store metadata about the program and the program store
+//! itself with a [`Value`].
 //!
 //! [Value]: Value
 
@@ -27,7 +27,7 @@ pub enum Field {
     SchemaChecksum,
 }
 
-/// A meta value for the program cache. Consists of a field identifier and an
+/// A meta value for the program store. Consists of a field identifier and an
 /// optional `String` value. Derives `Model` with the table name `_meta`.
 #[derive(Debug, Model)]
 #[table_name = "_meta"]

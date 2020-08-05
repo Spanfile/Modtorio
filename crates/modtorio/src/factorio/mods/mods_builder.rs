@@ -3,8 +3,8 @@
 
 use super::Mods;
 use crate::{
-    cache::Cache, config::Config, error::ModError, ext::PathExt, factorio::GameCacheId,
-    mod_common::Mod, mod_portal::ModPortal, util,
+    config::Config, error::ModError, ext::PathExt, factorio::GameCacheId, mod_common::Mod,
+    mod_portal::ModPortal, store::Store, util,
 };
 use log::*;
 use std::{
@@ -48,10 +48,10 @@ impl<'a> ModsBuilder {
         game_cache_id: GameCacheId,
         config: Arc<Config>,
         portal: Arc<ModPortal>,
-        cache: Arc<Cache>,
+        store: Arc<Store>,
     ) -> anyhow::Result<Vec<Mod>> {
         trace!("Building mods for cached game ID {}", game_cache_id);
-        let mods = cache.get_mods_of_game(game_cache_id).await?;
+        let mods = store.cache.get_mods_of_game(game_cache_id).await?;
         let mut created_mods = Vec::new();
         let mut mod_zips = HashSet::new();
 
@@ -61,7 +61,7 @@ impl<'a> ModsBuilder {
                 &self.directory,
                 Arc::clone(&config),
                 Arc::clone(&portal),
-                Arc::clone(&cache),
+                Arc::clone(&store),
             )
             .await
             {
@@ -106,7 +106,7 @@ impl<'a> ModsBuilder {
                     &entry,
                     Arc::clone(&config),
                     Arc::clone(&portal),
-                    Arc::clone(&cache),
+                    Arc::clone(&store),
                 )
                 .await
                 {
@@ -133,7 +133,7 @@ impl<'a> ModsBuilder {
         &self,
         config: Arc<Config>,
         portal: Arc<ModPortal>,
-        cache: Arc<Cache>,
+        store: Arc<Store>,
     ) -> anyhow::Result<Vec<Mod>> {
         let zips = self.directory.join(ZIP_GLOB);
         trace!("Building mods from filesystem: {}", zips.display());
@@ -144,7 +144,7 @@ impl<'a> ModsBuilder {
                 &entry,
                 Arc::clone(&config),
                 Arc::clone(&portal),
-                Arc::clone(&cache),
+                Arc::clone(&store),
             )
             .await
             {
@@ -170,7 +170,7 @@ impl<'a> ModsBuilder {
         self,
         config: Arc<Config>,
         portal: Arc<ModPortal>,
-        cache: Arc<Cache>,
+        store: Arc<Store>,
     ) -> anyhow::Result<Mods> {
         let built_mods = if let Some(game_cache_id) = self.game_cache_id {
             debug!(
@@ -182,7 +182,7 @@ impl<'a> ModsBuilder {
                 game_cache_id,
                 Arc::clone(&config),
                 Arc::clone(&portal),
-                Arc::clone(&cache),
+                Arc::clone(&store),
             )
             .await?
         } else {
@@ -191,7 +191,7 @@ impl<'a> ModsBuilder {
             self.build_mods_from_filesystem(
                 Arc::clone(&config),
                 Arc::clone(&portal),
-                Arc::clone(&cache),
+                Arc::clone(&store),
             )
             .await?
         };
@@ -229,7 +229,7 @@ impl<'a> ModsBuilder {
             mods,
             config,
             portal,
-            cache,
+            store,
         })
     }
 }
