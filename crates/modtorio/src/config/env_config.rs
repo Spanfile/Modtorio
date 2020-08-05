@@ -1,5 +1,5 @@
-use super::{Config, APP_PREFIX};
-use crate::util;
+use super::Config;
+use crate::{util, APP_PREFIX};
 use anyhow::Context;
 use serde::Deserialize;
 
@@ -16,7 +16,7 @@ impl EnvConfig {
             .with_context(|| {
                 format!(
                     "Failed to load config from environment variables:\n{}",
-                    util::dump_env(APP_PREFIX)
+                    util::env::dump_string(APP_PREFIX)
                 )
             })?)
     }

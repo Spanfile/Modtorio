@@ -24,6 +24,10 @@ use store::Store;
 
 /// Location of the sample server used during development.
 const SAMPLE_GAME_DIRECTORY: &str = "./sample";
+/// The prefix used with every environment value related to the program configuration.
+pub const APP_PREFIX: &str = "MODTORIO_";
+const PORTAL_USERNAME_ENV_VARIABLE: &str = "MODTORIO_PORTAL_USERNAME";
+const PORTAL_TOKEN_ENV_VARIABLE: &str = "MODTORIO_PORTAL_TOKEN";
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -37,10 +41,13 @@ async fn main() -> anyhow::Result<()> {
     // config.debug_values();
 
     debug!("{:?}", opts);
-    debug!("{:?}", util::dump_env_lines(config::APP_PREFIX));
+    debug!("{:?}", util::env::dump_lines(APP_PREFIX));
     debug!("{:?}", config);
 
+    update_store_from_env(&store).await?;
     log_program_information();
+
+    return Ok(());
 
     let portal = Arc::new(ModPortal::new(&config)?);
 
@@ -98,6 +105,34 @@ async fn main() -> anyhow::Result<()> {
         // factorio.mods.update().await?;
         // factorio.mods.ensure_dependencies().await?;
         factorio.update_cache().await?;
+    }
+
+    Ok(())
+}
+
+async fn update_store_from_env(store: &Store) -> anyhow::Result<()> {
+    for (key, value) in util::env::dump_map(APP_PREFIX) {
+        match key.as_ref() {
+            PORTAL_USERNAME_ENV_VARIABLE => {
+                debug!("Got portal username env variable, updating store");
+                store
+                    .set_option(store::option::Value {
+                        field: store::option::Field::PortalUsername,
+                        value: Some(value),
+                    })
+                    .await?
+            }
+            PORTAL_TOKEN_ENV_VARIABLE => {
+                debug!("Got portal token env variable, updating store");
+                store
+                    .set_option(store::option::Value {
+                        field: store::option::Field::PortalToken,
+                        value: Some(value),
+                    })
+                    .await?
+            }
+            _ => {}
+        }
     }
 
     Ok(())

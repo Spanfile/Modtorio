@@ -12,8 +12,6 @@ use std::path::Path;
 use store_config::StoreConfig;
 use util::LogLevel;
 
-/// The prefix used with every environment value related to the program configuration.
-pub const APP_PREFIX: &str = "MODTORIO_";
 pub const DEFAULT_CONFIG_FILE_LOCATION: &str = "modtorio.toml";
 pub const DEFAULT_STORE_FILE_LOCATION: &str = "modtorio.db";
 
