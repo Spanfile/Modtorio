@@ -142,3 +142,15 @@ pub enum HumanVersionError {
     #[error("Missing version in requirement string: {0}")]
     MissingVersion(String),
 }
+
+#[derive(Debug, Error)]
+pub enum StoreError {
+    #[error(
+        "Insufficient store file permissions ({path}): minimum {minimum:o}, actual {actual:o}"
+    )]
+    InsufficientFilePermissions {
+        path: String,
+        minimum: u32,
+        actual: u32,
+    },
+}

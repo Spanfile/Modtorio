@@ -2,6 +2,7 @@
 
 pub mod checksum;
 pub mod env;
+pub mod file;
 mod human_version;
 mod log_level;
 

@@ -2,7 +2,7 @@ pub mod cache;
 pub mod option;
 pub mod store_meta;
 
-use crate::ext::PathExt;
+use crate::{error::StoreError, ext::PathExt, util};
 pub use cache::Cache;
 use log::*;
 use rusqlite::{Connection, OptionalExtension};
@@ -15,6 +15,7 @@ use tokio::task;
 include!(concat!(env!("OUT_DIR"), "/store_consts.rs"));
 
 pub(crate) const MEMORY_STORE: &str = "_memory";
+const MAX_STORE_FILE_PERMISSIONS: u32 = 0o600;
 
 pub struct Store {
     conn: Arc<Mutex<Connection>>,
@@ -27,6 +28,28 @@ pub enum StoreLocation<P: AsRef<Path>> {
 }
 
 impl Store {
+    fn open_file_connection<P>(path: P) -> anyhow::Result<Connection>
+    where
+        P: AsRef<Path>,
+    {
+        if path.as_ref().exists() {
+            if util::file::ensure_permission(&path, MAX_STORE_FILE_PERMISSIONS)? {
+                Ok(Connection::open(path)?)
+            } else {
+                Err(StoreError::InsufficientFilePermissions {
+                    path: String::from(path.as_ref().get_str()?),
+                    minimum: MAX_STORE_FILE_PERMISSIONS,
+                    actual: util::file::get_permissions(&path)?,
+                }
+                .into())
+            }
+        } else {
+            let conn = Connection::open(&path)?;
+            util::file::set_permissions(&path, MAX_STORE_FILE_PERMISSIONS)?;
+            Ok(conn)
+        }
+    }
+
     pub async fn build<P>(store_location: StoreLocation<P>) -> anyhow::Result<Store>
     where
         P: AsRef<Path>,
@@ -44,7 +67,7 @@ impl Store {
             }
             StoreLocation::File(path) => {
                 debug!("Using a file store: {}", path.as_ref().display());
-                (path.as_ref().exists(), Connection::open(path)?)
+                (path.as_ref().exists(), Store::open_file_connection(path)?)
             }
         };
         let conn = Arc::new(Mutex::new(conn));

@@ -38,7 +38,6 @@ async fn main() -> anyhow::Result<()> {
     let config = Arc::new(build_config(&opts, &store).await?);
 
     log::setup_logging(&config)?;
-    // config.debug_values();
 
     debug!("{:?}", opts);
     debug!("Env {:?}", util::env::dump_lines(APP_PREFIX));
