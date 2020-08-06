@@ -49,7 +49,9 @@ where
 /// Represents a range of 64-bit unsigned integers.
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct Range {
+    /// The range's lower bound.
     pub min: u64,
+    /// The range's upper bound.
     pub max: u64,
 }
 
@@ -60,7 +62,9 @@ pub struct Range {
 /// and every other value as [Limited](#variant.Limited).
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone, Copy)]
 pub enum Limit {
+    /// An unlimited limit
     Unlimited,
+    /// A limited limit
     Limited(u64),
 }
 

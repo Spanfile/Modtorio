@@ -1,8 +1,12 @@
+//! A wrapper for a headless Linux Factorio server to allow higher control over the server's
+//! functionality.
+
 #![feature(drain_filter)]
 #![feature(async_closure)]
 #![feature(associated_type_bounds)]
 #![warn(clippy::if_not_else)]
 #![warn(clippy::needless_pass_by_value)]
+#![warn(clippy::missing_docs_in_private_items)]
 // #![warn(clippy::pedantic)]
 
 mod config;
@@ -27,9 +31,13 @@ use store::Store;
 const SAMPLE_GAME_DIRECTORY: &str = "./sample";
 /// The prefix used with every environment value related to the program configuration.
 pub const APP_PREFIX: &str = "MODTORIO_";
+
+/// The name of the environment variable used to store the mod portal username
 const PORTAL_USERNAME_ENV_VARIABLE: &str = "MODTORIO_PORTAL_USERNAME";
+/// The name of the environment variable used to store the mod portal token
 const PORTAL_TOKEN_ENV_VARIABLE: &str = "MODTORIO_PORTAL_TOKEN";
 
+/// The program's version at build-time.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 #[tokio::main]
@@ -116,6 +124,7 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Builds a complete configuration object with given command-line Opts and a program Store.
 async fn build_config(opts: &Opts, store: &Store) -> anyhow::Result<Config> {
     let mut builder = config::Builder::new();
 
@@ -136,6 +145,8 @@ async fn build_config(opts: &Opts, store: &Store) -> anyhow::Result<Config> {
     Ok(builder.build())
 }
 
+/// Creates a new config file with default values in a given path. This will overwrite any existing
+/// file in the path.
 fn create_default_config_file<P>(path: P) -> anyhow::Result<()>
 where
     P: AsRef<Path>,
@@ -143,6 +154,13 @@ where
     Config::write_default_config_to_writer(&mut File::create(path)?)
 }
 
+/// Updates a given program Store from the current environment variables.
+///
+/// The following values are updated:
+/// * `Field::PortalUsername` from the variable whose name is in the constant
+///   `PORTAL_USERNAME_ENV_VARIABLE`
+/// * `Field::PortalToken` from the variable whose name is in the constant
+///   `PORTAL_TOKEN_ENV_VARIABLE`
 async fn update_store_from_env(store: &Store) -> anyhow::Result<()> {
     for (key, value) in util::env::dump_map(APP_PREFIX) {
         match key.as_ref() {
@@ -171,6 +189,7 @@ async fn update_store_from_env(store: &Store) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Logs the program's information.
 fn log_program_information() {
     info!("Program version: {}", VERSION);
 }

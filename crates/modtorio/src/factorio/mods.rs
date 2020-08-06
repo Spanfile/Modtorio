@@ -24,10 +24,15 @@ use tokio::{fs, sync::Mutex};
 
 /// A collection of installed mods in a Factorio server.
 pub struct Mods {
+    /// The mod's root directory.
     directory: PathBuf,
+    /// The collection of installed mods.
     mods: HashMap<String, Arc<Mod>>,
+    /// Reference to the program config.
     config: Arc<Config>,
+    /// Reference to the mod portal.
     portal: Arc<ModPortal>,
+    /// Reference to the program store.
     store: Arc<Store>,
 }
 

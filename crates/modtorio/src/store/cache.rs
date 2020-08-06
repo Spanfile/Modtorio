@@ -1,3 +1,6 @@
+//! The program cache, used to cache game information to avoid heavy reloading when the program is
+//! run.
+
 pub mod models;
 
 use crate::{factorio::GameCacheId, sql, util::HumanVersion};
@@ -6,7 +9,10 @@ use rusqlite::{Connection, OptionalExtension, NO_PARAMS};
 use std::sync::{Arc, Mutex};
 use tokio::task;
 
+/// The program cache, used to cache game information to avoid heavy reloading when the program is
+/// run.
 pub struct Cache {
+    /// Reference to the SQLite connection to the program database.
     pub(super) conn: Arc<Mutex<Connection>>,
 }
 

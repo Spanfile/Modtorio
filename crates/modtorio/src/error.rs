@@ -71,6 +71,8 @@ pub enum ModError {
         /// The mod's existing name
         existing: String,
     },
+    /// Returned when verifying a cached-loaded mod whose corresponding zip archive doesn't exist
+    /// in the filesystem.
     #[error("Mod zip does not exist in filesystem: {0}")]
     MissingZip(PathBuf),
     /// Returned when:
@@ -143,14 +145,20 @@ pub enum HumanVersionError {
     MissingVersion(String),
 }
 
+/// Represents all types of errors that can occur when interacting with the [`program
+/// store`](crate::store::Store);
 #[derive(Debug, Error)]
 pub enum StoreError {
+    /// Returned when loading the program store database file and it has insufficient permissions.
     #[error(
-        "Insufficient store file permissions ({path}): minimum {minimum:o}, actual {actual:o}"
+        "Insufficient store file permissions ({path}): maximum {maximum:o}, actual {actual:o}"
     )]
     InsufficientFilePermissions {
+        /// Path to the database file.
         path: String,
-        minimum: u32,
+        /// The maximum required permissions.
+        maximum: u32,
+        /// The database file's actual permissions.
         actual: u32,
     },
 }

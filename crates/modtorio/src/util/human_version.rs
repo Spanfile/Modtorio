@@ -51,8 +51,11 @@ pub enum Comparator {
 /// * `01.02.03`
 #[derive(Debug, PartialEq, PartialOrd, Clone, Copy)]
 pub struct HumanVersion {
+    /// The major component.
     pub major: u64,
+    /// The minor component.
     pub minor: u64,
+    /// The patch component.
     pub patch: u64,
 }
 
@@ -73,7 +76,9 @@ pub struct HumanVersion {
 /// * `< 1.0`
 #[derive(Debug, PartialEq, Copy, Clone)]
 pub struct HumanVersionReq {
+    /// The version comparator.
     pub comparator: Comparator,
+    /// The version to compare against.
     pub version: HumanVersion,
 }
 
@@ -205,6 +210,7 @@ impl<'de> Deserialize<'de> for HumanVersion {
     where
         D: serde::Deserializer<'de>,
     {
+        #[allow(clippy::missing_docs_in_private_items)]
         struct HumanVersionVisitor;
 
         impl<'de> Visitor<'de> for HumanVersionVisitor {
@@ -232,6 +238,7 @@ impl<'de> Deserialize<'de> for HumanVersionReq {
     where
         D: serde::Deserializer<'de>,
     {
+        #[allow(clippy::missing_docs_in_private_items)]
         struct HumanVersionReqVisitor;
 
         impl<'de> Visitor<'de> for HumanVersionReqVisitor {

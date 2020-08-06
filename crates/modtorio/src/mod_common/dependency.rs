@@ -47,8 +47,11 @@ pub enum Requirement {
 /// * An incompatible mod without a specific version requirement: `!evil-mod`.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Dependency {
+    /// The dependeny's requirement.
     requirement: Requirement,
+    /// The name of the dependent mod.
     name: String,
+    /// The optional version requirement to the dependent mod.
     version: Option<HumanVersionReq>,
 }
 
@@ -173,6 +176,7 @@ impl<'de> Deserialize<'de> for Dependency {
     where
         D: serde::Deserializer<'de>,
     {
+        #[allow(clippy::missing_docs_in_private_items)]
         struct DependencyVisitor;
 
         impl<'de> Visitor<'de> for DependencyVisitor {

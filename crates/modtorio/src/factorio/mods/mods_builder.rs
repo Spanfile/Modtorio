@@ -24,11 +24,15 @@ const ZIP_GLOB: &str = "*.zip";
 /// loaded afterwards.
 // TODO: doctests
 pub struct ModsBuilder {
+    /// The mods' root directory.
     directory: PathBuf,
+    /// The cache ID of the game these mods belong to.
     game_cache_id: Option<GameCacheId>,
 }
 
 impl<'a> ModsBuilder {
+    /// Returns a new `ModsBuilder` with a given mod root directory. Doesn't have a game's cache ID
+    /// set.
     pub fn root(directory: PathBuf) -> Self {
         ModsBuilder {
             directory,
@@ -36,6 +40,7 @@ impl<'a> ModsBuilder {
         }
     }
 
+    /// Sets a the cache ID of the game to load mods from the program cache for.
     pub fn with_game_cache_id(self, game_cache_id: GameCacheId) -> Self {
         Self {
             game_cache_id: Some(game_cache_id),
@@ -43,6 +48,7 @@ impl<'a> ModsBuilder {
         }
     }
 
+    /// Builds mods from the program cache with a given game cache ID.
     async fn build_mods_from_cache(
         &self,
         game_cache_id: GameCacheId,
@@ -129,6 +135,7 @@ impl<'a> ModsBuilder {
         Ok(created_mods)
     }
 
+    /// Builds mods from the filesystem based on the builder's mod root directory.
     async fn build_mods_from_filesystem(
         &self,
         config: Arc<Config>,
@@ -166,6 +173,7 @@ impl<'a> ModsBuilder {
         Ok(created_mods)
     }
 
+    /// Finalises the builder and returns a new `Mods` object.
     pub async fn build(
         self,
         config: Arc<Config>,

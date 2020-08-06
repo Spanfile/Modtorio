@@ -15,7 +15,9 @@ fn main() {
     fs::write(
         &dest_path,
         format!(
-            r##"const SCHEMA: &str = r#"{}"#;
+            r##"/// The default schema.
+const SCHEMA: &str = r#"{}"#;
+/// The default schema's BLAKE2b checksum.
 const SCHEMA_CHECKSUM: &str = "{}";"##,
             schema, checksum
         ),

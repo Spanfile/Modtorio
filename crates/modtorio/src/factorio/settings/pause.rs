@@ -4,7 +4,7 @@
 use super::{GameFormatConversion, ServerSettingsGameFormat};
 use serde::{Deserialize, Serialize};
 
-// Contains a server's settings related to pausing the game.
+/// Contains a server's settings related to pausing the game.
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct Pause {
     /// Corresponds to the `auto_pause` field. Defaults to `true`.

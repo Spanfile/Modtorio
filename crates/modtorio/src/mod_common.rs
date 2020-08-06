@@ -29,11 +29,17 @@ pub use info::Release;
 /// Provides functions to build, download and update mods from the [program cache](crate::cache),
 /// zip archives and the [mod portal](crate::mod_portal).
 pub struct Mod {
+    /// The mod's info.
     info: Mutex<Info>,
+    /// Reference to the program config.
     config: Arc<Config>,
+    /// Reference to the mod portal.
     portal: Arc<ModPortal>,
+    /// Reference to the program store.
     store: Arc<Store>,
+    /// Path to the installed zip archive.
     zip_path: Arc<Mutex<Option<PathBuf>>>,
+    /// The installed zip archive's checksum.
     zip_checksum: Arc<Mutex<Option<String>>>,
 }
 
@@ -55,7 +61,9 @@ pub enum DownloadResult {
 
 /// The available checksum algorithms.
 enum ChecksumAlgorithm {
+    /// The `BLAKE2b`-algorith.
     BLAKE2b,
+    /// The `SHA1`-algorithm.
     SHA1,
 }
 
@@ -130,6 +138,7 @@ where
 }
 
 impl Mod {
+    /// Builds a new mod from a given cached `GameMod` and mod root directory.
     pub async fn from_cache<P>(
         game_mod: &models::GameMod,
         mods_root_path: P,
@@ -167,6 +176,7 @@ impl Mod {
         })
     }
 
+    /// Builds a new mod from a given path to a mod zip archive.
     pub async fn from_zip<P>(
         path: P,
         config: Arc<Config>,
@@ -190,6 +200,7 @@ impl Mod {
         })
     }
 
+    /// Builds a new mod from the mod portal.
     pub async fn from_portal(
         name: &str,
         config: Arc<Config>,
@@ -211,6 +222,7 @@ impl Mod {
 }
 
 impl Mod {
+    /// Updates the mod's cache
     pub async fn update_cache(&self) -> anyhow::Result<()> {
         trace!("Updating cache for '{}'", self.name().await);
 
@@ -339,6 +351,7 @@ impl Mod {
         self.fetch_portal_info().await
     }
 
+    /// Download a certain version of the mod. If no version is given, downloads the latest version.
     pub async fn download<P>(
         &self,
         version: Option<HumanVersion>,
@@ -413,20 +426,25 @@ impl Mod {
 
 #[allow(dead_code)]
 impl Mod {
+    /// Populates the mod's info from a given mod zip archive.
     async fn populate_info_from_zip(&self, path: PathBuf) -> anyhow::Result<()> {
         *self.zip_path.lock().await = Some(path.clone());
         self.info.lock().await.populate_from_zip(path).await?;
         Ok(())
     }
 
+    /// Returns whether the mod has its portal info populated or not.
     async fn is_portal_populated(&self) -> bool {
         self.info.lock().await.is_portal_populated()
     }
 
+    /// Returns a user-friendly display of the mod.
     pub async fn display(&self) -> String {
         self.info.lock().await.display()
     }
 
+    /// Returns the path of the mod's zip archive. Returns `ModError::MissingZipPath` if the path
+    /// isn't set.
     pub async fn zip_path(&self) -> anyhow::Result<PathBuf> {
         Ok(self
             .zip_path
@@ -436,6 +454,8 @@ impl Mod {
             .ok_or(ModError::MissingZipPath)?)
     }
 
+    /// Returns the mod zip archive's checksum if set. If not set, will calculate the checksum, set
+    /// it and return it. Returns `ModError::MissingZipPath` if the path isn't set.
     pub async fn get_zip_checksum(&self) -> anyhow::Result<String> {
         if let Some(checksum) = self.zip_checksum.lock().await.as_ref() {
             return Ok(checksum.to_owned());
@@ -454,71 +474,85 @@ impl Mod {
         Ok(checksum)
     }
 
+    /// Returns the mod's name.
     pub async fn name(&self) -> String {
         let info = self.info.lock().await;
         info.name().to_string()
     }
 
+    /// Returns the mod's author.
     pub async fn author(&self) -> String {
         let info = self.info.lock().await;
         info.author().to_string()
     }
 
+    /// Returns the mod author's contact.
     pub async fn contact(&self) -> Option<String> {
         let info = self.info.lock().await;
         info.contact().map(std::string::ToString::to_string)
     }
 
+    /// Returns the mod's author's homepage.
     pub async fn homepage(&self) -> Option<String> {
         let info = self.info.lock().await;
         info.homepage().map(std::string::ToString::to_string)
     }
 
+    /// Returns the mod's title.
     pub async fn title(&self) -> String {
         let info = self.info.lock().await;
         info.title().to_string()
     }
 
+    /// Returns the mod's summary, if any.
     pub async fn summary(&self) -> Option<String> {
         let info = self.info.lock().await;
         info.summary().map(std::string::ToString::to_string)
     }
 
+    /// Returns the mod's description.
     pub async fn description(&self) -> String {
         let info = self.info.lock().await;
         info.description().to_string()
     }
 
+    /// Returns the mod's changelog, if any.
     pub async fn changelog(&self) -> Option<String> {
         let info = self.info.lock().await;
         info.changelog().map(std::string::ToString::to_string)
     }
 
+    /// Returns the mod's version.
     pub async fn own_version(&self) -> anyhow::Result<HumanVersion> {
         let info = self.info.lock().await;
         info.own_version()
     }
 
+    /// Returns the version of Factorio the mod is for.
     pub async fn factorio_version(&self) -> anyhow::Result<HumanVersion> {
         let info = self.info.lock().await;
         info.factorio_version()
     }
 
+    /// Returns the mod's releases.
     pub async fn releases(&self) -> anyhow::Result<Vec<Release>> {
         let info = self.info.lock().await;
         info.releases()
     }
 
+    /// Returns a release with a given version.
     pub async fn get_release(&self, version: HumanVersion) -> anyhow::Result<Release> {
         let info = self.info.lock().await;
         info.get_release(Some(version))
     }
 
+    /// Returns the mod's latest release.
     pub async fn latest_release(&self) -> anyhow::Result<Release> {
         let info = self.info.lock().await;
         info.get_release(None)
     }
 
+    /// Returns the mod's dependencies on other mods.
     pub async fn dependencies(&self) -> anyhow::Result<Vec<Dependency>> {
         let info = self.info.lock().await;
         info.dependencies()

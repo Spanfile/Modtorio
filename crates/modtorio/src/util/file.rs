@@ -1,9 +1,15 @@
+//! Provides several utilities related filesystem files.
+
 use std::{fs, os::unix::fs::PermissionsExt, path::Path};
 
+/// The world rwx permission bits (007: `------rwx`).
 const W_RWX: u32 = 0o7;
+/// The group rwx permission bits (070: `---rwx---`).
 const G_RWX: u32 = 0o70;
+/// The user rwx permission bits (007: `rwx------`).
 const U_RWX: u32 = 0o700;
 
+/// Returns a given file's Unix permission mode.
 pub fn get_permissions<P>(path: P) -> anyhow::Result<u32>
 where
     P: AsRef<Path>,
@@ -12,6 +18,7 @@ where
     Ok(permissions.mode())
 }
 
+/// Sets a given file's Unix permission mode.
 pub fn set_permissions<P>(path: P, mode: u32) -> anyhow::Result<()>
 where
     P: AsRef<Path>,
@@ -22,6 +29,8 @@ where
     Ok(())
 }
 
+/// Returns whether a given file's Unix permission mode is more-or-equally restrictive as a given
+/// maximum permission mode.
 pub fn ensure_permission<P>(path: P, max: u32) -> anyhow::Result<bool>
 where
     P: AsRef<Path>,
@@ -32,6 +41,8 @@ where
     Ok(is_higher_or_equal_permission(mode, max))
 }
 
+/// Returns whether a given permission mode is more-or-equally restrictive as a given
+/// maximum permission mode.
 fn is_higher_or_equal_permission(smaller: u32, higher: u32) -> bool {
     higher & W_RWX >= smaller & W_RWX
         && higher & G_RWX >= smaller & G_RWX

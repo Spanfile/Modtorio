@@ -1,3 +1,5 @@
+//! The program store, used to store persistent data about the program in an SQLite database.
+
 pub mod cache;
 pub mod option;
 
@@ -13,26 +15,40 @@ use tokio::task;
 
 include!(concat!(env!("OUT_DIR"), "/store_consts.rs"));
 
+/// The special value interpreted as using an in-memory SQLite database.
 pub(crate) const MEMORY_STORE: &str = "_memory";
+/// The maximum permissions the store database file can have (600: `r--------`)
 const MAX_STORE_FILE_PERMISSIONS: u32 = 0o600;
 
+/// Provides access to the program store and cache. New instances are created with a
+/// [`Builder`](Builder).
 pub struct Store {
+    /// The connection to the SQLite database file.
     conn: Arc<Mutex<Connection>>,
+    /// The program cache.
     pub cache: Cache,
 }
 
+/// Builds new [`Store`](Store) instances.
 pub struct Builder<P>
 where
     P: AsRef<Path>,
 {
+    /// The SQL schema to use for the SQLite database.
     schema: String,
+    /// An optional pre-calculated checksum for the SQL schema.
     schema_checksum: Option<String>,
+    /// Location for the store database. Either a filesystem path, or in-memory.
     store_location: StoreLocation<P>,
+    /// Should the schema checksum not be stored as an option in the program store.
     skip_storing_checksum: bool,
 }
 
+/// Specifies the location for the store database.
 pub enum StoreLocation<P: AsRef<Path>> {
+    /// Specifies an in-memory database.
     Memory,
+    /// Specifies a filesystem path to save the database in.
     File(P),
 }
 
@@ -40,6 +56,8 @@ impl<P> Builder<P>
 where
     P: AsRef<Path>,
 {
+    /// Returns a new `Builder` with a given database location. The schema and its checksum are the
+    /// defaults which are found in the constants `SCHEMA` and `SCHEMA_CHECKSUM`.
     pub fn from_location(store_location: StoreLocation<P>) -> Self {
         Self {
             schema: String::from(SCHEMA),
@@ -49,6 +67,8 @@ where
         }
     }
 
+    /// Specifies a different schema. The pre-calculated schema checksum will be cleared and
+    /// recalculated when finalising the builder.
     #[allow(dead_code)]
     pub fn with_schema(self, schema: &str) -> Self {
         Self {
@@ -58,6 +78,7 @@ where
         }
     }
 
+    /// Specify whether to skip storing the schema checksum in the store options.
     #[allow(dead_code)]
     pub fn skip_storing_checksum(self, skip: bool) -> Self {
         Self {
@@ -66,6 +87,7 @@ where
         }
     }
 
+    /// Finalise the builder and return a new `Store`.
     pub async fn build(self) -> anyhow::Result<Store> {
         let schema_checksum = if let Some(checksum) = self.schema_checksum {
             checksum
@@ -107,6 +129,13 @@ where
     }
 }
 
+/// Opens an SQLite connection to a given file path. If the file exists, its permissions are checked
+/// to ensure they meet `MAX_STORE_FILE_PERMISSIONS`. If the file doesn't exist, a new one will be
+/// created and its permissions will be set to `MAX_STORE_FILE_PERMISSIONS`.
+///
+/// # Errors
+/// Returns `StoreError::InsufficientFilePermissions` if the existing file's permissions aren't
+/// sufficient.
 fn open_file_connection<P>(path: P) -> anyhow::Result<Connection>
 where
     P: AsRef<Path>,
@@ -117,7 +146,7 @@ where
         } else {
             Err(StoreError::InsufficientFilePermissions {
                 path: String::from(path.as_ref().get_str()?),
-                minimum: MAX_STORE_FILE_PERMISSIONS,
+                maximum: MAX_STORE_FILE_PERMISSIONS,
                 actual: util::file::get_permissions(&path)?,
             }
             .into())
@@ -129,6 +158,7 @@ where
     }
 }
 
+/// Applies a given SQL schema to a given `Store`.
 async fn apply_store_schema(store: &Store, schema: &str) -> anyhow::Result<()> {
     trace!("Applying database schema...");
     trace!("{}", schema);
@@ -137,6 +167,7 @@ async fn apply_store_schema(store: &Store, schema: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Stores a given schema checksum to the program store's `SchemaChecksum` option.
 async fn store_schema_checksum(store: &Store, checksum: &str) -> anyhow::Result<()> {
     trace!("Storing schema checksum...");
 

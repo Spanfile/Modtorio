@@ -16,8 +16,11 @@ const ADMINS_ONLY_GAME_VALUE: &str = "admins-only";
 /// Defaults to `AdminsOnly`.
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub enum AllowCommands {
+    /// Represents the `true` value for the setting.
     Yes,
+    /// Represents the `false` value for the setting.
     No,
+    /// Represents the `admins-only` for the setting.
     AdminsOnly,
 }
 

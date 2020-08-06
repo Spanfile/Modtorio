@@ -7,7 +7,9 @@ use serde::{Deserialize, Serialize};
 /// Represents the `password` and `token` fields.
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
 pub enum Credential {
+    /// Corresponds to the `password` field.
     Password(String),
+    /// Corresponds to the `token` field.
     Token(String),
 }
 
@@ -15,7 +17,9 @@ pub enum Credential {
 /// credential) together with `visibility.public` being `true`.
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone)]
 pub struct PublicVisibility {
+    /// Corresponds to the `username` field.
     pub username: String,
+    /// Corresponds to the credential fields.
     pub credential: Credential,
 }
 

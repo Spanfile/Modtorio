@@ -35,16 +35,22 @@ pub struct Factorio {
     pub settings: ServerSettings,
     /// The server's mods.
     pub mods: Mods,
+    /// The server's root directory.
     root: PathBuf,
+    /// The program's cache ID.
     cache_id: Mutex<Option<GameCacheId>>,
+    /// Reference to the program store.
     store: Arc<Store>,
 }
 
 /// Builds a new instance of a [`Factorio`](Factorio) server by importing its information from the
 /// filesystem or from the program cache.
 pub struct Importer {
+    /// The server's root directory.
     root: PathBuf,
+    /// The server's `server-settings.json` file's location.
     settings: PathBuf,
+    /// The program's cache ID.
     game_cache_id: Option<GameCacheId>,
 }
 

@@ -1,14 +1,21 @@
+//! Provides the `OptsConfig` object, used to access config values from the running program's
+//! command line arguments.
+
 use super::Config;
 use crate::{opts::Opts, util::LogLevel};
 use serde::{Deserialize, Serialize};
 
+/// Contains the config values from the running program's command line arguments.
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct OptsConfig {
+    /// Corresponds to the `--log-level` option.
     log_level: Option<LogLevel>,
+    /// Corresponds to the `--cache-expiry` option.
     cache_expiry: Option<u64>,
 }
 
 impl OptsConfig {
+    /// Returns a new `EnvConfig` built from a given `Opts` object.
     pub fn from_opts(opts: &Opts) -> Self {
         Self {
             log_level: opts.log_level,
@@ -16,6 +23,8 @@ impl OptsConfig {
         }
     }
 
+    /// Applies the contained config values to a given `Config`, returning a new `Config` with the
+    /// values set.
     pub fn apply_to_config(self, config: Config) -> Config {
         Config {
             log_level: self.log_level.unwrap_or(config.log_level),

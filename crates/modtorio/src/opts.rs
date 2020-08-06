@@ -9,11 +9,17 @@ use strum::VariantNames;
 /// Stores command line parameters.
 #[derive(Debug)]
 pub struct Opts {
+    /// Path to the config file.
     pub config: PathBuf,
+    /// Path to the program store database file.
     pub store: PathBuf,
+    /// Whether to skip applying configuration from the environment variables.
     pub no_env: bool,
+    /// Whether to skip applying configuration from the configuration file.
     pub no_conf: bool,
+    /// The log level to use.
     pub log_level: Option<LogLevel>,
+    /// The program cache expiry in seconds.
     pub cache_expiry: Option<u64>,
 }
 

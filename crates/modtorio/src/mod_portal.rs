@@ -23,7 +23,9 @@ const FULL_ENDPOINT: &str = "full";
 /// A username-token pair used to authenticate with the mod portal.
 #[derive(Debug)]
 struct Credentials {
+    /// The username.
     username: String,
+    /// The token used to authenticate.
     token: String,
 }
 
@@ -36,7 +38,9 @@ struct Credentials {
 /// ```
 #[derive(Debug)]
 pub struct ModPortal {
+    /// The authentication credentials.
     credentials: Credentials,
+    /// The HTTP client.
     client: Client,
 }
 

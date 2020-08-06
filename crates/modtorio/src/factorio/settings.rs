@@ -21,21 +21,30 @@ use traffic::Traffic;
 /// Stores a server's settings in a structured manner.
 #[derive(Deserialize, Serialize, Debug, Default)]
 pub struct ServerSettings {
+    /// Contains settings related to the server's public display.
     pub information: Information,
+    /// Contains settings related to the servers publicity.
     pub publicity: Publicity,
+    /// Contains settings related to the server's autosaving.
     pub autosave: Autosave,
+    /// Contains settings related to the server's pausing.
     pub pause: Pause,
+    /// Represents the `allow_commands` setting.
     pub allow_commands: AllowCommands,
+    /// Contains settings related to the server's traffic use.
     pub traffic: Traffic,
 }
 
 #[allow(dead_code)]
 impl ServerSettings {
+    /// Returns a new `ServerSettings` by deserializing a given JSON string.
     pub fn from_game_json(json: &str) -> anyhow::Result<Self> {
         let game_format = serde_json::from_str(json)?;
         Ok(ServerSettings::from_game_format(&game_format)?)
     }
 
+    /// Returns a string by serializing the `ServerSettings` object into the game's
+    /// `server-settings.json` file format.
     pub fn to_game_json(&self) -> anyhow::Result<String> {
         let mut game_format = ServerSettingsGameFormat::default();
         self.to_game_format(&mut game_format)?;

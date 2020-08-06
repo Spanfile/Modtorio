@@ -1,3 +1,5 @@
+//! Provides several utilities related to the running program's environment variables.
+
 use std::collections::HashMap;
 
 /// Returns all environment variables of the current process with a given prefix as a string with
@@ -20,6 +22,8 @@ pub fn dump_lines(prefix: &str) -> Vec<String> {
         .collect::<Vec<String>>()
 }
 
+/// Returns all environment variables of the current process with a given prefix as a map of
+/// variable name to its value.
 pub fn dump_map(prefix: &str) -> HashMap<String, String> {
     std::env::vars()
         .filter_map(|(k, v)| {
