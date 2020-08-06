@@ -22,19 +22,59 @@ pub struct Store {
     pub cache: Cache,
 }
 
+pub struct Builder<P>
+where
+    P: AsRef<Path>,
+{
+    schema: String,
+    schema_checksum: Option<String>,
+    store_location: StoreLocation<P>,
+    skip_storing_checksum: bool,
+}
+
 pub enum StoreLocation<P: AsRef<Path>> {
     Memory,
     File(P),
 }
 
-impl Store {
-    pub async fn build<P>(store_location: StoreLocation<P>) -> anyhow::Result<Store>
-    where
-        P: AsRef<Path>,
-    {
-        trace!("Cache database schema checksum: {}", SCHEMA_CHECKSUM);
+impl<P> Builder<P>
+where
+    P: AsRef<Path>,
+{
+    pub fn from_location(store_location: StoreLocation<P>) -> Self {
+        Self {
+            schema: String::from(SCHEMA),
+            schema_checksum: Some(String::from(SCHEMA_CHECKSUM)),
+            store_location,
+            skip_storing_checksum: false,
+        }
+    }
 
-        let (store_file_exists, conn) = match store_location {
+    pub fn with_schema(self, schema: &str) -> Self {
+        Self {
+            schema: String::from(schema),
+            schema_checksum: None,
+            ..self
+        }
+    }
+
+    pub fn skip_storing_checksum(self, skip: bool) -> Self {
+        Self {
+            skip_storing_checksum: skip,
+            ..self
+        }
+    }
+
+    pub async fn build(self) -> anyhow::Result<Store> {
+        let schema_checksum = if let Some(checksum) = self.schema_checksum {
+            checksum
+        } else {
+            trace!("Missing schema checksum, calculating");
+            util::checksum::blake2b_string(&self.schema)
+        };
+        trace!("Cache database schema checksum: {}", schema_checksum);
+
+        let (store_file_exists, conn) = match self.store_location {
             StoreLocation::Memory => {
                 // when opening an in-memory database, it will initially be empty, i.e. it didn't
                 // exist beforehand
@@ -51,11 +91,15 @@ impl Store {
         debug!("Cache database exists: {}", store_file_exists);
 
         let checksums_match =
-            store_file_exists && checksum_matches_meta(&store, SCHEMA_CHECKSUM).await?;
+            store_file_exists && checksum_matches_meta(&store, &schema_checksum).await?;
         debug!("Schema checksums match: {}", checksums_match);
 
         if !checksums_match {
-            apply_store_schema(&store).await?;
+            apply_store_schema(&store, &self.schema).await?;
+
+            if !self.skip_storing_checksum {
+                store_schema_checksum(&store, &schema_checksum).await?;
+            }
         }
 
         Ok(store)
@@ -84,18 +128,23 @@ where
     }
 }
 
-async fn apply_store_schema(store: &Store) -> anyhow::Result<()> {
-    debug!("Applying database schema...");
-    trace!("{}", SCHEMA);
+async fn apply_store_schema(store: &Store, schema: &str) -> anyhow::Result<()> {
+    trace!("Applying database schema...");
+    trace!("{}", schema);
 
-    store.apply_schema(SCHEMA).await?;
+    store.apply_schema(schema).await?;
+    Ok(())
+}
+
+async fn store_schema_checksum(store: &Store, checksum: &str) -> anyhow::Result<()> {
+    trace!("Storing schema checksum...");
+
     store
         .set_meta(store_meta::Value {
             field: store_meta::Field::SchemaChecksum,
-            value: Some(String::from(SCHEMA_CHECKSUM)),
+            value: Some(String::from(checksum)),
         })
         .await?;
-
     Ok(())
 }
 
@@ -234,5 +283,109 @@ impl Store {
             conn.execute_named(option::Value::replace_into(), &value.all_params())?;
             Ok(())
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::store;
+
+    async fn get_test_store(schema: &str) -> Store {
+        store::Builder::<String>::from_location(StoreLocation::Memory)
+            .with_schema(schema)
+            .skip_storing_checksum(true)
+            .build()
+            .await
+            .expect("failed to build test store")
+    }
+
+    #[tokio::test]
+    async fn set_meta() {
+        const SCHEMA: &str = r#"CREATE TABLE "_meta" (
+"field"	TEXT NOT NULL,
+"value"	TEXT,
+PRIMARY KEY("field")
+);"#;
+        let store = get_test_store(SCHEMA).await;
+
+        store
+            .begin_transaction()
+            .expect("failed to begin transaction");
+        store
+            .set_meta(store_meta::Value {
+                field: store_meta::Field::SchemaChecksum,
+                value: Some(String::from("value")),
+            })
+            .await
+            .expect("failed to set meta value");
+        store
+            .commit_transaction()
+            .expect("failed to commit transaction");
+    }
+
+    #[tokio::test]
+    async fn get_meta() {
+        const SCHEMA: &str = r#"CREATE TABLE "_meta" (
+"field"	TEXT NOT NULL,
+"value"	TEXT,
+PRIMARY KEY("field")
+);
+INSERT INTO _meta("field", "value") VALUES("SchemaChecksum", "value");"#;
+        let store = get_test_store(SCHEMA).await;
+
+        store
+            .begin_transaction()
+            .expect("failed to begin transaction");
+        let got_value = store
+            .get_meta(store_meta::Field::SchemaChecksum)
+            .await
+            .expect("failed to get meta value")
+            .expect("store returned no value");
+
+        assert_eq!(got_value.value, Some(String::from("value")));
+    }
+
+    #[tokio::test]
+    async fn set_option() {
+        const SCHEMA: &str = r#"CREATE TABLE "options" (
+"field"	TEXT NOT NULL,
+"value"	TEXT,
+PRIMARY KEY("field")
+);"#;
+        let store = get_test_store(SCHEMA).await;
+
+        store
+            .begin_transaction()
+            .expect("failed to begin transaction");
+        store
+            .set_option(option::Value {
+                field: option::Field::PortalUsername,
+                value: Some(String::from("value")),
+            })
+            .await
+            .expect("failed to set meta value");
+        store
+            .commit_transaction()
+            .expect("failed to commit transaction");
+    }
+
+    #[tokio::test]
+    async fn get_option() {
+        const SCHEMA: &str = r#"CREATE TABLE "options" (
+"field"	TEXT NOT NULL,
+"value"	TEXT,
+PRIMARY KEY("field")
+);
+INSERT INTO options("field", "value") VALUES("PortalUsername", "value");"#;
+        let store = get_test_store(SCHEMA).await;
+
+        let got_value = store
+            .get_option(option::Field::PortalUsername)
+            .await
+            .expect("failed to get option value")
+            .expect("store returned no value");
+
+        assert_eq!(got_value.value, Some(String::from("value")));
     }
 }

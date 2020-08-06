@@ -34,7 +34,11 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let opts = Opts::get();
-    let store = Arc::new(Store::build((&opts.store).into()).await?);
+    let store = Arc::new(
+        store::Builder::from_location((&opts.store).into())
+            .build()
+            .await?,
+    );
     let config = Arc::new(build_config(&opts, &store).await?);
 
     log::setup_logging(&config)?;

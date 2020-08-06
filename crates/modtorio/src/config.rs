@@ -110,7 +110,7 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store::option;
+    use crate::store::{self, option};
     use lazy_static::lazy_static;
     use std::{
         env,
@@ -176,7 +176,8 @@ expiry = {}
     }
 
     async fn temp_store() -> Store {
-        let store = Store::build(crate::store::MEMORY_STORE.into())
+        let store = store::Builder::from_location(crate::store::MEMORY_STORE.into())
+            .build()
             .await
             .expect("failed to build store");
         store
