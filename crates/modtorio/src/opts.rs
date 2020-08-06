@@ -66,9 +66,4 @@ impl Opts {
     pub fn get() -> Opts {
         Opts::from_matches(&Opts::build_app().get_matches())
     }
-
-    /// Returns a new `Opts` object built from custom command line parameters.
-    pub fn custom_args(args: &[&str]) -> Opts {
-        Opts::from_matches(&Opts::build_app().get_matches_from(args))
-    }
 }

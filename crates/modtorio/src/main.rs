@@ -19,7 +19,7 @@ use ::log::*;
 use config::Config;
 use mod_portal::ModPortal;
 use opts::Opts;
-use std::{fs::File, sync::Arc};
+use std::{fs::File, path::Path, sync::Arc};
 use store::Store;
 
 /// Location of the sample server used during development.
@@ -113,6 +113,10 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn build_config(opts: &Opts, store: &Store) -> anyhow::Result<Config> {
+    if !opts.config.exists() {
+        create_default_config_file(&opts.config)?;
+    }
+
     let mut builder = config::Builder::new()
         .apply_config_file(&mut File::open(&opts.config)?)?
         .apply_store(store)
@@ -123,6 +127,13 @@ async fn build_config(opts: &Opts, store: &Store) -> anyhow::Result<Config> {
     }
 
     Ok(builder.build())
+}
+
+fn create_default_config_file<P>(path: P) -> anyhow::Result<()>
+where
+    P: AsRef<Path>,
+{
+    Config::write_default_config_to_writer(&mut File::create(path)?)
 }
 
 async fn update_store_from_env(store: &Store) -> anyhow::Result<()> {

@@ -2,8 +2,9 @@
 
 use super::Config;
 use crate::util::LogLevel;
+use log::*;
 use serde::{Deserialize, Serialize};
-use std::io::Read;
+use std::io::{Read, Write};
 
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct FileConfig {
@@ -22,6 +23,18 @@ pub struct CacheOptions {
 }
 
 impl FileConfig {
+    pub fn write_default_to_writer<W>(writer: &mut W) -> anyhow::Result<()>
+    where
+        W: Write,
+    {
+        let default = FileConfig::default();
+        let serialised = toml::to_string(&default)?;
+
+        debug!("Default config file:\n{}", serialised);
+        write!(writer, "{}", serialised)?;
+        Ok(())
+    }
+
     /// Attempts to create a new `File` object from a given path to a config file.
     ///
     /// Returns [`ConfigError::ConfigFileDoesNotExist`](crate::error::ConfigError::

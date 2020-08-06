@@ -3,10 +3,17 @@
 Dependencies:
 * libsqlite3-dev
 
-Sample .env:
+Sample .env for development:
 ```
 MODTORIO_PORTAL_USERNAME=fillme
 MODTORIO_PORTAL_TOKEN=fillme
-MODTORIO_LOG_LEVEL=debug
-MODTORIO_CACHE_EXPIRY=60
+```
+
+Sample `modtorio.toml` for development:
+```
+[general]
+log_level = "debug"
+
+[cache]
+expiry = 60
 ```

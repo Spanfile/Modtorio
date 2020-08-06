@@ -8,7 +8,7 @@ use crate::{store::Store, util};
 use env_config::EnvConfig;
 use file_config::FileConfig;
 use serde::Deserialize;
-use std::io::Read;
+use std::io::{Read, Write};
 use store_config::StoreConfig;
 use util::LogLevel;
 
@@ -74,6 +74,13 @@ impl Builder {
 }
 
 impl Config {
+    pub fn write_default_config_to_writer<W>(writer: &mut W) -> anyhow::Result<()>
+    where
+        W: Write,
+    {
+        FileConfig::write_default_to_writer(writer)
+    }
+
     pub fn log_level(&self) -> LogLevel {
         self.log_level
     }
