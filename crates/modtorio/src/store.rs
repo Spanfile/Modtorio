@@ -28,47 +28,19 @@ pub enum StoreLocation<P: AsRef<Path>> {
 }
 
 impl Store {
-    fn open_file_connection<P>(path: P) -> anyhow::Result<Connection>
-    where
-        P: AsRef<Path>,
-    {
-        if path.as_ref().exists() {
-            if util::file::ensure_permission(&path, MAX_STORE_FILE_PERMISSIONS)? {
-                Ok(Connection::open(path)?)
-            } else {
-                Err(StoreError::InsufficientFilePermissions {
-                    path: String::from(path.as_ref().get_str()?),
-                    minimum: MAX_STORE_FILE_PERMISSIONS,
-                    actual: util::file::get_permissions(&path)?,
-                }
-                .into())
-            }
-        } else {
-            let conn = Connection::open(&path)?;
-            util::file::set_permissions(&path, MAX_STORE_FILE_PERMISSIONS)?;
-            Ok(conn)
-        }
-    }
-
     pub async fn build<P>(store_location: StoreLocation<P>) -> anyhow::Result<Store>
     where
         P: AsRef<Path>,
     {
-        // TODO: ensure the store database file has good permissions (660 or stricter)
         trace!("Cache database schema checksum: {}", SCHEMA_CHECKSUM);
 
         let (store_file_exists, conn) = match store_location {
-            StoreLocation::Memory =>
-            // when opening an in-memory database, it will initially be empty, i.e. it didn't exist
-            // beforehand
-            {
-                debug!("Using an in-memory store");
+            StoreLocation::Memory => {
+                // when opening an in-memory database, it will initially be empty, i.e. it didn't
+                // exist beforehand
                 (false, Connection::open_in_memory()?)
             }
-            StoreLocation::File(path) => {
-                debug!("Using a file store: {}", path.as_ref().display());
-                (path.as_ref().exists(), Store::open_file_connection(path)?)
-            }
+            StoreLocation::File(path) => (path.as_ref().exists(), open_file_connection(path)?),
         };
         let conn = Arc::new(Mutex::new(conn));
 
@@ -83,20 +55,48 @@ impl Store {
         debug!("Schema checksums match: {}", checksums_match);
 
         if !checksums_match {
-            debug!("Applying database schema...");
-            trace!("{}", SCHEMA);
-
-            store.apply_schema(SCHEMA).await?;
-            store
-                .set_meta(store_meta::Value {
-                    field: store_meta::Field::SchemaChecksum,
-                    value: Some(String::from(SCHEMA_CHECKSUM)),
-                })
-                .await?;
+            apply_store_schema(&store).await?;
         }
 
         Ok(store)
     }
+}
+
+fn open_file_connection<P>(path: P) -> anyhow::Result<Connection>
+where
+    P: AsRef<Path>,
+{
+    if path.as_ref().exists() {
+        if util::file::ensure_permission(&path, MAX_STORE_FILE_PERMISSIONS)? {
+            Ok(Connection::open(path)?)
+        } else {
+            Err(StoreError::InsufficientFilePermissions {
+                path: String::from(path.as_ref().get_str()?),
+                minimum: MAX_STORE_FILE_PERMISSIONS,
+                actual: util::file::get_permissions(&path)?,
+            }
+            .into())
+        }
+    } else {
+        let conn = Connection::open(&path)?;
+        util::file::set_permissions(&path, MAX_STORE_FILE_PERMISSIONS)?;
+        Ok(conn)
+    }
+}
+
+async fn apply_store_schema(store: &Store) -> anyhow::Result<()> {
+    debug!("Applying database schema...");
+    trace!("{}", SCHEMA);
+
+    store.apply_schema(SCHEMA).await?;
+    store
+        .set_meta(store_meta::Value {
+            field: store_meta::Field::SchemaChecksum,
+            value: Some(String::from(SCHEMA_CHECKSUM)),
+        })
+        .await?;
+
+    Ok(())
 }
 
 impl<P> From<P> for StoreLocation<P>
