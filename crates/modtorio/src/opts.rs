@@ -1,9 +1,10 @@
 //! Provides the [`Opts`](Opts) struct, used to read and access the program's command line
 //! arguments.
 
-use crate::config;
+use crate::{config, util::LogLevel};
 use clap::{App, Arg, ArgMatches};
 use std::path::PathBuf;
+use strum::VariantNames;
 
 /// Stores command line parameters.
 #[derive(Debug)]
@@ -11,6 +12,9 @@ pub struct Opts {
     pub config: PathBuf,
     pub store: PathBuf,
     pub no_env: bool,
+    pub no_conf: bool,
+    pub log_level: Option<LogLevel>,
+    pub cache_expiry: Option<u64>,
 }
 
 impl Opts {
@@ -45,6 +49,26 @@ impl Opts {
                 "Skip loading configuration values from the environment variables. Primarily used \
                  for debugging purposes.",
             ))
+            .arg(Arg::with_name("no-conf").long("no-conf").help(
+                "Skip loading configuration values from the config file. Primarily used for \
+                 debugging purposes.",
+            ))
+            .arg(
+                Arg::with_name("log-level")
+                    .long("log-level")
+                    .value_name("LOG LEVEL")
+                    .possible_values(LogLevel::VARIANTS)
+                    .case_insensitive(true)
+                    .takes_value(true)
+                    .help("Specify the log level to use."),
+            )
+            .arg(
+                Arg::with_name("cache-expiry")
+                    .long("cache-expiry")
+                    .value_name("SECONDS")
+                    .takes_value(true)
+                    .help("Specify the cache expiry time."),
+            )
     }
 
     /// Returns a new `Opts` object from a given set of matched command line parameters.
@@ -59,11 +83,25 @@ impl Opts {
                 .expect("store option has no value")
                 .into(),
             no_env: matches.is_present("no-env"),
+            no_conf: matches.is_present("no-conf"),
+            log_level: matches
+                .value_of("log-level")
+                .map(|s| s.parse().expect("failed to parse value as log level")),
+            cache_expiry: matches
+                .value_of("cache-expiry")
+                .map(|s| s.parse().expect("failed to parse value as u64")),
         }
     }
 
     /// Returns a new `Opts` object built from the program's command line parameters.
     pub fn get() -> Opts {
         Opts::from_matches(&Opts::build_app().get_matches())
+    }
+
+    /// Returns a new `Opts` object built from custom command line parameters.
+    pub fn custom_args(args: &[&str]) -> Opts {
+        let mut full_args = vec!["modtorio"];
+        full_args.extend_from_slice(args);
+        Opts::from_matches(&Opts::build_app().get_matches_from(&full_args))
     }
 }

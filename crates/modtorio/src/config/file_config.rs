@@ -1,8 +1,5 @@
-//! Provides the [File](File) object, which represents Modtorio's config file.
-
 use super::Config;
 use crate::util::LogLevel;
-use log::*;
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 
@@ -30,15 +27,10 @@ impl FileConfig {
         let default = FileConfig::default();
         let serialised = toml::to_string(&default)?;
 
-        debug!("Default config file:\n{}", serialised);
         write!(writer, "{}", serialised)?;
         Ok(())
     }
 
-    /// Attempts to create a new `File` object from a given path to a config file.
-    ///
-    /// Returns [`ConfigError::ConfigFileDoesNotExist`](crate::error::ConfigError::
-    /// ConfigFileDoesNotExist) if the given path does not exist.
     pub fn from_file<R>(file: &mut R) -> anyhow::Result<Self>
     where
         R: Read,

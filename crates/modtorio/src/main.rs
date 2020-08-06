@@ -113,14 +113,17 @@ async fn main() -> anyhow::Result<()> {
 }
 
 async fn build_config(opts: &Opts, store: &Store) -> anyhow::Result<Config> {
-    if !opts.config.exists() {
-        create_default_config_file(&opts.config)?;
+    let mut builder = config::Builder::new();
+
+    if !opts.no_conf {
+        if !opts.config.exists() {
+            create_default_config_file(&opts.config)?;
+        }
+
+        builder = builder.apply_config_file(&mut File::open(&opts.config)?)?;
     }
 
-    let mut builder = config::Builder::new()
-        .apply_config_file(&mut File::open(&opts.config)?)?
-        .apply_store(store)
-        .await?;
+    builder = builder.apply_opts(opts).apply_store(&store).await?;
 
     if !opts.no_env {
         builder = builder.apply_env()?;

@@ -2,11 +2,13 @@
 
 mod env_config;
 mod file_config;
+mod opts_config;
 mod store_config;
 
-use crate::{store::Store, util};
+use crate::{opts::Opts, store::Store, util};
 use env_config::EnvConfig;
 use file_config::FileConfig;
+use opts_config::OptsConfig;
 use serde::Deserialize;
 use std::io::{Read, Write};
 use store_config::StoreConfig;
@@ -52,6 +54,13 @@ impl Builder {
         Ok(Builder {
             config: file_config.apply_to_config(self.config),
         })
+    }
+
+    pub fn apply_opts(self, opts: &Opts) -> Self {
+        let opts_config = OptsConfig::from_opts(opts);
+        Builder {
+            config: opts_config.apply_to_config(self.config),
+        }
     }
 
     pub fn apply_env(self) -> anyhow::Result<Self> {
@@ -123,17 +132,42 @@ mod tests {
 
     const MODTORIO_PORTAL_USERNAME: &str = "MODTORIO_PORTAL_USERNAME";
     const MODTORIO_PORTAL_TOKEN: &str = "MODTORIO_PORTAL_TOKEN";
+
+    const CONFIG_LOG_LEVEL: LogLevel = LogLevel::Debug;
+    const CONFIG_CACHE_EXPIRY: u64 = 1337;
+    const OPTS_LOG_LEVEL_STR: &str = "trace";
+    const OPTS_LOG_LEVEL: LogLevel = LogLevel::Trace;
+    const OPTS_CACHE_EXPIRY_STR: &str = "420";
+    const OPTS_CACHE_EXPIRY: u64 = 420;
     const ENV_USERNAME: &str = "env_username";
     const ENV_TOKEN: &str = "env_token";
     const STORE_USERNAME: &str = "store_username";
     const STORE_TOKEN: &str = "store_token";
 
-    fn temp_config_file(contents: &str) -> File {
+    fn temp_config_file() -> File {
         let mut temp = tempfile::tempfile().expect("failed to open tempfile");
-        write!(&temp, "{}", contents).expect("failed to write contents into tempfile");
+        write!(
+            &temp,
+            r#"[general]
+log_level = "{}"
+[cache]
+expiry = {}
+"#,
+            CONFIG_LOG_LEVEL, CONFIG_CACHE_EXPIRY
+        )
+        .expect("failed to write contents into tempfile");
         temp.seek(SeekFrom::Start(0))
             .expect("failed to seek tempfile back to start");
         temp
+    }
+
+    fn temp_opts() -> Opts {
+        Opts::custom_args(&[
+            "--log-level",
+            OPTS_LOG_LEVEL_STR,
+            "--cache-expiry",
+            OPTS_CACHE_EXPIRY_STR,
+        ])
     }
 
     fn temp_env() {
@@ -164,14 +198,7 @@ mod tests {
 
     #[test]
     fn config_from_file() {
-        let mut f = temp_config_file(
-            r#"
-            [general]
-            log_level = "trace"
-            [cache]
-            expiry = 1337
-        "#,
-        );
+        let mut f = temp_config_file();
 
         let config = Builder::new()
             .apply_config_file(&mut f)
@@ -179,8 +206,19 @@ mod tests {
             .build();
         println!("{:?}", config);
 
-        assert_eq!(config.log_level, LogLevel::Trace);
-        assert_eq!(config.cache_expiry, 1337);
+        assert_eq!(config.log_level, CONFIG_LOG_LEVEL);
+        assert_eq!(config.cache_expiry, CONFIG_CACHE_EXPIRY);
+    }
+
+    #[test]
+    fn config_from_opts() {
+        let opts = temp_opts();
+
+        let config = Builder::new().apply_opts(&opts).build();
+        println!("{:?}", config);
+
+        assert_eq!(config.log_level, OPTS_LOG_LEVEL);
+        assert_eq!(config.cache_expiry, OPTS_CACHE_EXPIRY);
     }
 
     #[test]
@@ -219,19 +257,14 @@ mod tests {
         let _s = SERIAL_MUTEX.lock().expect("failed to lock serial mutex");
 
         let store = temp_store().await;
-        let mut f = temp_config_file(
-            r#"
-            [general]
-            log_level = "trace"
-            [cache]
-            expiry = 1337
-        "#,
-        );
+        let opts = temp_opts();
+        let mut f = temp_config_file();
         temp_env();
 
         let config = Builder::new()
             .apply_config_file(&mut f)
             .expect("failed to apply config file")
+            .apply_opts(&opts)
             .apply_store(&store)
             .await
             .expect("failed to apply store to builder")
@@ -240,8 +273,8 @@ mod tests {
             .build();
         println!("{:?}", config);
 
-        assert_eq!(config.log_level, LogLevel::Trace);
-        assert_eq!(config.cache_expiry, 1337);
+        assert_eq!(config.log_level, OPTS_LOG_LEVEL);
+        assert_eq!(config.cache_expiry, OPTS_CACHE_EXPIRY);
         assert_eq!(config.portal_username, ENV_USERNAME);
         assert_eq!(config.portal_token, ENV_TOKEN);
     }
