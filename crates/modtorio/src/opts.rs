@@ -98,6 +98,7 @@ impl Opts {
         Opts::from_matches(&Opts::build_app().get_matches())
     }
 
+    #[allow(dead_code)]
     /// Returns a new `Opts` object built from custom command line parameters.
     pub fn custom_args(args: &[&str]) -> Opts {
         let mut full_args = vec!["modtorio"];

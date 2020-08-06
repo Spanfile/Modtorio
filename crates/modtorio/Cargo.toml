@@ -62,3 +62,11 @@ version = "2.33.1"
 
 [dev-dependencies]
 tempfile = "3.1.0"
+
+[build-dependencies]
+blake2 = "0.9.0"
+hex = "0.4.2"
+
+[build-dependencies.digest]
+features = ["alloc", "std"]
+version = "0.9.0"

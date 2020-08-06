@@ -19,6 +19,7 @@ where
     Ok(hex::encode(&result[..]))
 }
 
+#[allow(dead_code)]
 /// Calculates the checksum of a string using the BLAKE2b algorithm.
 pub fn blake2b_string(value: &str) -> String {
     let mut hasher = Blake2b::new();

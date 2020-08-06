@@ -2,7 +2,7 @@ pub mod cache;
 pub mod option;
 pub mod store_meta;
 
-use crate::{ext::PathExt, util};
+use crate::ext::PathExt;
 pub use cache::Cache;
 use log::*;
 use rusqlite::{Connection, OptionalExtension};
@@ -12,8 +12,8 @@ use std::{
 };
 use tokio::task;
 
-/// The default store database schema string.
-const SCHEMA: &str = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/schema.sql"));
+include!(concat!(env!("OUT_DIR"), "/store_consts.rs"));
+
 pub(crate) const MEMORY_STORE: &str = "_memory";
 
 pub struct Store {
@@ -32,9 +32,7 @@ impl Store {
         P: AsRef<Path>,
     {
         // TODO: ensure the store database file has good permissions (660 or stricter)
-        // TODO: since the schema is static, just calculate the checksum at build-time
-        let encoded_checksum = util::checksum::blake2b_string(SCHEMA);
-        trace!("Cache database schema checksum: {}", encoded_checksum);
+        trace!("Cache database schema checksum: {}", SCHEMA_CHECKSUM);
 
         let (store_file_exists, conn) = match store_location {
             StoreLocation::Memory =>
@@ -58,7 +56,7 @@ impl Store {
         debug!("Cache database exists: {}", store_file_exists);
 
         let checksums_match =
-            store_file_exists && checksum_matches_meta(&store, &encoded_checksum).await?;
+            store_file_exists && checksum_matches_meta(&store, SCHEMA_CHECKSUM).await?;
         debug!("Schema checksums match: {}", checksums_match);
 
         if !checksums_match {
@@ -69,7 +67,7 @@ impl Store {
             store
                 .set_meta(store_meta::Value {
                     field: store_meta::Field::SchemaChecksum,
-                    value: Some(encoded_checksum),
+                    value: Some(String::from(SCHEMA_CHECKSUM)),
                 })
                 .await?;
         }
