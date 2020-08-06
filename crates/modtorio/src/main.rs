@@ -34,7 +34,7 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let opts = Opts::get();
-    let store = Arc::new(Store::build(&opts).await?);
+    let store = Arc::new(Store::build((&opts.store).into()).await?);
     let config = Arc::new(build_config(&opts, &store).await?);
 
     log::setup_logging(&config)?;
@@ -114,12 +114,12 @@ async fn main() -> anyhow::Result<()> {
 
 async fn build_config(opts: &Opts, store: &Store) -> anyhow::Result<Config> {
     let mut builder = config::Builder::new()
-        .with_config_file(&mut File::open(&opts.config)?)?
-        .with_store(store)
+        .apply_config_file(&mut File::open(&opts.config)?)?
+        .apply_store(store)
         .await?;
 
     if !opts.no_env {
-        builder = builder.with_env()?;
+        builder = builder.apply_env()?;
     }
 
     Ok(builder.build())

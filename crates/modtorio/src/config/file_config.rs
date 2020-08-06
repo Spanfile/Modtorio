@@ -1,7 +1,7 @@
 //! Provides the [File](File) object, which represents Modtorio's config file.
 
 use super::Config;
-use crate::{error::ConfigError, ext::PathExt, util::LogLevel};
+use crate::util::LogLevel;
 use serde::{Deserialize, Serialize};
 use std::io::Read;
 

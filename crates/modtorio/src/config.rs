@@ -44,7 +44,7 @@ impl Builder {
         Ok(EnvConfig::from_env()?)
     }
 
-    pub fn with_config_file<R>(self, file: &mut R) -> anyhow::Result<Self>
+    pub fn apply_config_file<R>(self, file: &mut R) -> anyhow::Result<Self>
     where
         R: Read,
     {
@@ -54,14 +54,14 @@ impl Builder {
         })
     }
 
-    pub fn with_env(self) -> anyhow::Result<Self> {
+    pub fn apply_env(self) -> anyhow::Result<Self> {
         let env_config = Builder::get_env_config()?;
         Ok(Builder {
             config: env_config.apply_to_config(self.config),
         })
     }
 
-    pub async fn with_store(self, store: &Store) -> anyhow::Result<Self> {
+    pub async fn apply_store(self, store: &Store) -> anyhow::Result<Self> {
         let store_config = StoreConfig::from_store(store).await?;
         Ok(Builder {
             config: store_config.apply_to_config(self.config),
@@ -94,10 +94,14 @@ impl Config {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ext::PathExt;
+    use crate::store::option;
     use lazy_static::lazy_static;
-    use std::{env, fs::File, io::Write, path::PathBuf, sync::Mutex};
-    use tempfile::Builder;
+    use std::{
+        env,
+        fs::File,
+        io::{Seek, SeekFrom, Write},
+        sync::Mutex,
+    };
 
     // when running tests with cargo, they all share the same set of environment variables (cargo's)
     // and cargo runs them all in parallel. this means the tests *will* interfere with each other's
@@ -112,25 +116,48 @@ mod tests {
 
     const MODTORIO_PORTAL_USERNAME: &str = "MODTORIO_PORTAL_USERNAME";
     const MODTORIO_PORTAL_TOKEN: &str = "MODTORIO_PORTAL_TOKEN";
+    const ENV_USERNAME: &str = "env_username";
+    const ENV_TOKEN: &str = "env_token";
+    const STORE_USERNAME: &str = "store_username";
+    const STORE_TOKEN: &str = "store_token";
 
-    fn temp_config_file(contents: &str) -> (PathBuf, File) {
-        let named = Builder::new()
-            .prefix("modtorio")
-            .suffix(".conf")
-            .tempfile()
-            .expect("failed to open tempfile");
-        write!(&named, "{}", contents).expect("failed to write contents into tempfile");
-        (
-            named.path().to_path_buf(),
-            named.reopen().expect("failed to reopen tempfile"),
-        )
+    fn temp_config_file(contents: &str) -> File {
+        let mut temp = tempfile::tempfile().expect("failed to open tempfile");
+        write!(&temp, "{}", contents).expect("failed to write contents into tempfile");
+        temp.seek(SeekFrom::Start(0))
+            .expect("failed to seek tempfile back to start");
+        temp
     }
 
-    #[tokio::test]
-    async fn full_config() {
-        let _s = SERIAL_MUTEX.lock().expect("failed to lock serial mutex");
+    fn temp_env() {
+        env::set_var(MODTORIO_PORTAL_USERNAME, ENV_USERNAME);
+        env::set_var(MODTORIO_PORTAL_TOKEN, ENV_TOKEN);
+    }
 
-        let (conf_path, _f) = temp_config_file(
+    async fn temp_store() -> Store {
+        let store = Store::build(crate::store::MEMORY_STORE.into())
+            .await
+            .expect("failed to build store");
+        store
+            .set_option(option::Value {
+                field: option::Field::PortalUsername,
+                value: Some(String::from(STORE_USERNAME)),
+            })
+            .await
+            .expect("failed to store portal username");
+        store
+            .set_option(option::Value {
+                field: option::Field::PortalToken,
+                value: Some(String::from(STORE_TOKEN)),
+            })
+            .await
+            .expect("failed to store portal token");
+        store
+    }
+
+    #[test]
+    fn config_from_file() {
+        let mut f = temp_config_file(
             r#"
             [general]
             log_level = "trace"
@@ -138,44 +165,77 @@ mod tests {
             expiry = 1337
         "#,
         );
-        let opts = Opts::custom_args(&[
-            "modtorio",
-            "-c",
-            conf_path.get_str().expect("failed to get tempfile path"),
-            "--store",
-            crate::store::MEMORY_STORE,
-        ]);
-        let store = Store::build(&opts).await.unwrap();
 
-        env::set_var(MODTORIO_PORTAL_USERNAME, "username");
-        env::set_var(MODTORIO_PORTAL_TOKEN, "token");
-
-        println!("{:?}", util::env::dump_lines(crate::APP_PREFIX));
-        let config = Config::build(&opts, &store).await.unwrap();
+        let config = Builder::new()
+            .apply_config_file(&mut f)
+            .expect("failed to apply config file to builder")
+            .build();
         println!("{:?}", config);
 
-        assert_eq!(config.portal_username, "username");
-        assert_eq!(config.portal_token, "token");
         assert_eq!(config.log_level, LogLevel::Trace);
         assert_eq!(config.cache_expiry, 1337);
     }
 
-    // #[tokio::test]
-    // async fn default_config() {
-    //     let _s = SERIAL_MUTEX.lock().expect("failed to lock serial mutex");
+    #[test]
+    fn config_from_env() {
+        let _s = SERIAL_MUTEX.lock().expect("failed to lock serial mutex");
+        temp_env();
 
-    //     let opts = Opts::custom_args(&["--store", crate::store::MEMORY_STORE]);
-    //     let store = Store::build(&opts).await.unwrap();
+        println!("{:?}", util::env::dump_lines(crate::APP_PREFIX));
+        let config = Builder::new()
+            .apply_env()
+            .expect("failed to apply env to builder")
+            .build();
+        println!("{:?}", config);
 
-    //     // remove variables possibly left over from other tests
-    //     env::remove_var(MODTORIO_PORTAL_USERNAME);
-    //     env::remove_var(MODTORIO_PORTAL_TOKEN);
+        assert_eq!(config.portal_username, ENV_USERNAME);
+        assert_eq!(config.portal_token, ENV_TOKEN);
+    }
 
-    //     println!("{:?}", util::env::dump_lines(crate::APP_PREFIX));
-    //     let config = Config::build(&opts, &store).await.unwrap();
-    //     println!("{:?}", config);
+    #[tokio::test]
+    async fn config_from_store() {
+        let store = temp_store().await;
 
-    //     assert_eq!(config.cache_expiry, DEFAULT_CACHE_EXPIRY);
-    //     assert_eq!(config.log_level, LogLevel::default());
-    // }
+        let config = Builder::new()
+            .apply_store(&store)
+            .await
+            .expect("failed to apply store to builder")
+            .build();
+        println!("{:?}", config);
+
+        assert_eq!(config.portal_username, STORE_USERNAME);
+        assert_eq!(config.portal_token, STORE_TOKEN);
+    }
+
+    #[tokio::test]
+    async fn full_config() {
+        let _s = SERIAL_MUTEX.lock().expect("failed to lock serial mutex");
+
+        let store = temp_store().await;
+        let mut f = temp_config_file(
+            r#"
+            [general]
+            log_level = "trace"
+            [cache]
+            expiry = 1337
+        "#,
+        );
+        temp_env();
+
+        let config = Builder::new()
+            .apply_config_file(&mut f)
+            .expect("failed to apply config file")
+            .apply_store(&store)
+            .await
+            .expect("failed to apply store to builder")
+            .apply_env()
+            .expect("failed to apply env")
+            .build();
+        println!("{:?}", config);
+
+        assert_eq!(config.log_level, LogLevel::Trace);
+        assert_eq!(config.cache_expiry, 1337);
+        assert_eq!(config.portal_username, ENV_USERNAME);
+        assert_eq!(config.portal_token, ENV_TOKEN);
+    }
 }

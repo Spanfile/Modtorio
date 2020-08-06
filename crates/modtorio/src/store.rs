@@ -2,11 +2,14 @@ pub mod cache;
 pub mod option;
 pub mod store_meta;
 
-use crate::{ext::PathExt, opts::Opts, util};
+use crate::{ext::PathExt, util};
 pub use cache::Cache;
 use log::*;
 use rusqlite::{Connection, OptionalExtension};
-use std::sync::{Arc, Mutex};
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+};
 use tokio::task;
 
 /// The default store database schema string.
@@ -18,23 +21,33 @@ pub struct Store {
     pub cache: Cache,
 }
 
+pub enum StoreLocation<P: AsRef<Path>> {
+    Memory,
+    File(P),
+}
+
 impl Store {
-    pub async fn build(opts: &Opts) -> anyhow::Result<Store> {
+    pub async fn build<P>(store_location: StoreLocation<P>) -> anyhow::Result<Store>
+    where
+        P: AsRef<Path>,
+    {
         // TODO: ensure the store database file has good permissions (660 or stricter)
         // TODO: since the schema is static, just calculate the checksum at build-time
         let encoded_checksum = util::checksum::blake2b_string(SCHEMA);
         trace!("Cache database schema checksum: {}", encoded_checksum);
 
-        let store_location = opts.store.get_str()?;
-        let (store_file_exists, conn) = if store_location == MEMORY_STORE {
+        let (store_file_exists, conn) = match store_location {
+            StoreLocation::Memory =>
             // when opening an in-memory database, it will initially be empty, i.e. it didn't exist
             // beforehand
-            (false, Connection::open_in_memory()?)
-        } else {
-            (
-                opts.store.exists(),
-                Connection::open(opts.store.get_str()?)?,
-            )
+            {
+                debug!("Using an in-memory store");
+                (false, Connection::open_in_memory()?)
+            }
+            StoreLocation::File(path) => {
+                debug!("Using a file store: {}", path.as_ref().display());
+                (path.as_ref().exists(), Connection::open(path)?)
+            }
         };
         let conn = Arc::new(Mutex::new(conn));
 
@@ -42,8 +55,6 @@ impl Store {
             conn: Arc::clone(&conn),
         };
         let store = Store { conn, cache };
-
-        debug!("Using store location: {}", store_location);
         debug!("Cache database exists: {}", store_file_exists);
 
         let checksums_match =
@@ -64,6 +75,19 @@ impl Store {
         }
 
         Ok(store)
+    }
+}
+
+impl<P> From<P> for StoreLocation<P>
+where
+    P: AsRef<Path>,
+{
+    fn from(p: P) -> Self {
+        if p.as_ref().get_str().expect("failed to get path as str") == MEMORY_STORE {
+            StoreLocation::Memory
+        } else {
+            StoreLocation::File(p)
+        }
     }
 }
 
