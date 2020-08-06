@@ -1,6 +1,5 @@
 pub mod cache;
 pub mod option;
-pub mod store_meta;
 
 use crate::{error::StoreError, ext::PathExt, util};
 pub use cache::Cache;
@@ -50,6 +49,7 @@ where
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_schema(self, schema: &str) -> Self {
         Self {
             schema: String::from(schema),
@@ -58,6 +58,7 @@ where
         }
     }
 
+    #[allow(dead_code)]
     pub fn skip_storing_checksum(self, skip: bool) -> Self {
         Self {
             skip_storing_checksum: skip,
@@ -140,10 +141,10 @@ async fn store_schema_checksum(store: &Store, checksum: &str) -> anyhow::Result<
     trace!("Storing schema checksum...");
 
     store
-        .set_meta(store_meta::Value {
-            field: store_meta::Field::SchemaChecksum,
-            value: Some(String::from(checksum)),
-        })
+        .set_option(option::Value::new(
+            option::Field::SchemaChecksum,
+            Some(String::from(checksum)),
+        ))
         .await?;
     Ok(())
 }
@@ -170,8 +171,8 @@ where
 async fn checksum_matches_meta(store: &Store, wanted_checksum: &str) -> anyhow::Result<bool> {
     // TODO: the checksum won't match if the _meta table doesn't exist - return false instead of the
     // error
-    if let Some(metavalue) = store.get_meta(store_meta::Field::SchemaChecksum).await? {
-        if let Some(existing_checksum) = metavalue.value {
+    if let Some(metavalue) = store.get_option(option::Field::SchemaChecksum).await? {
+        if let Some(existing_checksum) = metavalue.value() {
             trace!("Got existing schema checksum: {}", existing_checksum);
             return Ok(wanted_checksum == existing_checksum);
         }
@@ -236,32 +237,6 @@ impl Store {
         Ok(self.conn.lock().unwrap().execute_batch("COMMIT")?)
     }
 
-    /// Retrieves an optional meta value from the meta table with a given meta field.
-    pub async fn get_meta(
-        &self,
-        field: store_meta::Field,
-    ) -> anyhow::Result<Option<store_meta::Value>> {
-        let conn = &self.conn;
-        sql!(conn => {
-            let mut stmt = conn.prepare(store_meta::Value::select())?;
-
-            Ok(stmt
-                .query_row_named(&store_meta::Value::select_params(&field), |row| {
-                    Ok(row.into())
-                })
-                .optional()?)
-        })
-    }
-
-    /// Stores a meta value to the meta table.
-    pub async fn set_meta(&self, value: store_meta::Value) -> anyhow::Result<()> {
-        let conn = &self.conn;
-        sql!(conn => {
-            conn.execute_named(store_meta::Value::replace_into(), &value.all_params())?;
-            Ok(())
-        })
-    }
-
     /// Retrieves an option value from the option table with a given option field.
     pub async fn get_option(&self, field: option::Field) -> anyhow::Result<Option<option::Value>> {
         let conn = &self.conn;
@@ -301,52 +276,6 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn set_meta() {
-        const SCHEMA: &str = r#"CREATE TABLE "_meta" (
-"field"	TEXT NOT NULL,
-"value"	TEXT,
-PRIMARY KEY("field")
-);"#;
-        let store = get_test_store(SCHEMA).await;
-
-        store
-            .begin_transaction()
-            .expect("failed to begin transaction");
-        store
-            .set_meta(store_meta::Value {
-                field: store_meta::Field::SchemaChecksum,
-                value: Some(String::from("value")),
-            })
-            .await
-            .expect("failed to set meta value");
-        store
-            .commit_transaction()
-            .expect("failed to commit transaction");
-    }
-
-    #[tokio::test]
-    async fn get_meta() {
-        const SCHEMA: &str = r#"CREATE TABLE "_meta" (
-"field"	TEXT NOT NULL,
-"value"	TEXT,
-PRIMARY KEY("field")
-);
-INSERT INTO _meta("field", "value") VALUES("SchemaChecksum", "value");"#;
-        let store = get_test_store(SCHEMA).await;
-
-        store
-            .begin_transaction()
-            .expect("failed to begin transaction");
-        let got_value = store
-            .get_meta(store_meta::Field::SchemaChecksum)
-            .await
-            .expect("failed to get meta value")
-            .expect("store returned no value");
-
-        assert_eq!(got_value.value, Some(String::from("value")));
-    }
-
-    #[tokio::test]
     async fn set_option() {
         const SCHEMA: &str = r#"CREATE TABLE "options" (
 "field"	TEXT NOT NULL,
@@ -359,10 +288,10 @@ PRIMARY KEY("field")
             .begin_transaction()
             .expect("failed to begin transaction");
         store
-            .set_option(option::Value {
-                field: option::Field::PortalUsername,
-                value: Some(String::from("value")),
-            })
+            .set_option(option::Value::new(
+                option::Field::PortalUsername,
+                Some(String::from("value")),
+            ))
             .await
             .expect("failed to set meta value");
         store
@@ -386,6 +315,6 @@ INSERT INTO options("field", "value") VALUES("PortalUsername", "value");"#;
             .expect("failed to get option value")
             .expect("store returned no value");
 
-        assert_eq!(got_value.value, Some(String::from("value")));
+        assert_eq!(got_value.value(), Some("value"));
     }
 }

@@ -3,7 +3,7 @@ use rusqlite::{
     types::{self, FromSql},
     ToSql,
 };
-use std::str::FromStr;
+use std::{str::FromStr, string::ToString};
 use strum_macros::{Display, EnumString};
 use types::{FromSqlError, FromSqlResult, ToSqlOutput, ValueRef};
 
@@ -11,14 +11,29 @@ use types::{FromSqlError, FromSqlResult, ToSqlOutput, ValueRef};
 pub enum Field {
     PortalUsername,
     PortalToken,
+    SchemaChecksum,
 }
 
 #[derive(Debug, Model)]
 #[table_name = "options"]
 pub struct Value {
     #[index]
-    pub field: Field,
-    pub value: Option<String>,
+    field: Field,
+    value: Option<String>,
+}
+
+impl Value {
+    pub fn new(field: Field, value: Option<String>) -> Self {
+        Self { field, value }
+    }
+
+    pub fn value(&self) -> Option<&str> {
+        self.value.as_deref()
+    }
+
+    pub fn take_value(self) -> Option<String> {
+        self.value
+    }
 }
 
 impl ToSql for Field {
@@ -29,7 +44,7 @@ impl ToSql for Field {
 
 impl FromSql for Field {
     fn column_result(value: ValueRef<'_>) -> FromSqlResult<Self> {
-        match Field::from_str(value.as_str()?) {
+        match Self::from_str(value.as_str()?) {
             Ok(v) => Ok(v),
             Err(e) => Err(FromSqlError::Other(Box::new(e))),
         }

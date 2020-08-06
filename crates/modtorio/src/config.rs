@@ -181,17 +181,17 @@ expiry = {}
             .await
             .expect("failed to build store");
         store
-            .set_option(option::Value {
-                field: option::Field::PortalUsername,
-                value: Some(String::from(STORE_USERNAME)),
-            })
+            .set_option(option::Value::new(
+                option::Field::PortalUsername,
+                Some(String::from(STORE_USERNAME)),
+            ))
             .await
             .expect("failed to store portal username");
         store
-            .set_option(option::Value {
-                field: option::Field::PortalToken,
-                value: Some(String::from(STORE_TOKEN)),
-            })
+            .set_option(option::Value::new(
+                option::Field::PortalToken,
+                Some(String::from(STORE_TOKEN)),
+            ))
             .await
             .expect("failed to store portal token");
         store

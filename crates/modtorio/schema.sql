@@ -1,10 +1,3 @@
-DROP TABLE IF EXISTS "_meta";
-CREATE TABLE IF NOT EXISTS "_meta" (
-	"field"	TEXT NOT NULL,
-	"value"	TEXT,
-	PRIMARY KEY("field")
-);
-
 DROP TABLE IF EXISTS "options";
 CREATE TABLE IF NOT EXISTS "options" (
 	"field" TEXT NOT NULL,

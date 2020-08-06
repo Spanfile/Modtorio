@@ -1,5 +1,6 @@
 #![feature(drain_filter)]
 #![feature(async_closure)]
+#![feature(associated_type_bounds)]
 #![warn(clippy::if_not_else)]
 #![warn(clippy::needless_pass_by_value)]
 // #![warn(clippy::pedantic)]
@@ -148,19 +149,19 @@ async fn update_store_from_env(store: &Store) -> anyhow::Result<()> {
             PORTAL_USERNAME_ENV_VARIABLE => {
                 debug!("Got portal username env variable, updating store");
                 store
-                    .set_option(store::option::Value {
-                        field: store::option::Field::PortalUsername,
-                        value: Some(value),
-                    })
+                    .set_option(store::option::Value::new(
+                        store::option::Field::PortalUsername,
+                        Some(value),
+                    ))
                     .await?
             }
             PORTAL_TOKEN_ENV_VARIABLE => {
                 debug!("Got portal token env variable, updating store");
                 store
-                    .set_option(store::option::Value {
-                        field: store::option::Field::PortalToken,
-                        value: Some(value),
-                    })
+                    .set_option(store::option::Value::new(
+                        store::option::Field::PortalToken,
+                        Some(value),
+                    ))
                     .await?
             }
             _ => {}

@@ -13,12 +13,12 @@ impl StoreConfig {
         let portal_username = store
             .get_option(store::option::Field::PortalUsername)
             .await?
-            .and_then(|v| v.value)
+            .and_then(|v| v.take_value())
             .unwrap_or_else(String::new);
         let portal_token = store
             .get_option(store::option::Field::PortalToken)
             .await?
-            .and_then(|v| v.value)
+            .and_then(|v| v.take_value())
             .unwrap_or_else(String::new);
 
         Ok(Self {
@@ -28,7 +28,7 @@ impl StoreConfig {
     }
 
     // clippy complains that the config parameter should be taken by reference, but if it is the
-    // ..config will fail
+    // '..config' bit will fail
     #[allow(clippy::needless_pass_by_value)]
     pub fn apply_to_config(self, config: Config) -> Config {
         Config {

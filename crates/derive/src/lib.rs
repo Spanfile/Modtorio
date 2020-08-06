@@ -7,7 +7,7 @@ use heck::SnakeCase;
 use helpers::*;
 use proc_macro2::{Span, TokenStream};
 use quote::quote;
-use syn::{parse_macro_input, spanned::Spanned, DeriveInput, FieldsNamed, Ident, Type};
+use syn::{parse_macro_input, spanned::Spanned, DeriveInput, FieldsNamed, Generics, Ident, Type};
 use thiserror::Error;
 
 const INDEX_ATTRIBUTE: &str = "index";
@@ -90,6 +90,7 @@ pub fn model(item: proc_macro::TokenStream) -> proc_macro::TokenStream {
 fn run_macro(input: DeriveInput) -> Result<TokenStream, MacroError> {
     let fields = get_fields(&input)?;
     let ident = &input.ident;
+    let gen = &input.generics;
     let table_name =
         if let Some(table_name) = get_attribute_value(&input.attrs, TABLE_NAME_ATTRIBUTE)? {
             table_name
@@ -106,10 +107,10 @@ fn run_macro(input: DeriveInput) -> Result<TokenStream, MacroError> {
     let update = update_clause(&table_name, &macro_fields);
 
     let params = params_fns(&macro_fields);
-    let from_row = from_row_impl(&ident, &macro_fields);
+    let from_row = from_row_impl(&ident, gen, &macro_fields);
 
     Ok(quote!(
-        impl #ident {
+        impl#gen #ident#gen {
             #params
 
             /// Returns an SQL `SELECT`-clause that selects rows based on the model's marked indices.
@@ -320,7 +321,7 @@ fn all_params_fn(fields: &[MacroField]) -> TokenStream {
     )
 }
 
-fn from_row_impl(ident: &Ident, fields: &[MacroField]) -> TokenStream {
+fn from_row_impl(ident: &Ident, gen: &Generics, fields: &[MacroField]) -> TokenStream {
     let mut field_setters = Vec::new();
 
     for (index, field) in fields.iter().enumerate() {
@@ -335,7 +336,7 @@ fn from_row_impl(ident: &Ident, fields: &[MacroField]) -> TokenStream {
     }
 
     quote!(
-        impl From<&::rusqlite::Row<'_>> for #ident {
+        impl#gen From<&::rusqlite::Row<'_>> for #ident#gen {
             fn from(row: &::rusqlite::Row) -> Self {
                 Self {
                     #(#field_setters),*
