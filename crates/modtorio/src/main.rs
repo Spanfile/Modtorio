@@ -61,8 +61,6 @@ async fn main() -> anyhow::Result<()> {
     }
     log_program_information();
 
-    return Ok(());
-
     let portal = Arc::new(ModPortal::new(&config)?);
 
     // let factorio = Arc::new(
@@ -71,6 +69,7 @@ async fn main() -> anyhow::Result<()> {
     //         .await?,
     // );
 
+    info!("Loading previous games...");
     let cached_games = store.cache.get_games().await?;
     let mut games = Vec::new();
     debug!("Got cached games: {:?}", cached_games);
@@ -95,23 +94,7 @@ async fn main() -> anyhow::Result<()> {
         games.push(game);
     }
 
-    if games.is_empty() {
-        info!(
-            "No cached games found, importing from {}...",
-            SAMPLE_GAME_DIRECTORY
-        );
-
-        games.push(
-            factorio::Importer::from_root(SAMPLE_GAME_DIRECTORY)
-                .import(Arc::clone(&config), Arc::clone(&portal), Arc::clone(&store))
-                .await?,
-        );
-    }
-
-    // factorio
-    //     .mods
-    //     .add_from_portal("angelsindustries", None)
-    //     .await?;
+    info!("{} previous games loaded.", games.len());
 
     for factorio in &mut games {
         // factorio.mods.add_from_portal("FARL", None).await?;
@@ -162,6 +145,8 @@ where
 /// * `Field::PortalToken` from the variable whose name is in the constant
 ///   `PORTAL_TOKEN_ENV_VARIABLE`
 async fn update_store_from_env(store: &Store) -> anyhow::Result<()> {
+    store.begin_transaction()?;
+
     for (key, value) in util::env::dump_map(APP_PREFIX) {
         match key.as_ref() {
             PORTAL_USERNAME_ENV_VARIABLE => {
@@ -186,6 +171,7 @@ async fn update_store_from_env(store: &Store) -> anyhow::Result<()> {
         }
     }
 
+    store.commit_transaction()?;
     Ok(())
 }
 

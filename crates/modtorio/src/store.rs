@@ -254,7 +254,7 @@ impl Store {
 
     /// Begins a new transaction in the database with `BEGIN TRANSACTION;`.
     pub fn begin_transaction(&self) -> anyhow::Result<()> {
-        debug!("Beginning new cache transaction");
+        trace!("Beginning new cache transaction");
         Ok(self
             .conn
             .lock()
@@ -264,7 +264,7 @@ impl Store {
 
     /// Commits an ongoing transaction in the database with `COMMIT`;
     pub fn commit_transaction(&self) -> anyhow::Result<()> {
-        debug!("Committing cache transaction");
+        trace!("Committing cache transaction");
         Ok(self.conn.lock().unwrap().execute_batch("COMMIT")?)
     }
 

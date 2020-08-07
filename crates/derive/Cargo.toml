@@ -1,5 +1,6 @@
 [package]
 authors = ["Spanfile <spansdev@gmail.com>"]
+description = "Various derive macros for Modtorio."
 edition = "2018"
 name = "derive"
 version = "0.1.0"
