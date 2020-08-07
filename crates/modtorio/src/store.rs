@@ -3,7 +3,7 @@
 pub mod cache;
 pub mod option;
 
-use crate::{error::StoreError, ext::PathExt, util};
+use crate::{error::StoreError, util, util::ext::PathExt};
 pub use cache::Cache;
 use log::*;
 use rusqlite::{Connection, OptionalExtension};

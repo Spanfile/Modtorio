@@ -5,8 +5,8 @@ mod mods;
 mod settings;
 
 use crate::{
-    ext::PathExt,
     store::{cache::models, Store},
+    util::ext::PathExt,
     Config, ModPortal,
 };
 use log::*;

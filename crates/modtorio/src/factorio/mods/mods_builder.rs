@@ -3,8 +3,8 @@
 
 use super::Mods;
 use crate::{
-    config::Config, error::ModError, ext::PathExt, factorio::GameCacheId, mod_common::Mod,
-    mod_portal::ModPortal, store::Store, util,
+    config::Config, error::ModError, factorio::GameCacheId, mod_common::Mod, mod_portal::ModPortal,
+    store::Store, util, util::ext::PathExt,
 };
 use log::*;
 use std::{

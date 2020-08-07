@@ -11,7 +11,6 @@
 
 mod config;
 mod error;
-mod ext;
 mod factorio;
 mod log;
 mod mod_common;

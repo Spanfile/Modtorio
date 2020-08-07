@@ -4,11 +4,13 @@
 use super::Dependency;
 use crate::{
     error::ModError,
-    ext::{PathExt, ZipExt},
     mod_portal::ModPortal,
     store::{cache::models, Store},
     util,
-    util::HumanVersion,
+    util::{
+        ext::{PathExt, ZipExt},
+        HumanVersion,
+    },
 };
 use anyhow::ensure;
 use chrono::{DateTime, Utc};

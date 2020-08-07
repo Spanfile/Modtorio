@@ -2,11 +2,12 @@
 
 pub mod checksum;
 pub mod env;
+pub mod ext;
 pub mod file;
 mod human_version;
 mod log_level;
 
-use crate::ext::PathExt;
+use ext::PathExt;
 pub use human_version::{Comparator, HumanVersion, HumanVersionReq};
 pub use log_level::LogLevel;
 use serde::{Deserialize, Serialize};

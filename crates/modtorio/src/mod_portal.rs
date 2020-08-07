@@ -1,6 +1,6 @@
 //! Provides the [`ModPortal`](ModPortal) object to interact with the Factorio mod portal via HTTP.
 
-use crate::{config::Config, error::ModPortalError, ext::ResponseExt};
+use crate::{config::Config, error::ModPortalError, util::ext::ResponseExt};
 use anyhow::ensure;
 use log::*;
 use reqwest::{Client, StatusCode};

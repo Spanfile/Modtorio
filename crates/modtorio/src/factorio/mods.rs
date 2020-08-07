@@ -6,10 +6,9 @@ mod mods_builder;
 use super::GameCacheId;
 use crate::{
     error::ModError,
-    ext::PathExt,
     mod_common::{DownloadResult, Mod, Requirement},
     store::{cache::models, Store},
-    util::HumanVersion,
+    util::{ext::PathExt, HumanVersion},
     Config, ModPortal,
 };
 pub use mods_builder::ModsBuilder;
