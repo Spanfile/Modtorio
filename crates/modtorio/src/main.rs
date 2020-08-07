@@ -136,7 +136,7 @@ where
     Config::write_default_config_to_writer(&mut File::create(path)?)
 }
 
-/// Updates a given program Store from the current environment variables.
+/// Updates a given program `Store` from the current environment variables.
 ///
 /// The following values are updated:
 /// * `Field::PortalUsername` from the variable whose name is in the constant
