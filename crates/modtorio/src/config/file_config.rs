@@ -2,21 +2,26 @@
 
 use super::Config;
 use crate::util::LogLevel;
+use common::net::NetAddress;
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
 
 /// Contains the config values from a config file.
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct FileConfig {
-    /// General config options
-    general: GeneralOptions,
+    /// Debug config options
+    #[serde(default)] // TODO: test these defaults
+    debug: DebugOptions,
     /// Cache config options
+    #[serde(default)]
     cache: CacheOptions,
+    /// Network config options
+    network: NetworkOptions,
 }
 
 /// Contains the config values from the `[general]` section of a config file.
 #[derive(Debug, Deserialize, Serialize, Default)]
-pub struct GeneralOptions {
+pub struct DebugOptions {
     /// The log level to use.
     log_level: LogLevel,
 }
@@ -26,6 +31,13 @@ pub struct GeneralOptions {
 pub struct CacheOptions {
     /// The program cache expiry in seconds.
     expiry: u64,
+}
+
+/// Contains the config values from the `[network]` section of a config file.
+#[derive(Debug, Deserialize, Serialize, Default)]
+pub struct NetworkOptions {
+    /// The server listen addresses
+    listen: Vec<NetAddress>,
 }
 
 impl FileConfig {
@@ -55,7 +67,7 @@ impl FileConfig {
     /// values set.
     pub fn apply_to_config(self, config: Config) -> Config {
         Config {
-            log_level: self.general.log_level,
+            log_level: self.debug.log_level,
             cache_expiry: self.cache.expiry,
             ..config
         }

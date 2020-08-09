@@ -154,6 +154,7 @@ mod tests {
         static ref SERIAL_MUTEX: Mutex<()> = Mutex::new(());
     }
 
+    // TODO: all these constants are ew
     const MODTORIO_PORTAL_USERNAME: &str = "MODTORIO_PORTAL_USERNAME";
     const MODTORIO_PORTAL_TOKEN: &str = "MODTORIO_PORTAL_TOKEN";
 
@@ -172,10 +173,12 @@ mod tests {
         let mut temp = tempfile::tempfile().expect("failed to open tempfile");
         write!(
             &temp,
-            r#"[general]
+            r#"[debug]
 log_level = "{}"
 [cache]
 expiry = {}
+[network]
+listen = ["0.0.0.0:1337", "unix:/temp/path"]
 "#,
             CONFIG_LOG_LEVEL, CONFIG_CACHE_EXPIRY
         )
