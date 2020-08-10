@@ -138,26 +138,32 @@ impl Modtorio {
             .await?;
         Ok(())
     }
-}
 
-impl Modtorio {
+    /// Logs a given RPC request.
+    fn log_rpc_request<T: std::fmt::Debug>(&self, request: &Request<T>) {
+        info!(
+            "Got a request from '{}'",
+            request
+                .remote_addr()
+                .map(|addr| addr.to_string())
+                .unwrap_or_else(|| String::from("unknown"))
+        );
+        debug!("{:?}", request);
+    }
+
     /// Returns this instance's uptime.
     async fn get_uptime(&self) -> chrono::Duration {
         Utc::now() - *self.started_at
     }
 
     /// Imports a new Factorio instance from a given path to its root directory.
-    async fn import_game<P>(
-        self,
-        path: P,
-        prog_tx: status::AsyncProgressChannel,
-    ) -> anyhow::Result<()>
+    async fn import_game<P>(self, path: P, prog_tx: status::AsyncProgressChannel)
     where
         P: AsRef<Path>,
     {
         let path = path.as_ref().to_path_buf();
         task::spawn(async move {
-            match factorio::Importer::from_root(path)
+            match factorio::Importer::from_root(&path)
                 .with_status_updates(prog_tx.clone())
                 .import(
                     Arc::clone(&self.config),
@@ -167,17 +173,28 @@ impl Modtorio {
                 .await
             {
                 Ok(game) => {
-                    status::send_status(Some(prog_tx), status::indefinite("Done")).await?;
                     self.games.lock().await.push(game);
-                    Ok(())
+
+                    info!(
+                        "Imported new Factorio server instance from {}",
+                        path.display()
+                    );
+                    if let Err(e) =
+                        status::send_status(Some(prog_tx), status::indefinite("Done")).await
+                    {
+                        error!("Failed to send status update: {}", e);
+                    }
                 }
                 Err(e) => {
-                    status::send_status(Some(prog_tx), status::error(&e.to_string())).await?;
-                    Err(anyhow::anyhow!(""))
+                    error!("Failed to import game: {}", e);
+                    if let Err(nested) =
+                        status::send_status(Some(prog_tx), status::error(&e.to_string())).await
+                    {
+                        error!("Failed to send status update: {}", nested);
+                    }
                 }
             }
-        })
-        .await?
+        });
     }
 }
 
@@ -189,7 +206,7 @@ impl ModRpc for Modtorio {
         &self,
         request: Request<Empty>,
     ) -> Result<Response<ServerStatus>, Status> {
-        debug!("Got status request: {:?}", request);
+        self.log_rpc_request(&request);
 
         let uptime = self.get_uptime().await;
         Ok(Response::new(ServerStatus {
@@ -201,14 +218,13 @@ impl ModRpc for Modtorio {
         &self,
         request: Request<ImportRequest>,
     ) -> Result<Response<Self::ImportGameStream>, Status> {
-        debug!("Got a game import request: {:?}", request);
+        self.log_rpc_request(&request);
 
         let (tx, rx) = mpsc::channel(1024);
 
         self.clone()
             .import_game(request.into_inner().path, Arc::new(Mutex::new(tx)))
-            .await
-            .unwrap();
+            .await;
         Ok(Response::new(rx))
     }
 }

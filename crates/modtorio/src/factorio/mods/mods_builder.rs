@@ -116,6 +116,11 @@ impl<'a> ModsBuilder {
             created_mods.push(created_mod);
         }
 
+        status::send_status(
+            self.prog_tx.clone(),
+            status::indefinite("Checking for non-cached mod zip archives..."),
+        )
+        .await?;
         debug!(
             "{} mods loaded from cache, checking for non-cached zips...",
             created_mods.len()
@@ -132,6 +137,14 @@ impl<'a> ModsBuilder {
                     "Found non-cached mod from filesystem: {}, loading from zip...",
                     entry.display()
                 );
+                status::send_status(
+                    self.prog_tx.clone(),
+                    status::indefinite(&format!(
+                        "Found non-cached mod zip archive: {}, loading...",
+                        entry.display()
+                    )),
+                )
+                .await?;
 
                 let created_mod = match Mod::from_zip(
                     &entry,
@@ -174,7 +187,10 @@ impl<'a> ModsBuilder {
         for entry in util::glob(&zips)? {
             status::send_status(
                 self.prog_tx.clone(),
-                status::indefinite(&format!("Loading mod from archive: {}", entry.display())),
+                status::indefinite(&format!(
+                    "Loading mod from zip archive: {}",
+                    entry.display()
+                )),
             )
             .await?;
 

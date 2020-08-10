@@ -155,14 +155,14 @@ impl Importer {
         let mut mods_path = self.root.clone();
         mods_path.push(MODS_PATH);
 
-        let mut mods = ModsBuilder::root(mods_path);
+        let mut mods_builder = ModsBuilder::root(mods_path);
 
         if let Some(game_cache_id) = self.game_cache_id {
-            mods = mods.with_game_cache_id(game_cache_id);
+            mods_builder = mods_builder.with_game_cache_id(game_cache_id);
         }
 
         if let Some(prog_tx) = &self.prog_tx {
-            mods = mods.with_status_updates(Arc::clone(prog_tx));
+            mods_builder = mods_builder.with_status_updates(Arc::clone(prog_tx));
         }
 
         status::send_status(
@@ -173,7 +173,9 @@ impl Importer {
         let settings = ServerSettings::from_game_json(&fs::read_to_string(settings_path)?)?;
 
         status::send_status(self.prog_tx.clone(), status::indefinite("Loading mods...")).await?;
-        let mods = mods.build(config, portal, Arc::clone(&store)).await?;
+        let mods = mods_builder
+            .build(config, portal, Arc::clone(&store))
+            .await?;
 
         Ok(Factorio {
             settings,

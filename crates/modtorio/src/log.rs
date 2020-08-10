@@ -11,12 +11,13 @@ pub fn setup_logging(config: &Config) -> anyhow::Result<()> {
     Dispatch::new()
         .format(move |out, msg, record| {
             out.finish(format_args!(
-                "{: >11.3} {: >5} [{:?}] {}",
+                "{: >11.3} {: >5} [{:0>3?}] [{}] {}",
                 // "[{} UTC] [{}] {}",
                 // chrono::Utc::now().format(time_format),
                 start.elapsed().as_secs_f32(),
                 record.level(),
                 thread::current().id().as_u64(),
+                record.target(),
                 msg
             ))
         })
@@ -25,6 +26,7 @@ pub fn setup_logging(config: &Config) -> anyhow::Result<()> {
         .level_for("reqwest", log::LevelFilter::Info)
         .level_for("mio", log::LevelFilter::Info)
         .level_for("module", log::LevelFilter::Info)
+        .level_for("h2", log::LevelFilter::Info)
         .chain(std::io::stdout())
         .apply()?;
     Ok(())
