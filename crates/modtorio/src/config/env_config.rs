@@ -41,3 +41,32 @@ impl EnvConfig {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{super::SERIAL_MUTEX, *};
+    use std::env;
+
+    #[test]
+    fn full() {
+        let _s = SERIAL_MUTEX.lock().expect("failed to lock serial mutex");
+
+        env::set_var("MODTORIO_PORTAL_USERNAME", "env_username");
+        env::set_var("MODTORIO_PORTAL_TOKEN", "env_token");
+
+        let config = EnvConfig::from_env().expect("failed to create EnvConfig");
+
+        assert_eq!(config.portal_username, "env_username");
+        assert_eq!(config.portal_token, "env_token");
+    }
+
+    #[test]
+    fn required() {
+        let _s = SERIAL_MUTEX.lock().expect("failed to lock serial mutex");
+
+        env::remove_var("MODTORIO_PORTAL_USERNAME");
+        env::remove_var("MODTORIO_PORTAL_TOKEN");
+
+        assert!(EnvConfig::from_env().is_err());
+    }
+}

@@ -1,6 +1,6 @@
 //! Provides the `FileConfig` object, used to access config values from a config file.
 
-use super::Config;
+use super::{Config, DEFAULT_CACHE_EXPIRY};
 use crate::util::LogLevel;
 use common::net::NetAddress;
 use serde::{Deserialize, Serialize};
@@ -77,7 +77,61 @@ impl FileConfig {
 impl Default for CacheOptions {
     fn default() -> Self {
         Self {
-            expiry: super::DEFAULT_CACHE_EXPIRY,
+            expiry: DEFAULT_CACHE_EXPIRY,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::{io::Cursor, path::PathBuf};
+
+    #[test]
+    fn full() {
+        let contents = String::from(
+            r#"[debug]
+log_level = "trace"
+[cache]
+expiry = 60
+[network]
+listen = ["0.0.0.0:1337", "unix:/temp/path"]"#,
+        );
+        let mut contents = Cursor::new(contents.into_bytes());
+        let config = FileConfig::from_file(&mut contents).expect("failed to create FileConfig");
+
+        assert_eq!(config.debug.log_level, LogLevel::Trace);
+        assert_eq!(config.cache.expiry, 60);
+        assert_eq!(
+            config.network.listen,
+            vec![
+                NetAddress::TCP(std::net::SocketAddr::new(
+                    std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
+                    1337
+                )),
+                NetAddress::Unix(PathBuf::from("/temp/path")),
+            ]
+        )
+    }
+
+    #[test]
+    fn required() {
+        let contents = String::new();
+        let mut contents = Cursor::new(contents.into_bytes());
+
+        assert!(FileConfig::from_file(&mut contents).is_err());
+    }
+
+    #[test]
+    fn default() {
+        let contents = String::from(
+            r#"[network]
+listen = ["0.0.0.0:1337"]"#,
+        );
+        let mut contents = Cursor::new(contents.into_bytes());
+        let config = FileConfig::from_file(&mut contents).expect("failed to create FileConfig");
+
+        assert_eq!(config.debug.log_level, LogLevel::default());
+        assert_eq!(config.cache.expiry, DEFAULT_CACHE_EXPIRY);
     }
 }
