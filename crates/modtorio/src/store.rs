@@ -215,13 +215,6 @@ async fn checksum_matches_meta(store: &Store, wanted_checksum: &str) -> anyhow::
 /// Accepts a reference to an `Arc<Mutex<Connection>>` and a block where that reference can be used
 /// to access the database connection. The block will run a blocking thread with
 /// `task::spawn_blocking`. Returns what the given block returns.
-///
-/// ```no_run
-/// let conn = &self.conn;
-/// sql!(conn => {
-///     // use conn
-/// })
-/// ```
 #[macro_export]
 macro_rules! sql {
     ($conn:ident => $b:block) => {

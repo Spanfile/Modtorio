@@ -61,6 +61,7 @@ pub struct Config {
 }
 
 /// Builds new [`Config`](Config) instances.
+#[derive(Default)]
 pub struct Builder {
     /// The current state of the config while building.
     config: Config,

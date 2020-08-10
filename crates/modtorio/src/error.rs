@@ -162,3 +162,10 @@ pub enum StoreError {
         actual: u32,
     },
 }
+
+/// Represesnts all types of errors that correspond to invalid configuration.
+#[derive(Debug, Error)]
+pub enum ConfigError {
+    #[error("No listen addresses specified.")]
+    NoListenAddresses,
+}

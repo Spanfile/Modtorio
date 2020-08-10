@@ -30,12 +30,6 @@ struct Credentials {
 }
 
 /// The mod portal interface object.
-///
-/// Built with a [Config](crate::config::Config) object, which contains the username-token pair.
-/// ```no_run
-/// let config = Config::from_env().unwrap();
-/// let mod_portal = ModPortal::new(&config).unwrap();
-/// ```
 #[derive(Debug)]
 pub struct ModPortal {
     /// The authentication credentials.

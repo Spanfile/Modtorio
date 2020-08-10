@@ -23,6 +23,8 @@ const SCHEMA_CHECKSUM: &str = "{}";"##,
         ),
     )
     .unwrap();
+
+    println!("cargo:rerun-if-changed={}", schema_path.display());
 }
 
 fn blake2b_string(value: &str) -> String {

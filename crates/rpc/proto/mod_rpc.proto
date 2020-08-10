@@ -1,7 +1,7 @@
 syntax = "proto3";
 package mod_rpc;
 
-service ModRpc { rpc GetStatus(Empty) returns (StatusResponse); }
+service ModRpc { rpc GetServerStatus(Empty) returns (ServerStatus); }
 
 message Empty {}
-message StatusResponse { uint64 uptime = 1; };
+message ServerStatus { uint64 uptime = 1; };

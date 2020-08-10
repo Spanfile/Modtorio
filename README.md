@@ -16,4 +16,7 @@ log_level = "debug"
 
 [cache]
 expiry = 60
+
+[network]
+listen = ["[::1]:1337"]
 ```

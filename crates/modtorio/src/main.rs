@@ -1,54 +1,21 @@
-//! A wrapper for a headless Linux Factorio server to allow higher control over the server's
-//! functionality.
-
-#![feature(drain_filter)]
-#![feature(async_closure)]
-#![feature(associated_type_bounds)]
-#![warn(clippy::if_not_else)]
-#![warn(clippy::needless_pass_by_value)]
-#![warn(clippy::missing_docs_in_private_items)]
-// #![warn(clippy::pedantic)]
-
-mod config;
-mod error;
-mod factorio;
-mod log;
-mod mod_common;
-mod mod_portal;
-mod opts;
-mod store;
-mod util;
-
 use ::log::*;
-use config::Config;
-use mod_portal::ModPortal;
-use opts::Opts;
-use rpc::server;
-use std::{fs::File, path::Path, sync::Arc};
-use store::Store;
+use modtorio::*;
+use std::{env, fs::File, path::Path, sync::Arc};
 
-/// Location of the sample server used during development.
-const SAMPLE_GAME_DIRECTORY: &str = "./sample";
-/// The prefix used with every environment value related to the program configuration.
-pub const APP_PREFIX: &str = "MODTORIO_";
-
+/// The program's version at build-time.
+const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// The name of the environment variable used to store the mod portal username
 const PORTAL_USERNAME_ENV_VARIABLE: &str = "MODTORIO_PORTAL_USERNAME";
 /// The name of the environment variable used to store the mod portal token
 const PORTAL_TOKEN_ENV_VARIABLE: &str = "MODTORIO_PORTAL_TOKEN";
 
-/// The program's version at build-time.
-const VERSION: &str = env!("CARGO_PKG_VERSION");
-
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let opts = Opts::get();
-    let store = Arc::new(
-        store::Builder::from_location((&opts.store).into())
-            .build()
-            .await?,
-    );
-    let config = Arc::new(build_config(&opts, &store).await?);
+    let opts = opts::Opts::get();
+    let store = store::Builder::from_location((&opts.store).into())
+        .build()
+        .await?;
+    let config = build_config(&opts, &store).await?;
 
     log::setup_logging(&config)?;
 
@@ -61,67 +28,15 @@ async fn main() -> anyhow::Result<()> {
     }
     log_program_information();
 
-    let portal = Arc::new(ModPortal::new(&config)?);
+    let modtorio = Arc::new(Modtorio::new(config, store).await?);
 
-    // let factorio = Arc::new(
-    //     factorio::Importer::from_root("./sample")
-    //         .import(config, portal, cache)
-    //         .await?,
-    // );
-
-    info!("Loading previous games...");
-    let cached_games = store.cache.get_games().await?;
-    let mut games = Vec::new();
-    debug!("Got cached games: {:?}", cached_games);
-
-    for cached_game in &cached_games {
-        info!(
-            "Importing cached game ID {} from path {}...",
-            cached_game.id, cached_game.path
-        );
-
-        let game = factorio::Importer::from_cache(cached_game)
-            .import(Arc::clone(&config), Arc::clone(&portal), Arc::clone(&store))
-            .await?;
-
-        info!(
-            "Cached game ID {} imported from {}. {} mods",
-            cached_game.id,
-            cached_game.path,
-            game.mods.count()
-        );
-        debug!("Cached game: {:?}", cached_game);
-        games.push(game);
-    }
-
-    info!("{} previous games loaded.", games.len());
-
-    // for factorio in &mut games {
-    //     // factorio.mods.add_from_portal("FARL", None).await?;
-
-    //     // factorio.mods.update().await?;
-    //     // factorio.mods.ensure_dependencies().await?;
-    //     factorio.update_cache().await?;
-    // }
-
-    let listen_addresses = config.listen();
-    if listen_addresses.len() > 1 {
-        unimplemented!("listening to multiple addresses not yet supported");
-    }
-
-    let listen = listen_addresses.first().unwrap().clone();
-    let server_task = tokio::spawn(server::run(listen));
-
-    if let Err(e) = tokio::try_join!(server_task) {
-        error!("Async task failed with: {}", e);
-        Err(e.into())
-    } else {
-        Ok(())
-    }
+    debug!("Program initialisation complete, running Modtorio");
+    Modtorio::run(modtorio).await?;
+    Ok(())
 }
 
 /// Builds a complete configuration object with given command-line Opts and a program Store.
-async fn build_config(opts: &Opts, store: &Store) -> anyhow::Result<Config> {
+async fn build_config(opts: &opts::Opts, store: &store::Store) -> anyhow::Result<config::Config> {
     let mut builder = config::Builder::new();
 
     if !opts.no_conf {
@@ -147,7 +62,7 @@ fn create_default_config_file<P>(path: P) -> anyhow::Result<()>
 where
     P: AsRef<Path>,
 {
-    Config::write_default_config_to_writer(&mut File::create(path)?)
+    config::Config::write_default_config_to_writer(&mut File::create(path)?)
 }
 
 /// Updates a given program `Store` from the current environment variables.
@@ -157,11 +72,11 @@ where
 ///   `PORTAL_USERNAME_ENV_VARIABLE`
 /// * `Field::PortalToken` from the variable whose name is in the constant
 ///   `PORTAL_TOKEN_ENV_VARIABLE`
-async fn update_store_from_env(store: &Store) -> anyhow::Result<()> {
+async fn update_store_from_env(store: &store::Store) -> anyhow::Result<()> {
     store.begin_transaction()?;
 
     for (key, value) in util::env::dump_map(APP_PREFIX) {
-        match key.as_ref() {
+        match key.as_str() {
             PORTAL_USERNAME_ENV_VARIABLE => {
                 debug!("Got portal username env variable, updating store");
                 store
@@ -191,4 +106,10 @@ async fn update_store_from_env(store: &Store) -> anyhow::Result<()> {
 /// Logs the program's information.
 fn log_program_information() {
     info!("Program version: {}", VERSION);
+    info!(
+        "Working directory: {}",
+        env::current_dir()
+            .expect("failed to get current working directory")
+            .display()
+    );
 }
