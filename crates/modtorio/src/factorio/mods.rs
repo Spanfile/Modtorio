@@ -200,8 +200,21 @@ impl Mods {
 
         let mut missing: Vec<String> = Vec::new();
 
-        for fact_mod in self.mods.values() {
-            info!("Ensuring '{}'s dependencies are met...", fact_mod.title().await);
+        let mods = self.mods.values();
+        let max_mods = mods.len() as u32;
+        for (index, fact_mod) in mods.into_iter().enumerate() {
+            let title = fact_mod.title().await;
+            info!("Ensuring '{}'s dependencies are met...", title);
+            status::send_status(
+                prog_tx.clone(),
+                status::definite(
+                    &format!("Ensuring '{}'s dependencies are met...", title),
+                    index as u32 + 1,
+                    max_mods,
+                ),
+            )
+            .await?;
+
             missing.extend(self.ensure_single_dependencies(fact_mod).await?.into_iter());
         }
 
@@ -210,8 +223,19 @@ impl Mods {
         } else {
             info!("Found {} missing mod dependencies, installing", missing.len());
 
-            for miss in &missing {
-                self.add_from_portal(&miss, None, prog_tx.clone()).await?;
+            let max_missing = missing.len() as u32;
+            for (index, miss) in missing.iter().enumerate() {
+                status::send_status(
+                    prog_tx.clone(),
+                    status::definite(
+                        &format!("Installing missing mod '{}'...", miss),
+                        index as u32 + 1,
+                        max_missing,
+                    ),
+                )
+                .await?;
+
+                self.add_from_portal(&miss, None, None).await?;
             }
         }
 

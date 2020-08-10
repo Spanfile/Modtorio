@@ -7,6 +7,8 @@ service ModRpc {
   rpc UpdateCache(UpdateCacheRequest) returns (stream Progress);
   rpc InstallMod(InstallModRequest) returns (stream Progress);
   rpc UpdateMods(UpdateModsRequest) returns (stream Progress);
+  rpc EnsureModDependencies(EnsureModDependenciesRequest)
+      returns (stream Progress);
 }
 
 message Empty {}
@@ -54,3 +56,4 @@ message InstallModRequest {
   string mod_version = 3;
 }
 message UpdateModsRequest { uint32 game_index = 1; }
+message EnsureModDependenciesRequest { uint32 game_index = 1; }

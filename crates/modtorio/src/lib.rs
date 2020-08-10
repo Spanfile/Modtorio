@@ -29,7 +29,8 @@ use mod_portal::ModPortal;
 use rpc::{
     mod_rpc_server::{ModRpc, ModRpcServer},
     server_status::{game::GameStatus, Game, InstanceStatus},
-    Empty, ImportRequest, InstallModRequest, Progress, ServerStatus, UpdateCacheRequest, UpdateModsRequest,
+    Empty, EnsureModDependenciesRequest, ImportRequest, InstallModRequest, Progress, ServerStatus, UpdateCacheRequest,
+    UpdateModsRequest,
 };
 use std::{path::Path, sync::Arc};
 use store::Store;
@@ -362,12 +363,10 @@ impl Modtorio {
                     .add_from_portal(&mod_name, version, Some(prog_tx.clone()))
                     .await
                 {
-                    error!("Failed to update game cache: {}", e);
-                    if let Err(e) = status::send_status(
-                        Some(prog_tx.clone()),
-                        status::internal_error("Failed to update game cache"),
-                    )
-                    .await
+                    error!("Failed to install mod: {}", e);
+                    if let Err(e) =
+                        status::send_status(Some(prog_tx.clone()), status::internal_error("Failed to install mod"))
+                            .await
                     {
                         error!("Failed to send status update: {}", e);
                         return;
@@ -404,10 +403,50 @@ impl Modtorio {
             let game = games.get_mut(game_index);
             if let Some(game) = game {
                 if let Err(e) = game.mods.update(Some(prog_tx.clone())).await {
-                    error!("Failed to update game cache: {}", e);
+                    error!("Failed to update mods: {}", e);
+                    if let Err(e) =
+                        status::send_status(Some(prog_tx.clone()), status::internal_error("Failed to update mods"))
+                            .await
+                    {
+                        error!("Failed to send status update: {}", e);
+                        return;
+                    }
+                }
+
+                if let Err(e) = status::send_status(Some(prog_tx.clone()), status::indefinite("Done")).await {
+                    error!("Failed to send status update: {}", e);
+                    return;
+                }
+            } else if let Err(e) = status::send_status(
+                Some(prog_tx.clone()),
+                status::internal_error(&format!("No such game index: {}", game_index)),
+            )
+            .await
+            {
+                error!("Failed to send status update: {}", e);
+                return;
+            }
+        });
+    }
+
+    /// Updates the installed mods of a given game instance.
+    async fn ensure_mod_dependencies(self, game_index: usize, prog_tx: status::AsyncProgressChannel) {
+        if !self
+            .assert_instance_status(InstanceStatus::Running, prog_tx.clone())
+            .await
+        {
+            return;
+        }
+
+        task::spawn(async move {
+            let mut games = self.games.lock().await;
+            let game = games.get_mut(game_index);
+            if let Some(game) = game {
+                if let Err(e) = game.mods.ensure_dependencies(Some(prog_tx.clone())).await {
+                    error!("Failed to ensure mod dependencies: {}", e);
                     if let Err(e) = status::send_status(
                         Some(prog_tx.clone()),
-                        status::internal_error("Failed to update game cache"),
+                        status::internal_error("Failed to ensure mod dependencies"),
                     )
                     .await
                     {
@@ -439,6 +478,7 @@ impl ModRpc for Modtorio {
     type UpdateCacheStream = mpsc::Receiver<Result<Progress, Status>>;
     type InstallModStream = mpsc::Receiver<Result<Progress, Status>>;
     type UpdateModsStream = mpsc::Receiver<Result<Progress, Status>>;
+    type EnsureModDependenciesStream = mpsc::Receiver<Result<Progress, Status>>;
 
     async fn get_server_status(&self, req: Request<Empty>) -> Result<Response<ServerStatus>, Status> {
         log_rpc_request(&req);
@@ -521,12 +561,27 @@ impl ModRpc for Modtorio {
 
         Ok(resp)
     }
+
+    async fn ensure_mod_dependencies(
+        &self,
+        req: Request<EnsureModDependenciesRequest>,
+    ) -> Result<Response<Self::EnsureModDependenciesStream>, Status> {
+        log_rpc_request(&req);
+        let (tx, rx) = channel();
+
+        let msg = req.into_inner();
+        self.clone().ensure_mod_dependencies(msg.game_index as usize, tx).await;
+        let resp = Response::new(rx);
+        log_rpc_response(&resp);
+
+        Ok(resp)
+    }
 }
 
 /// Creates a new bounded channel and returns the receiver and sender, the sender wrapped in an
 /// Arc<Mutex>.
 fn channel<T>() -> (Arc<Mutex<mpsc::Sender<T>>>, mpsc::Receiver<T>) {
-    let (tx, rx) = mpsc::channel(8);
+    let (tx, rx) = mpsc::channel(64);
     (Arc::new(Mutex::new(tx)), rx)
 }
 
