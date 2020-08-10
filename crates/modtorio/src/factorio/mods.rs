@@ -109,12 +109,19 @@ impl Mods {
 
     /// Adds and installs a new mod with a given name from the portal. Optionally a wanted version
     /// can be supplied. If no wanted version is supplied, the latest version is installed.
-    pub async fn add_from_portal(&mut self, name: &str, version: Option<HumanVersion>) -> anyhow::Result<()> {
+    pub async fn add_from_portal(
+        &mut self,
+        name: &str,
+        version: Option<HumanVersion>,
+        prog_tx: Option<status::AsyncProgressChannel>,
+    ) -> anyhow::Result<()> {
         if let Some(version) = version {
             info!("Adding '{}' ver. {:?}", name, version);
         } else {
             info!("Adding latest '{}'", name);
         }
+
+        status::send_status(prog_tx.clone(), status::indefinite(&format!("Installing {}...", name))).await?;
 
         let new_mod = self.add_or_update_in_place(name, version).await?;
         info!("Added {}", new_mod.display().await);
@@ -124,18 +131,30 @@ impl Mods {
     /// Updates the portal info for all mods and downloads their most recent version if the
     /// currently installed version is older.
     #[allow(dead_code)]
-    pub async fn update(&mut self) -> anyhow::Result<()> {
+    pub async fn update(&mut self, prog_tx: Option<status::AsyncProgressChannel>) -> anyhow::Result<()> {
         info!("Checking for mod updates...");
 
         let mut updates = Vec::new();
-        for m in self.mods.values_mut() {
-            info!("Checking for updates to {}...", m.display().await);
+        let max_mods = self.mods.len() as u32;
+
+        for (index, m) in self.mods.values_mut().enumerate() {
+            let mod_display = m.display().await;
+            info!("Checking for updates to {}...", mod_display);
+            status::send_status(
+                prog_tx.clone(),
+                status::definite(
+                    &format!("Checking for updates to {}...", mod_display),
+                    index as u32 + 1,
+                    max_mods,
+                ),
+            )
+            .await?;
 
             m.ensure_portal_info().await?;
             let release = m.latest_release().await?;
 
             if m.own_version().await? < release.version() {
-                debug!(
+                info!(
                     "Found newer version of '{}': {} (over {}) released on {}",
                     m.title().await,
                     release.version(),
@@ -145,7 +164,7 @@ impl Mods {
 
                 updates.push(m.name().await.to_owned());
             } else {
-                debug!("{} is up to date", m.display().await);
+                info!("{} is up to date", mod_display);
             }
         }
 
@@ -154,7 +173,15 @@ impl Mods {
             debug!("{:?}", updates)
         };
 
-        for update in &updates {
+        let max_updates = updates.len() as u32;
+        for (index, update) in updates.iter().enumerate() {
+            info!("Updating {}...", update);
+            status::send_status(
+                prog_tx.clone(),
+                status::definite(&format!("Updating {}...", update), index as u32 + 1, max_updates),
+            )
+            .await?;
+
             self.add_or_update_in_place(update, None).await?;
         }
 
@@ -168,7 +195,7 @@ impl Mods {
     ///
     /// [CannotEnsureDependency]: crate::error::ModError::CannotEnsureDependency
     #[allow(dead_code)]
-    pub async fn ensure_dependencies(&mut self) -> anyhow::Result<()> {
+    pub async fn ensure_dependencies(&mut self, prog_tx: Option<status::AsyncProgressChannel>) -> anyhow::Result<()> {
         info!("Ensuring mod dependencies are met...");
 
         let mut missing: Vec<String> = Vec::new();
@@ -184,7 +211,7 @@ impl Mods {
             info!("Found {} missing mod dependencies, installing", missing.len());
 
             for miss in &missing {
-                self.add_from_portal(&miss, None).await?;
+                self.add_from_portal(&miss, None, prog_tx.clone()).await?;
             }
         }
 
@@ -216,19 +243,22 @@ impl Mods {
         match self.mods.entry(name.to_owned()) {
             Entry::Occupied(entry) => {
                 let existing_mod = entry.into_mut();
-                info!("Downloading {}...", existing_mod.display().await);
+                let existing_mod_display = existing_mod.display().await;
+
+                info!("Downloading {}...", existing_mod_display);
 
                 match existing_mod.download(version, &self.directory).await? {
-                    DownloadResult::New => info!("{} added", existing_mod.display().await),
-                    DownloadResult::Unchanged => info!("{} unchanged", existing_mod.display().await),
+                    DownloadResult::New => info!("{} added", existing_mod_display),
+                    DownloadResult::Unchanged => info!("{} unchanged", existing_mod_display),
                     DownloadResult::Replaced {
                         old_version,
                         old_archive,
                     } => {
-                        debug!("Removing old mod archive {}", old_archive);
+                        let old_archive = self.directory.join(old_archive);
+                        debug!("Removing old mod archive {}", old_archive.display());
                         fs::remove_file(old_archive).await?;
 
-                        info!("{} replaced from ver. {}", existing_mod.display().await, old_version);
+                        info!("{} replaced from ver. {}", existing_mod_display, old_version);
                     }
                 }
 
@@ -244,6 +274,8 @@ impl Mods {
                     )
                     .await?,
                 );
+
+                info!("Downloading {}...", name);
 
                 new_mod.download(version, &self.directory).await?;
                 Ok(entry.insert(new_mod))

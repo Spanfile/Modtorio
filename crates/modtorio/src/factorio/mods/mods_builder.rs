@@ -75,13 +75,18 @@ impl<'a> ModsBuilder {
     ) -> anyhow::Result<Vec<Mod>> {
         trace!("Building mods for cached game ID {}", game_cache_id);
         let mods = store.cache.get_mods_of_game(game_cache_id).await?;
+        let max_mods = mods.len() as u32;
         let mut created_mods = Vec::new();
         let mut mod_zips = HashSet::new();
 
-        for game_mod in mods {
+        for (index, game_mod) in mods.into_iter().enumerate() {
             status::send_status(
                 self.prog_tx.clone(),
-                status::indefinite(&format!("Loading mod from cache: {}", game_mod.factorio_mod)),
+                status::definite(
+                    &format!("Loading mod from cache: {}", game_mod.factorio_mod),
+                    index as u32 + 1,
+                    max_mods,
+                ),
             )
             .await?;
 
@@ -125,10 +130,20 @@ impl<'a> ModsBuilder {
         );
         trace!("Mod zips: {:?}", mod_zips);
 
-        let zips = self.directory.join(ZIP_GLOB);
-        for entry in util::glob(&zips)? {
+        let zips = util::glob(&self.directory.join(ZIP_GLOB))?;
+        let max_zips = zips.len() as u32;
+        for (index, entry) in zips.into_iter().enumerate() {
             let entry_file_name = entry.get_file_name()?;
             trace!("Checking if {} is loaded...", entry_file_name);
+            status::send_status(
+                self.prog_tx.clone(),
+                status::definite(
+                    &format!("Checking if {} is loaded...", entry.display()),
+                    index as u32 + 1,
+                    max_zips,
+                ),
+            )
+            .await?;
 
             if !mod_zips.contains(&entry_file_name) {
                 warn!(
@@ -137,10 +152,7 @@ impl<'a> ModsBuilder {
                 );
                 status::send_status(
                     self.prog_tx.clone(),
-                    status::indefinite(&format!(
-                        "Found non-cached mod zip archive: {}, loading...",
-                        entry.display()
-                    )),
+                    status::definite(&format!("Loading {}...", entry.display()), index as u32 + 1, max_zips),
                 )
                 .await?;
 
@@ -176,10 +188,16 @@ impl<'a> ModsBuilder {
         trace!("Building mods from filesystem: {}", zips.display());
         let mut created_mods = Vec::new();
 
-        for entry in util::glob(&zips)? {
+        let entries = util::glob(&zips)?;
+        let max_entries = entries.len() as u32;
+        for (index, entry) in entries.iter().enumerate() {
             status::send_status(
                 self.prog_tx.clone(),
-                status::indefinite(&format!("Loading mod from zip archive: {}", entry.display())),
+                status::definite(
+                    &format!("Loading mod from zip archive: {}", entry.display()),
+                    index as u32 + 1,
+                    max_entries,
+                ),
             )
             .await?;
 

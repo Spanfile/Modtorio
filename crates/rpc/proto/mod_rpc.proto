@@ -5,6 +5,8 @@ service ModRpc {
   rpc GetServerStatus(Empty) returns (ServerStatus);
   rpc ImportGame(ImportRequest) returns (stream Progress);
   rpc UpdateCache(UpdateCacheRequest) returns (stream Progress);
+  rpc InstallMod(InstallModRequest) returns (stream Progress);
+  rpc UpdateMods(UpdateModsRequest) returns (stream Progress);
 }
 
 message Empty {}
@@ -45,5 +47,10 @@ message ServerStatus {
 }
 
 message ImportRequest { string path = 1; }
-
-message UpdateCacheRequest { uint32 server_index = 1; }
+message UpdateCacheRequest { uint32 game_index = 1; }
+message InstallModRequest {
+  uint32 game_index = 1;
+  string mod_name = 2;
+  string mod_version = 3;
+}
+message UpdateModsRequest { uint32 game_index = 1; }

@@ -8,6 +8,7 @@ use tokio::sync::{mpsc, Mutex};
 type AsyncProgressResult = Result<Progress, tonic::Status>;
 pub type AsyncProgressChannel = Arc<Mutex<mpsc::Sender<AsyncProgressResult>>>;
 
+/// Sends a given status update to an optional progress channel.
 pub async fn send_status(channel: Option<AsyncProgressChannel>, status: AsyncProgressResult) -> anyhow::Result<()> {
     if let Some(channel) = channel {
         trace!("Sending status update: {:?}", status);
@@ -19,6 +20,7 @@ pub async fn send_status(channel: Option<AsyncProgressChannel>, status: AsyncPro
     Ok(())
 }
 
+/// Returns a new indefinite progress status.
 pub fn indefinite(message: &str) -> AsyncProgressResult {
     Ok(Progress {
         message: String::from(message),
@@ -28,6 +30,7 @@ pub fn indefinite(message: &str) -> AsyncProgressResult {
     })
 }
 
+/// Returns a new definite progress status.
 pub fn definite(message: &str, value: u32, max: u32) -> AsyncProgressResult {
     Ok(Progress {
         message: String::from(message),
@@ -37,6 +40,12 @@ pub fn definite(message: &str, value: u32, max: u32) -> AsyncProgressResult {
     })
 }
 
-pub fn error(message: &str) -> AsyncProgressResult {
+/// Returns a new internal error status.
+pub fn internal_error(message: &str) -> AsyncProgressResult {
     Err(tonic::Status::internal(message))
+}
+
+/// Returns a new failed precondition error status.
+pub fn failed_precondition(message: &str) -> AsyncProgressResult {
+    Err(tonic::Status::failed_precondition(message))
 }
