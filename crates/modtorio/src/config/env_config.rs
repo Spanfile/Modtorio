@@ -10,9 +10,9 @@ use serde::Deserialize;
 #[derive(Debug, Deserialize, Default)]
 pub struct EnvConfig {
     /// Corresponds to the `MODTORIO_PORTAL_USERNAME` environment variable.
-    pub portal_username: String,
+    pub portal_username: Option<String>,
     /// Corresponds to the `MODTORIO_PORTAL_TOKEN` environment variable.
-    pub portal_token: String,
+    pub portal_token: Option<String>,
 }
 
 impl ConfigSource for EnvConfig {
@@ -23,8 +23,8 @@ impl ConfigSource for EnvConfig {
     #[allow(clippy::needless_pass_by_value)]
     fn apply_to_config(self, config: Config) -> Config {
         Config {
-            portal_username: self.portal_username,
-            portal_token: self.portal_token,
+            portal_username: self.portal_username.unwrap_or(config.portal_username),
+            portal_token: self.portal_token.unwrap_or(config.portal_token),
             ..config
         }
     }
@@ -58,17 +58,20 @@ mod tests {
 
         let config = EnvConfig::new().expect("failed to create EnvConfig");
 
-        assert_eq!(config.portal_username, "env_username");
-        assert_eq!(config.portal_token, "env_token");
+        assert_eq!(config.portal_username, Some(String::from("env_username")));
+        assert_eq!(config.portal_token, Some(String::from("env_token")));
     }
 
     #[test]
-    fn required() {
+    fn default() {
         let _s = SERIAL_MUTEX.lock().expect("failed to lock serial mutex");
 
         env::remove_var("MODTORIO_PORTAL_USERNAME");
         env::remove_var("MODTORIO_PORTAL_TOKEN");
 
-        assert!(EnvConfig::new().is_err());
+        let config = EnvConfig::new().expect("failed to create EnvConfig");
+
+        assert_eq!(config.portal_username, None);
+        assert_eq!(config.portal_token, None);
     }
 }
