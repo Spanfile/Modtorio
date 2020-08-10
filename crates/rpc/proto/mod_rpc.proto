@@ -4,9 +4,11 @@ package mod_rpc;
 service ModRpc {
   rpc GetServerStatus(Empty) returns (ServerStatus);
   rpc ImportGame(ImportRequest) returns (stream Progress);
+  rpc UpdateCache(UpdateCacheRequest) returns (stream Progress);
 }
 
 message Empty {}
+
 message Progress {
   string message = 1;
 
@@ -18,5 +20,24 @@ message Progress {
   uint32 value = 3;
   uint32 max = 4;
 }
-message ServerStatus { int64 uptime = 1; }
+
+message ServerStatus {
+  int64 uptime = 1;
+
+  message Game {
+    string path = 1;
+
+    enum GameStatus {
+      SHUTDOWN = 0;
+      STARTING = 1;
+      RUNNING = 2;
+      SHUTTING_DOWN = 3;
+    };
+    GameStatus status = 2;
+  };
+  repeated Game games = 2;
+}
+
 message ImportRequest { string path = 1; }
+
+message UpdateCacheRequest { uint32 server_index = 1; }

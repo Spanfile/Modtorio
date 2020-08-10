@@ -8,7 +8,7 @@ use crate::{
     error::ModError,
     mod_common::{DownloadResult, Mod, Requirement},
     store::{cache::models, Store},
-    util::{ext::PathExt, HumanVersion},
+    util::{ext::PathExt, status, HumanVersion},
     Config, ModPortal,
 };
 pub use mods_builder::ModsBuilder;
@@ -45,13 +45,28 @@ impl Mods {
     /// Updates the cache for all current mods. This includes updating both the mod information and
     /// the game-to-mod mapping.
     #[allow(dead_code)]
-    pub async fn update_cache(&self, game_id: GameCacheId) -> anyhow::Result<()> {
+    pub async fn update_cache(
+        &self,
+        game_id: GameCacheId,
+        prog_tx: Option<status::AsyncProgressChannel>,
+    ) -> anyhow::Result<()> {
         debug!("Updating cached mods for game {}", game_id);
         let new_game_mods = Mutex::new(Vec::new());
+        let max_mods = self.mods.len() as u32;
 
-        for fact_mod in self.mods.values() {
+        for (index, fact_mod) in self.mods.values().enumerate() {
             let mod_name = fact_mod.name().await;
             let mod_display = fact_mod.display().await;
+
+            status::send_status(
+                prog_tx.clone(),
+                status::definite(
+                    &format!("Updating mod cache for {}...", mod_display),
+                    index as u32 + 1,
+                    max_mods,
+                ),
+            )
+            .await?;
 
             match fact_mod.update_cache().await {
                 Ok(()) => debug!("Updated Factorio mod cache for {}", mod_name),

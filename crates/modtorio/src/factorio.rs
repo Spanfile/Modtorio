@@ -57,8 +57,11 @@ pub struct Importer {
 }
 
 impl Factorio {
-    /// Updates all information about this game instance in the program cache.
-    pub async fn update_cache(&self) -> anyhow::Result<()> {
+    /// Updates all information about the instance in the program cache.
+    pub async fn update_cache(
+        &self,
+        prog_tx: Option<status::AsyncProgressChannel>,
+    ) -> anyhow::Result<()> {
         let mut cache_id = self.cache_id.lock().await;
 
         self.store.begin_transaction()?;
@@ -73,6 +76,11 @@ impl Factorio {
                 .await?;
 
             info!("Updating existing game ID {} cache", c);
+            status::send_status(
+                prog_tx.clone(),
+                status::indefinite("Updating existing cached game..."),
+            )
+            .await?;
             c
         } else {
             let new_id = self
@@ -87,14 +95,24 @@ impl Factorio {
             *cache_id = Some(new_id);
 
             info!("Creating new game cache with ID {}", new_id);
+            status::send_status(
+                prog_tx.clone(),
+                status::indefinite("Creating new cached game..."),
+            )
+            .await?;
             new_id
         };
 
-        self.mods.update_cache(id).await?;
+        self.mods.update_cache(id, prog_tx).await?;
         self.store.commit_transaction()?;
 
         info!("Game ID {} cached updated", id);
         Ok(())
+    }
+
+    /// Returns the instance's root directory.
+    pub fn root(&self) -> &Path {
+        &self.root
     }
 }
 

@@ -1,5 +1,5 @@
 use log::*;
-use rpc::Progress;
+use rpc::{progress::ProgressType, Progress};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
@@ -23,7 +23,7 @@ pub async fn send_status(
 pub fn indefinite(message: &str) -> AsyncProgressResult {
     Ok(Progress {
         message: String::from(message),
-        prog_type: 0,
+        prog_type: ProgressType::Indefinite.into(),
         value: 0,
         max: 0,
     })
@@ -32,7 +32,7 @@ pub fn indefinite(message: &str) -> AsyncProgressResult {
 pub fn definite(message: &str, value: u32, max: u32) -> AsyncProgressResult {
     Ok(Progress {
         message: String::from(message),
-        prog_type: 1,
+        prog_type: ProgressType::Definite.into(),
         value,
         max,
     })
