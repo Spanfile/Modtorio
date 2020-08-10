@@ -6,7 +6,7 @@ mod settings;
 
 use crate::{
     store::{cache::models, Store},
-    util::ext::PathExt,
+    util::{ext::PathExt, status},
     Config, ModPortal,
 };
 use log::*;
@@ -52,6 +52,8 @@ pub struct Importer {
     settings: PathBuf,
     /// The program's cache ID.
     game_cache_id: Option<GameCacheId>,
+    /// A status update channel.
+    prog_tx: Option<status::AsyncProgressChannel>,
 }
 
 impl Factorio {
@@ -107,6 +109,7 @@ impl Importer {
             root: root.as_ref().to_path_buf(),
             settings: PathBuf::from(SERVER_SETTINGS_FILENAME),
             game_cache_id: None,
+            prog_tx: None,
         }
     }
 
@@ -116,6 +119,7 @@ impl Importer {
             root: PathBuf::from(&cached_game.path),
             settings: PathBuf::from(SERVER_SETTINGS_FILENAME),
             game_cache_id: Some(cached_game.id),
+            prog_tx: None,
         }
     }
 
@@ -127,6 +131,13 @@ impl Importer {
     {
         Self {
             settings: settings.as_ref().to_path_buf(),
+            ..self
+        }
+    }
+
+    pub fn with_status_updates(self, prog_tx: status::AsyncProgressChannel) -> Self {
+        Self {
+            prog_tx: Some(prog_tx),
             ..self
         }
     }
@@ -145,13 +156,28 @@ impl Importer {
         mods_path.push(MODS_PATH);
 
         let mut mods = ModsBuilder::root(mods_path);
+
         if let Some(game_cache_id) = self.game_cache_id {
             mods = mods.with_game_cache_id(game_cache_id);
         }
 
+        if let Some(prog_tx) = &self.prog_tx {
+            mods = mods.with_status_updates(Arc::clone(prog_tx));
+        }
+
+        status::send_status(
+            self.prog_tx.clone(),
+            status::indefinite("Reading server settings..."),
+        )
+        .await;
+        let settings = ServerSettings::from_game_json(&fs::read_to_string(settings_path)?)?;
+
+        status::send_status(self.prog_tx.clone(), status::indefinite("Loading mods...")).await;
+        let mods = mods.build(config, portal, Arc::clone(&store)).await?;
+
         Ok(Factorio {
-            settings: ServerSettings::from_game_json(&fs::read_to_string(settings_path)?)?,
-            mods: mods.build(config, portal, Arc::clone(&store)).await?,
+            settings,
+            mods,
             root: self.root,
             cache_id: Mutex::new(self.game_cache_id),
             store,

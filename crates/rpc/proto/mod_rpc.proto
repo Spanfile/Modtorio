@@ -1,7 +1,22 @@
 syntax = "proto3";
 package mod_rpc;
 
-service ModRpc { rpc GetServerStatus(Empty) returns (ServerStatus); }
+service ModRpc {
+  rpc GetServerStatus(Empty) returns (ServerStatus);
+  rpc ImportGame(ImportRequest) returns (stream Progress);
+}
 
 message Empty {}
-message ServerStatus { int64 uptime = 1; };
+message Progress {
+  string message = 1;
+
+  enum ProgressType {
+    INDEFINITE = 0;
+    DEFINITE = 1;
+  };
+  ProgressType prog_type = 2;
+  uint32 value = 3;
+  uint32 max = 4;
+}
+message ServerStatus { int64 uptime = 1; }
+message ImportRequest { string path = 1; }

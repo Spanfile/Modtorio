@@ -3,8 +3,14 @@
 
 use super::Mods;
 use crate::{
-    config::Config, error::ModError, factorio::GameCacheId, mod_common::Mod, mod_portal::ModPortal,
-    store::Store, util, util::ext::PathExt,
+    config::Config,
+    error::ModError,
+    factorio::GameCacheId,
+    mod_common::Mod,
+    mod_portal::ModPortal,
+    store::Store,
+    util,
+    util::{ext::PathExt, status},
 };
 use log::*;
 use std::{
@@ -28,6 +34,8 @@ pub struct ModsBuilder {
     directory: PathBuf,
     /// The cache ID of the game these mods belong to.
     game_cache_id: Option<GameCacheId>,
+    /// A status update channel.
+    prog_tx: Option<status::AsyncProgressChannel>,
 }
 
 impl<'a> ModsBuilder {
@@ -37,6 +45,7 @@ impl<'a> ModsBuilder {
         ModsBuilder {
             directory,
             game_cache_id: None,
+            prog_tx: None,
         }
     }
 
@@ -44,6 +53,13 @@ impl<'a> ModsBuilder {
     pub fn with_game_cache_id(self, game_cache_id: GameCacheId) -> Self {
         Self {
             game_cache_id: Some(game_cache_id),
+            ..self
+        }
+    }
+
+    pub fn with_status_updates(self, prog_tx: status::AsyncProgressChannel) -> Self {
+        Self {
+            prog_tx: Some(prog_tx),
             ..self
         }
     }
@@ -62,6 +78,15 @@ impl<'a> ModsBuilder {
         let mut mod_zips = HashSet::new();
 
         for game_mod in mods {
+            status::send_status(
+                self.prog_tx.clone(),
+                status::indefinite(&format!(
+                    "Loading mod from cache: {}",
+                    game_mod.factorio_mod
+                )),
+            )
+            .await;
+
             let created_mod = match Mod::from_cache(
                 &game_mod,
                 &self.directory,
@@ -147,6 +172,12 @@ impl<'a> ModsBuilder {
         let mut created_mods = Vec::new();
 
         for entry in util::glob(&zips)? {
+            status::send_status(
+                self.prog_tx.clone(),
+                status::indefinite(&format!("Loading mod from archive: {}", entry.display())),
+            )
+            .await;
+
             let created_mod = match Mod::from_zip(
                 &entry,
                 Arc::clone(&config),

@@ -4,6 +4,7 @@
 #![feature(drain_filter)]
 #![feature(async_closure)]
 #![feature(associated_type_bounds)]
+#![feature(thread_id_value)]
 #![warn(clippy::if_not_else)]
 #![warn(clippy::needless_pass_by_value)]
 #![warn(clippy::missing_docs_in_private_items)]
@@ -27,31 +28,33 @@ use factorio::Factorio;
 use mod_portal::ModPortal;
 use rpc::{
     mod_rpc_server::{ModRpc, ModRpcServer},
-    Empty, ServerStatus,
+    Empty, ImportRequest, Progress, ServerStatus,
 };
-use std::sync::Arc;
+use std::{path::Path, sync::Arc};
 use store::Store;
-use tokio::sync::Mutex;
+use tokio::{
+    sync::{mpsc, Mutex},
+    task,
+};
 use tonic::{transport::Server, Request, Response, Status};
+use util::status;
 
-/// Location of the sample server used during development.
-const SAMPLE_GAME_DIRECTORY: &str = "./sample";
 /// The prefix used with every environment value related to the program configuration.
 pub const APP_PREFIX: &str = "MODTORIO_";
 
+#[derive(Clone)]
 /// A wrapper for a headless Linux Factorio server.
 pub struct Modtorio {
     /// The program config.
     config: Arc<Config>,
+    /// The mod portal.
+    portal: Arc<ModPortal>,
     /// The program store.
     store: Arc<Store>,
+    /// Collection of Factorio instances this Modtorio instance is managing.
     games: Arc<Mutex<Vec<Factorio>>>,
-    started_at: DateTime<Utc>,
-}
-
-/// The RPC server implementation.
-struct ModtorioRpc {
-    modtorio: Arc<Modtorio>,
+    /// Timestamp when this Modtorio instance was started.
+    started_at: Arc<DateTime<Utc>>,
 }
 
 impl Modtorio {
@@ -92,15 +95,16 @@ impl Modtorio {
 
         Ok(Modtorio {
             config,
+            portal,
             store,
             games: Arc::new(Mutex::new(games)),
-            started_at: Utc::now(),
+            started_at: Arc::new(Utc::now()),
         })
     }
 
     /// Runs a given Modtorio instance.
-    pub async fn run(modtorio: Arc<Modtorio>) -> anyhow::Result<()> {
-        let server_task = tokio::spawn(ModtorioRpc::run(Arc::clone(&modtorio)));
+    pub async fn run(self) -> anyhow::Result<()> {
+        let server_task = tokio::spawn(self.run_rpc());
 
         if let Err(e) = tokio::try_join!(server_task) {
             error!("Async task failed with: {}", e);
@@ -109,34 +113,10 @@ impl Modtorio {
             Ok(())
         }
     }
-}
 
-impl Modtorio {
-    fn get_uptime(&self) -> chrono::Duration {
-        Utc::now() - self.started_at
-    }
-}
-
-#[tonic::async_trait]
-impl ModRpc for ModtorioRpc {
-    async fn get_server_status(
-        &self,
-        _request: Request<Empty>,
-    ) -> Result<Response<ServerStatus>, Status> {
-        debug!("Got status request");
-
-        let reply = ServerStatus {
-            uptime: self.modtorio.get_uptime().num_seconds(),
-        };
-
-        Ok(Response::new(reply))
-    }
-}
-
-impl ModtorioRpc {
     /// Runs the RPC server.
-    async fn run(modtorio: Arc<Modtorio>) -> anyhow::Result<()> {
-        let listen_addresses = modtorio.config.listen();
+    async fn run_rpc(self) -> anyhow::Result<()> {
+        let listen_addresses = self.config.listen();
 
         if listen_addresses.is_empty() {
             return Err(error::ConfigError::NoListenAddresses.into());
@@ -150,12 +130,77 @@ impl ModtorioRpc {
             NetAddress::TCP(addr) => addr,
             NetAddress::Unix(_) => unimplemented!(),
         };
-        let server = ModtorioRpc { modtorio };
+
         debug!("Starting RPC server. Listening on {}", addr);
         Server::builder()
-            .add_service(ModRpcServer::new(server))
+            .add_service(ModRpcServer::new(self))
             .serve(addr)
             .await?;
         Ok(())
+    }
+}
+
+impl Modtorio {
+    /// Returns this instance's uptime.
+    async fn get_uptime(&self) -> chrono::Duration {
+        Utc::now() - *self.started_at
+    }
+
+    /// Imports a new Factorio instance from a given path to its root directory.
+    async fn import_game<P>(self, path: P, prog_tx: status::AsyncProgressChannel)
+    where
+        P: AsRef<Path>,
+    {
+        let path = path.as_ref().to_path_buf();
+        task::spawn(async move {
+            match factorio::Importer::from_root(path)
+                .with_status_updates(prog_tx.clone())
+                .import(
+                    Arc::clone(&self.config),
+                    Arc::clone(&self.portal),
+                    Arc::clone(&self.store),
+                )
+                .await
+            {
+                Ok(game) => {
+                    status::send_status(Some(prog_tx), status::indefinite("Done")).await;
+                    self.games.lock().await.push(game);
+                }
+                Err(e) => {
+                    status::send_status(Some(prog_tx), status::error(&e.to_string())).await;
+                }
+            };
+        });
+    }
+}
+
+#[tonic::async_trait]
+impl ModRpc for Modtorio {
+    type ImportGameStream = mpsc::Receiver<Result<Progress, Status>>;
+
+    async fn get_server_status(
+        &self,
+        request: Request<Empty>,
+    ) -> Result<Response<ServerStatus>, Status> {
+        debug!("Got status request: {:?}", request);
+
+        let uptime = self.get_uptime().await;
+        Ok(Response::new(ServerStatus {
+            uptime: uptime.num_seconds(),
+        }))
+    }
+
+    async fn import_game(
+        &self,
+        request: Request<ImportRequest>,
+    ) -> Result<Response<Self::ImportGameStream>, Status> {
+        debug!("Got a game import request: {:?}", request);
+
+        let (tx, rx) = mpsc::channel(1024);
+
+        self.clone()
+            .import_game(request.into_inner().path, Arc::new(Mutex::new(tx)))
+            .await;
+        Ok(Response::new(rx))
     }
 }

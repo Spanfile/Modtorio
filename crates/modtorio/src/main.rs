@@ -1,6 +1,6 @@
 use ::log::*;
 use modtorio::*;
-use std::{env, fs::File, path::Path, sync::Arc};
+use std::{env, fs::File, path::Path};
 
 /// The program's version at build-time.
 const VERSION: &str = env!("CARGO_PKG_VERSION");
@@ -28,10 +28,10 @@ async fn main() -> anyhow::Result<()> {
     }
     log_program_information();
 
-    let modtorio = Arc::new(Modtorio::new(config, store).await?);
+    let modtorio = Modtorio::new(config, store).await?;
 
     debug!("Program initialisation complete, running Modtorio");
-    Modtorio::run(modtorio).await?;
+    modtorio.run().await?;
     Ok(())
 }
 

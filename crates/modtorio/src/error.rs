@@ -166,6 +166,8 @@ pub enum StoreError {
 /// Represesnts all types of errors that correspond to invalid configuration.
 #[derive(Debug, Error)]
 pub enum ConfigError {
+    /// Returned when trying to run a Modtorio instance which has no RPC listen addresses specified
+    /// in its config.
     #[error("No listen addresses specified.")]
     NoListenAddresses,
 }
