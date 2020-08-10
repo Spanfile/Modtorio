@@ -169,10 +169,10 @@ impl Importer {
             self.prog_tx.clone(),
             status::indefinite("Reading server settings..."),
         )
-        .await;
+        .await?;
         let settings = ServerSettings::from_game_json(&fs::read_to_string(settings_path)?)?;
 
-        status::send_status(self.prog_tx.clone(), status::indefinite("Loading mods...")).await;
+        status::send_status(self.prog_tx.clone(), status::indefinite("Loading mods...")).await?;
         let mods = mods.build(config, portal, Arc::clone(&store)).await?;
 
         Ok(Factorio {

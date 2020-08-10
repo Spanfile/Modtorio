@@ -85,7 +85,7 @@ impl<'a> ModsBuilder {
                     game_mod.factorio_mod
                 )),
             )
-            .await;
+            .await?;
 
             let created_mod = match Mod::from_cache(
                 &game_mod,
@@ -176,7 +176,7 @@ impl<'a> ModsBuilder {
                 self.prog_tx.clone(),
                 status::indefinite(&format!("Loading mod from archive: {}", entry.display())),
             )
-            .await;
+            .await?;
 
             let created_mod = match Mod::from_zip(
                 &entry,

@@ -147,7 +147,11 @@ impl Modtorio {
     }
 
     /// Imports a new Factorio instance from a given path to its root directory.
-    async fn import_game<P>(self, path: P, prog_tx: status::AsyncProgressChannel)
+    async fn import_game<P>(
+        self,
+        path: P,
+        prog_tx: status::AsyncProgressChannel,
+    ) -> anyhow::Result<()>
     where
         P: AsRef<Path>,
     {
@@ -163,14 +167,17 @@ impl Modtorio {
                 .await
             {
                 Ok(game) => {
-                    status::send_status(Some(prog_tx), status::indefinite("Done")).await;
+                    status::send_status(Some(prog_tx), status::indefinite("Done")).await?;
                     self.games.lock().await.push(game);
+                    Ok(())
                 }
                 Err(e) => {
-                    status::send_status(Some(prog_tx), status::error(&e.to_string())).await;
+                    status::send_status(Some(prog_tx), status::error(&e.to_string())).await?;
+                    Err(anyhow::anyhow!(""))
                 }
-            };
-        });
+            }
+        })
+        .await?
     }
 }
 
@@ -200,7 +207,8 @@ impl ModRpc for Modtorio {
 
         self.clone()
             .import_game(request.into_inner().path, Arc::new(Mutex::new(tx)))
-            .await;
+            .await
+            .unwrap();
         Ok(Response::new(rx))
     }
 }
