@@ -80,10 +80,7 @@ impl<'a> ModsBuilder {
         for game_mod in mods {
             status::send_status(
                 self.prog_tx.clone(),
-                status::indefinite(&format!(
-                    "Loading mod from cache: {}",
-                    game_mod.factorio_mod
-                )),
+                status::indefinite(&format!("Loading mod from cache: {}", game_mod.factorio_mod)),
             )
             .await?;
 
@@ -146,20 +143,14 @@ impl<'a> ModsBuilder {
                 )
                 .await?;
 
-                let created_mod = match Mod::from_zip(
-                    &entry,
-                    Arc::clone(&config),
-                    Arc::clone(&portal),
-                    Arc::clone(&store),
-                )
-                .await
-                {
-                    Ok(created_mod) => created_mod,
-                    Err(e) => {
-                        error!("Zip mod '{}' failed to load: {}", entry.display(), e);
-                        continue;
-                    }
-                };
+                let created_mod =
+                    match Mod::from_zip(&entry, Arc::clone(&config), Arc::clone(&portal), Arc::clone(&store)).await {
+                        Ok(created_mod) => created_mod,
+                        Err(e) => {
+                            error!("Zip mod '{}' failed to load: {}", entry.display(), e);
+                            continue;
+                        }
+                    };
 
                 info!(
                     "Loaded non-cached mod {} from zip ({})",
@@ -187,27 +178,18 @@ impl<'a> ModsBuilder {
         for entry in util::glob(&zips)? {
             status::send_status(
                 self.prog_tx.clone(),
-                status::indefinite(&format!(
-                    "Loading mod from zip archive: {}",
-                    entry.display()
-                )),
+                status::indefinite(&format!("Loading mod from zip archive: {}", entry.display())),
             )
             .await?;
 
-            let created_mod = match Mod::from_zip(
-                &entry,
-                Arc::clone(&config),
-                Arc::clone(&portal),
-                Arc::clone(&store),
-            )
-            .await
-            {
-                Ok(created_mod) => created_mod,
-                Err(e) => {
-                    error!("Zip mod '{}' failed to load: {}", entry.display(), e);
-                    continue;
-                }
-            };
+            let created_mod =
+                match Mod::from_zip(&entry, Arc::clone(&config), Arc::clone(&portal), Arc::clone(&store)).await {
+                    Ok(created_mod) => created_mod,
+                    Err(e) => {
+                        error!("Zip mod '{}' failed to load: {}", entry.display(), e);
+                        continue;
+                    }
+                };
 
             info!(
                 "Loaded mod {} from zip ({})",
@@ -221,17 +203,9 @@ impl<'a> ModsBuilder {
     }
 
     /// Finalises the builder and returns a new `Mods` object.
-    pub async fn build(
-        self,
-        config: Arc<Config>,
-        portal: Arc<ModPortal>,
-        store: Arc<Store>,
-    ) -> anyhow::Result<Mods> {
+    pub async fn build(self, config: Arc<Config>, portal: Arc<ModPortal>, store: Arc<Store>) -> anyhow::Result<Mods> {
         let built_mods = if let Some(game_cache_id) = self.game_cache_id {
-            debug!(
-                "Got cached game ID {}, loading mods from cache",
-                game_cache_id
-            );
+            debug!("Got cached game ID {}, loading mods from cache", game_cache_id);
 
             self.build_mods_from_cache(
                 game_cache_id,
@@ -243,12 +217,8 @@ impl<'a> ModsBuilder {
         } else {
             debug!("No cached game, loading mods from filesystem");
 
-            self.build_mods_from_filesystem(
-                Arc::clone(&config),
-                Arc::clone(&portal),
-                Arc::clone(&store),
-            )
-            .await?
+            self.build_mods_from_filesystem(Arc::clone(&config), Arc::clone(&portal), Arc::clone(&store))
+                .await?
         };
 
         let mut mods = HashMap::new();

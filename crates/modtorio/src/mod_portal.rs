@@ -69,12 +69,7 @@ impl ModPortal {
     /// Downloads a given mod its zip archive URL to a temporary location and copies it to the final
     /// given location. Returns the final location's path and the zip archive's size in the
     /// filesystem.
-    pub async fn download_mod<P>(
-        &self,
-        name: &str,
-        url_path: &str,
-        directory: P,
-    ) -> anyhow::Result<(PathBuf, usize)>
+    pub async fn download_mod<P>(&self, name: &str, url_path: &str, directory: P) -> anyhow::Result<(PathBuf, usize)>
     where
         P: AsRef<Path>,
     {
@@ -87,10 +82,7 @@ impl ModPortal {
         let mut response = self.get(download_url).await?;
         let status = response.status();
 
-        ensure!(
-            status == StatusCode::OK,
-            ModPortalError::ErrorStatus(status)
-        );
+        ensure!(status == StatusCode::OK, ModPortalError::ErrorStatus(status));
 
         let mut temp = fs::File::from_std(tempfile()?);
         let written = response.to_writer(&mut temp).await?;

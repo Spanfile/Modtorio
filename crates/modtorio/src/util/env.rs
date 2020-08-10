@@ -26,12 +26,6 @@ pub fn dump_lines(prefix: &str) -> Vec<String> {
 /// variable name to its value.
 pub fn dump_map(prefix: &str) -> HashMap<String, String> {
     std::env::vars()
-        .filter_map(|(k, v)| {
-            if k.starts_with(prefix) {
-                Some((k, v))
-            } else {
-                None
-            }
-        })
+        .filter_map(|(k, v)| if k.starts_with(prefix) { Some((k, v)) } else { None })
         .collect::<HashMap<String, String>>()
 }

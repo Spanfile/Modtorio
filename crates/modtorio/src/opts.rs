@@ -45,20 +45,20 @@ impl Opts {
                     .value_name("FILE")
                     .default_value(config::DEFAULT_STORE_FILE_LOCATION)
                     .help(
-                        "Sets a custom program persistent store file. The special value '_memory' \
-                         specifies an ephemeral in-memory store, which is primarily used for \
-                         debugging purposes.",
+                        "Sets a custom program persistent store file. The special value '_memory' specifies an \
+                         ephemeral in-memory store, which is primarily used for debugging purposes.",
                     )
                     .takes_value(true),
             )
             .arg(Arg::with_name("no-env").long("no-env").help(
-                "Skip loading configuration values from the environment variables. Primarily used \
-                 for debugging purposes.",
+                "Skip loading configuration values from the environment variables. Primarily used for debugging \
+                 purposes.",
             ))
-            .arg(Arg::with_name("no-conf").long("no-conf").help(
-                "Skip loading configuration values from the config file. Primarily used for \
-                 debugging purposes.",
-            ))
+            .arg(
+                Arg::with_name("no-conf").long("no-conf").help(
+                    "Skip loading configuration values from the config file. Primarily used for debugging purposes.",
+                ),
+            )
             .arg(
                 Arg::with_name("log-level")
                     .long("log-level")
@@ -84,10 +84,7 @@ impl Opts {
                 .value_of_os("config")
                 .expect("config option has no value")
                 .into(),
-            store: matches
-                .value_of_os("store")
-                .expect("store option has no value")
-                .into(),
+            store: matches.value_of_os("store").expect("store option has no value").into(),
             no_env: matches.is_present("no-env"),
             no_conf: matches.is_present("no-conf"),
             log_level: matches

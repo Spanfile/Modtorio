@@ -44,9 +44,7 @@ where
 /// Returns whether a given permission mode is more-or-equally restrictive as a given
 /// maximum permission mode.
 fn is_higher_or_equal_permission(smaller: u32, higher: u32) -> bool {
-    higher & W_RWX >= smaller & W_RWX
-        && higher & G_RWX >= smaller & G_RWX
-        && higher & U_RWX >= smaller & U_RWX
+    higher & W_RWX >= smaller & W_RWX && higher & G_RWX >= smaller & G_RWX && higher & U_RWX >= smaller & U_RWX
 }
 
 #[cfg(test)]

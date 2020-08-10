@@ -35,10 +35,7 @@ impl Cache {
     }
 
     /// Retrieves all mods of a given `Game`, identified by its cache ID.
-    pub async fn get_mods_of_game(
-        &self,
-        game_cache_id: GameCacheId,
-    ) -> anyhow::Result<Vec<GameMod>> {
+    pub async fn get_mods_of_game(&self, game_cache_id: GameCacheId) -> anyhow::Result<Vec<GameMod>> {
         let conn = &self.conn;
         sql!(conn => {
             let mut stmt = conn.prepare(GameMod::select())?;
@@ -93,10 +90,7 @@ impl Cache {
     }
 
     /// Retrieves an optional `FactorioMod`.
-    pub async fn get_factorio_mod(
-        &self,
-        factorio_mod: String,
-    ) -> anyhow::Result<Option<FactorioMod>> {
+    pub async fn get_factorio_mod(&self, factorio_mod: String) -> anyhow::Result<Option<FactorioMod>> {
         let conn = &self.conn;
         sql!(conn => {
             let mut stmt = conn.prepare(FactorioMod::select())?;
@@ -171,10 +165,7 @@ impl Cache {
     }
 
     /// Stores all given `ReleaseDependencies`.
-    pub async fn set_release_dependencies(
-        &self,
-        dependencies: Vec<ReleaseDependency>,
-    ) -> anyhow::Result<()> {
+    pub async fn set_release_dependencies(&self, dependencies: Vec<ReleaseDependency>) -> anyhow::Result<()> {
         let conn = &self.conn;
         sql!(conn => {
             let mut stmt = conn.prepare(ReleaseDependency::replace_into())?;

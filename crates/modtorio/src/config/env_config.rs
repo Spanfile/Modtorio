@@ -33,14 +33,12 @@ impl ConfigSource for EnvConfig {
 impl EnvConfig {
     /// Returns a new `EnvConfig` built from the running program's environment variables.
     pub fn new() -> anyhow::Result<Self> {
-        Ok(envy::prefixed(APP_PREFIX)
-            .from_env::<Self>()
-            .with_context(|| {
-                format!(
-                    "Failed to load config from environment variables:\n{}",
-                    util::env::dump_string(APP_PREFIX)
-                )
-            })?)
+        Ok(envy::prefixed(APP_PREFIX).from_env::<Self>().with_context(|| {
+            format!(
+                "Failed to load config from environment variables:\n{}",
+                util::env::dump_string(APP_PREFIX)
+            )
+        })?)
     }
 }
 

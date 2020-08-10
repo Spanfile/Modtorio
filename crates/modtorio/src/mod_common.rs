@@ -86,21 +86,17 @@ where
 {
     let path = zip.as_ref().to_owned();
     let result = match algorithm {
-        ChecksumAlgorithm::BLAKE2b => task::spawn_blocking(move || -> anyhow::Result<String> {
-            util::checksum::blake2b_file(path)
-        }),
-        ChecksumAlgorithm::SHA1 => task::spawn_blocking(move || -> anyhow::Result<String> {
-            util::checksum::sha1_file(path)
-        }),
+        ChecksumAlgorithm::BLAKE2b => {
+            task::spawn_blocking(move || -> anyhow::Result<String> { util::checksum::blake2b_file(path) })
+        }
+        ChecksumAlgorithm::SHA1 => {
+            task::spawn_blocking(move || -> anyhow::Result<String> { util::checksum::sha1_file(path) })
+        }
     }
     .await?;
 
     let result = result?;
-    trace!(
-        "Calculated zip checksum ({}): {}",
-        zip.as_ref().display(),
-        result
-    );
+    trace!("Calculated zip checksum ({}): {}", zip.as_ref().display(), result);
     Ok(result)
 }
 
@@ -155,8 +151,7 @@ impl Mod {
             .get_factorio_mod(game_mod.factorio_mod.clone())
             .await?
             .ok_or(ModError::ModNotInCache)?;
-        let info =
-            Mutex::new(Info::from_cache(factorio_mod, game_mod.mod_version, store.as_ref()).await?);
+        let info = Mutex::new(Info::from_cache(factorio_mod, game_mod.mod_version, store.as_ref()).await?);
 
         debug!(
             "Verifying mod '{}' zip ({}) against cache...",
@@ -326,12 +321,10 @@ impl Mod {
 
         if let Some(cache_mod) = self.store.cache.get_factorio_mod(self.name().await).await? {
             let time_since_updated = Utc::now() - cache_mod.last_updated;
-            let expired =
-                time_since_updated.to_std()? > Duration::from_secs(self.config.cache_expiry());
+            let expired = time_since_updated.to_std()? > Duration::from_secs(self.config.cache_expiry());
 
             trace!(
-                "Ensuring mod '{}' has portal info. Got cached mod: {:?}. Expired: {} (configured \
-                 expiry {} seconds)",
+                "Ensuring mod '{}' has portal info. Got cached mod: {:?}. Expired: {} (configured expiry {} seconds)",
                 self.name().await,
                 cache_mod,
                 expired,
@@ -340,8 +333,7 @@ impl Mod {
 
             if !expired {
                 let mut info = self.info.lock().await;
-                info.populate_with_cache_object(self.store.as_ref(), cache_mod)
-                    .await?;
+                info.populate_with_cache_object(self.store.as_ref(), cache_mod).await?;
 
                 return Ok(());
             }
@@ -352,11 +344,7 @@ impl Mod {
     }
 
     /// Download a certain version of the mod. If no version is given, downloads the latest version.
-    pub async fn download<P>(
-        &self,
-        version: Option<HumanVersion>,
-        destination: P,
-    ) -> anyhow::Result<DownloadResult>
+    pub async fn download<P>(&self, version: Option<HumanVersion>, destination: P) -> anyhow::Result<DownloadResult>
     where
         P: AsRef<Path>,
     {
@@ -446,12 +434,7 @@ impl Mod {
     /// Returns the path of the mod's zip archive. Returns `ModError::MissingZipPath` if the path
     /// isn't set.
     pub async fn zip_path(&self) -> anyhow::Result<PathBuf> {
-        Ok(self
-            .zip_path
-            .lock()
-            .await
-            .clone()
-            .ok_or(ModError::MissingZipPath)?)
+        Ok(self.zip_path.lock().await.clone().ok_or(ModError::MissingZipPath)?)
     }
 
     /// Returns the mod zip archive's checksum if set. If not set, will calculate the checksum, set
@@ -461,8 +444,7 @@ impl Mod {
             return Ok(checksum.to_owned());
         }
 
-        let checksum =
-            calculate_zip_checksum(CACHE_ZIP_CHECKSUM_ALGO, self.zip_path().await?).await?;
+        let checksum = calculate_zip_checksum(CACHE_ZIP_CHECKSUM_ALGO, self.zip_path().await?).await?;
         *self.zip_checksum.lock().await = Some(checksum.clone());
 
         trace!(

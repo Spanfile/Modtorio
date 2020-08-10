@@ -101,10 +101,7 @@ impl Mods {
             info!("Updated cache for {}", mod_display);
         }
 
-        self.store
-            .cache
-            .set_mods_of_game(new_game_mods.into_inner())
-            .await?;
+        self.store.cache.set_mods_of_game(new_game_mods.into_inner()).await?;
         info!("Updated game ID {}'s cached mods", game_id);
 
         Ok(())
@@ -112,11 +109,7 @@ impl Mods {
 
     /// Adds and installs a new mod with a given name from the portal. Optionally a wanted version
     /// can be supplied. If no wanted version is supplied, the latest version is installed.
-    pub async fn add_from_portal(
-        &mut self,
-        name: &str,
-        version: Option<HumanVersion>,
-    ) -> anyhow::Result<()> {
+    pub async fn add_from_portal(&mut self, name: &str, version: Option<HumanVersion>) -> anyhow::Result<()> {
         if let Some(version) = version {
             info!("Adding '{}' ver. {:?}", name, version);
         } else {
@@ -181,20 +174,14 @@ impl Mods {
         let mut missing: Vec<String> = Vec::new();
 
         for fact_mod in self.mods.values() {
-            info!(
-                "Ensuring '{}'s dependencies are met...",
-                fact_mod.title().await
-            );
+            info!("Ensuring '{}'s dependencies are met...", fact_mod.title().await);
             missing.extend(self.ensure_single_dependencies(fact_mod).await?.into_iter());
         }
 
         if missing.is_empty() {
             info!("All mod dependencies met");
         } else {
-            info!(
-                "Found {} missing mod dependencies, installing",
-                missing.len()
-            );
+            info!("Found {} missing mod dependencies, installing", missing.len());
 
             for miss in &missing {
                 self.add_from_portal(&miss, None).await?;
@@ -225,11 +212,7 @@ impl Mods {
     ///
     /// If an already installed mod is redownloaded and its version is higher than earlier, the old
     /// mod archive will be removed.
-    async fn add_or_update_in_place(
-        &mut self,
-        name: &str,
-        version: Option<HumanVersion>,
-    ) -> anyhow::Result<&Mod> {
+    async fn add_or_update_in_place(&mut self, name: &str, version: Option<HumanVersion>) -> anyhow::Result<&Mod> {
         match self.mods.entry(name.to_owned()) {
             Entry::Occupied(entry) => {
                 let existing_mod = entry.into_mut();
@@ -237,9 +220,7 @@ impl Mods {
 
                 match existing_mod.download(version, &self.directory).await? {
                     DownloadResult::New => info!("{} added", existing_mod.display().await),
-                    DownloadResult::Unchanged => {
-                        info!("{} unchanged", existing_mod.display().await)
-                    }
+                    DownloadResult::Unchanged => info!("{} unchanged", existing_mod.display().await),
                     DownloadResult::Replaced {
                         old_version,
                         old_archive,
@@ -247,11 +228,7 @@ impl Mods {
                         debug!("Removing old mod archive {}", old_archive);
                         fs::remove_file(old_archive).await?;
 
-                        info!(
-                            "{} replaced from ver. {}",
-                            existing_mod.display().await,
-                            old_version
-                        );
+                        info!("{} replaced from ver. {}", existing_mod.display().await, old_version);
                     }
                 }
 
@@ -297,8 +274,7 @@ impl Mods {
                         match dep.version() {
                             Some(version_req) if !required_version.meets(version_req) => {
                                 debug!(
-                                    "Dependency {} of '{}' not met: version requirement mismatch \
-                                     (found {})",
+                                    "Dependency {} of '{}' not met: version requirement mismatch (found {})",
                                     dep, target_name, required_version
                                 );
                                 missing.push(dep.name().to_string());

@@ -76,8 +76,7 @@ pub enum ModError {
     #[error("Mod zip does not exist in filesystem: {0}")]
     MissingZip(PathBuf),
     /// Returned when:
-    ///  * a downloaded mod archive's SHA1 checksum doesn't match its expected checksum from the
-    ///    portal.
+    ///  * a downloaded mod archive's SHA1 checksum doesn't match its expected checksum from the portal.
     ///  * a mod archive's checksum doesn't match the mod's cached archive checksum.
     #[error("Mod zip's checksum does not match expected: got {zip_checksum}, expected {expected}")]
     ZipChecksumMismatch {
@@ -150,9 +149,7 @@ pub enum HumanVersionError {
 #[derive(Debug, Error)]
 pub enum StoreError {
     /// Returned when loading the program store database file and it has insufficient permissions.
-    #[error(
-        "Insufficient store file permissions ({path}): maximum {maximum:o}, actual {actual:o}"
-    )]
+    #[error("Insufficient store file permissions ({path}): maximum {maximum:o}, actual {actual:o}")]
     InsufficientFilePermissions {
         /// Path to the database file.
         path: String,

@@ -12,9 +12,7 @@ const PORTAL_TOKEN_ENV_VARIABLE: &str = "MODTORIO_PORTAL_TOKEN";
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let opts = opts::Opts::get();
-    let store = store::Builder::from_location((&opts.store).into())
-        .build()
-        .await?;
+    let store = store::Builder::from_location((&opts.store).into()).build().await?;
     let config = build_config(&opts, &store).await?;
 
     log::setup_logging(&config)?;
@@ -68,10 +66,8 @@ where
 /// Updates a given program `Store` from the current environment variables.
 ///
 /// The following values are updated:
-/// * `Field::PortalUsername` from the variable whose name is in the constant
-///   `PORTAL_USERNAME_ENV_VARIABLE`
-/// * `Field::PortalToken` from the variable whose name is in the constant
-///   `PORTAL_TOKEN_ENV_VARIABLE`
+/// * `Field::PortalUsername` from the variable whose name is in the constant `PORTAL_USERNAME_ENV_VARIABLE`
+/// * `Field::PortalToken` from the variable whose name is in the constant `PORTAL_TOKEN_ENV_VARIABLE`
 async fn update_store_from_env(store: &store::Store) -> anyhow::Result<()> {
     store.begin_transaction()?;
 

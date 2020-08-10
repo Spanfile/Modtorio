@@ -6,10 +6,7 @@ use tokio::sync::{mpsc, Mutex};
 type AsyncProgressResult = Result<Progress, tonic::Status>;
 pub type AsyncProgressChannel = Arc<Mutex<mpsc::Sender<AsyncProgressResult>>>;
 
-pub async fn send_status(
-    channel: Option<AsyncProgressChannel>,
-    status: AsyncProgressResult,
-) -> anyhow::Result<()> {
+pub async fn send_status(channel: Option<AsyncProgressChannel>, status: AsyncProgressResult) -> anyhow::Result<()> {
     if let Some(channel) = channel {
         trace!("Sending status update: {:?}", status);
         if let Err(e) = channel.lock().await.try_send(status) {

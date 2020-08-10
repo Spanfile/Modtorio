@@ -58,10 +58,7 @@ pub struct Importer {
 
 impl Factorio {
     /// Updates all information about the instance in the program cache.
-    pub async fn update_cache(
-        &self,
-        prog_tx: Option<status::AsyncProgressChannel>,
-    ) -> anyhow::Result<()> {
+    pub async fn update_cache(&self, prog_tx: Option<status::AsyncProgressChannel>) -> anyhow::Result<()> {
         let mut cache_id = self.cache_id.lock().await;
 
         self.store.begin_transaction()?;
@@ -76,11 +73,7 @@ impl Factorio {
                 .await?;
 
             info!("Updating existing game ID {} cache", c);
-            status::send_status(
-                prog_tx.clone(),
-                status::indefinite("Updating existing cached game..."),
-            )
-            .await?;
+            status::send_status(prog_tx.clone(), status::indefinite("Updating existing cached game...")).await?;
             c
         } else {
             let new_id = self
@@ -95,11 +88,7 @@ impl Factorio {
             *cache_id = Some(new_id);
 
             info!("Creating new game cache with ID {}", new_id);
-            status::send_status(
-                prog_tx.clone(),
-                status::indefinite("Creating new cached game..."),
-            )
-            .await?;
+            status::send_status(prog_tx.clone(), status::indefinite("Creating new cached game...")).await?;
             new_id
         };
 
@@ -183,17 +172,11 @@ impl Importer {
             mods_builder = mods_builder.with_status_updates(Arc::clone(prog_tx));
         }
 
-        status::send_status(
-            self.prog_tx.clone(),
-            status::indefinite("Reading server settings..."),
-        )
-        .await?;
+        status::send_status(self.prog_tx.clone(), status::indefinite("Reading server settings...")).await?;
         let settings = ServerSettings::from_game_json(&fs::read_to_string(settings_path)?)?;
 
         status::send_status(self.prog_tx.clone(), status::indefinite("Loading mods...")).await?;
-        let mods = mods_builder
-            .build(config, portal, Arc::clone(&store))
-            .await?;
+        let mods = mods_builder.build(config, portal, Arc::clone(&store)).await?;
 
         Ok(Factorio {
             settings,

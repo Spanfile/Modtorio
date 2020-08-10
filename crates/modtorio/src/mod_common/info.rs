@@ -188,8 +188,8 @@ where
 /// Removes redundant information from an info object returned by the mod portal.
 ///
 /// The function will:
-/// * Remove all but the last path segment from each release's download URL. The other components
-///   are always the same and thus, can be derived when required.
+/// * Remove all but the last path segment from each release's download URL. The other components are always the same
+///   and thus, can be derived when required.
 fn compress_portal_info(info: PortalInfo) -> PortalInfo {
     if let Some(releases) = info.releases {
         let new_releases = releases
@@ -433,10 +433,7 @@ impl Info {
         if let Some(cache_mod) = store.cache.get_factorio_mod(self.name.clone()).await? {
             self.populate_with_cache_object(store, cache_mod).await
         } else {
-            trace!(
-                "Mod '{}' not in cache while trying to load it from cache",
-                self.name
-            );
+            trace!("Mod '{}' not in cache while trying to load it from cache", self.name);
 
             Err(ModError::ModNotInCache.into())
         }
@@ -523,11 +520,7 @@ impl Info {
     /// Returns the mod's releases, or an error if the mod's info hasn't been fetched from the mod
     /// portal (`ModError::MissingInfo`).
     pub fn releases(&self) -> anyhow::Result<Vec<Release>> {
-        Ok(self
-            .releases
-            .as_ref()
-            .cloned()
-            .ok_or(ModError::MissingInfo)?)
+        Ok(self.releases.as_ref().cloned().ok_or(ModError::MissingInfo)?)
     }
 
     /// Returns a release with a certain version, or the latest version if no wanted version is
@@ -553,11 +546,7 @@ impl Info {
     /// Returns the mod's dependencies on other mods, or an error if the mod isn't installed or its
     /// info hasn't been fetched from the mod portal (`ModError::MissingInfo`).
     pub fn dependencies(&self) -> anyhow::Result<Vec<Dependency>> {
-        Ok(self
-            .dependencies
-            .as_ref()
-            .cloned()
-            .ok_or(ModError::MissingInfo)?)
+        Ok(self.dependencies.as_ref().cloned().ok_or(ModError::MissingInfo)?)
     }
 }
 

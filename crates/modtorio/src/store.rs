@@ -113,8 +113,7 @@ where
         let store = Store { conn, cache };
         debug!("Cache database exists: {}", store_file_exists);
 
-        let checksums_match =
-            store_file_exists && checksum_matches_meta(&store, &schema_checksum).await?;
+        let checksums_match = store_file_exists && checksum_matches_meta(&store, &schema_checksum).await?;
         debug!("Schema checksums match: {}", checksums_match);
 
         if !checksums_match {
@@ -248,11 +247,7 @@ impl Store {
     /// Begins a new transaction in the database with `BEGIN TRANSACTION;`.
     pub fn begin_transaction(&self) -> anyhow::Result<()> {
         trace!("Beginning new cache transaction");
-        Ok(self
-            .conn
-            .lock()
-            .unwrap()
-            .execute_batch("BEGIN TRANSACTION")?)
+        Ok(self.conn.lock().unwrap().execute_batch("BEGIN TRANSACTION")?)
     }
 
     /// Commits an ongoing transaction in the database with `COMMIT`;
@@ -308,9 +303,7 @@ PRIMARY KEY("field")
 );"#;
         let store = get_test_store(SCHEMA).await;
 
-        store
-            .begin_transaction()
-            .expect("failed to begin transaction");
+        store.begin_transaction().expect("failed to begin transaction");
         store
             .set_option(option::Value::new(
                 option::Field::PortalUsername,
@@ -318,9 +311,7 @@ PRIMARY KEY("field")
             ))
             .await
             .expect("failed to set meta value");
-        store
-            .commit_transaction()
-            .expect("failed to commit transaction");
+        store.commit_transaction().expect("failed to commit transaction");
     }
 
     #[tokio::test]

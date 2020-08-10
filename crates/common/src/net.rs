@@ -86,16 +86,12 @@ mod tests {
     #[test]
     fn parse() {
         assert_eq!(
-            "0.0.0.0:1337"
-                .parse::<NetAddress>()
-                .expect("failed to parse TCP"),
+            "0.0.0.0:1337".parse::<NetAddress>().expect("failed to parse TCP"),
             NetAddress::TCP(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 1337))
         );
 
         assert_eq!(
-            "unix:/temp/path"
-                .parse::<NetAddress>()
-                .expect("failed to parse Unix"),
+            "unix:/temp/path".parse::<NetAddress>().expect("failed to parse Unix"),
             NetAddress::Unix(PathBuf::from("/temp/path"))
         );
     }
@@ -112,8 +108,7 @@ mod tests {
         );
 
         assert_eq!(
-            serde_json::to_string(&NetAddress::Unix(PathBuf::from("/temp/path")))
-                .expect("failed to serialize Unix"),
+            serde_json::to_string(&NetAddress::Unix(PathBuf::from("/temp/path"))).expect("failed to serialize Unix"),
             r#""unix:/temp/path""#
         );
     }
@@ -121,14 +116,12 @@ mod tests {
     #[test]
     fn deserialize() {
         assert_eq!(
-            serde_json::from_str::<NetAddress>(r#""0.0.0.0:1337""#)
-                .expect("failed to deserialize TCP"),
+            serde_json::from_str::<NetAddress>(r#""0.0.0.0:1337""#).expect("failed to deserialize TCP"),
             NetAddress::TCP(SocketAddr::new(IpAddr::V4(Ipv4Addr::new(0, 0, 0, 0)), 1337))
         );
 
         assert_eq!(
-            serde_json::from_str::<NetAddress>(r#""unix:/temp/path""#)
-                .expect("failed to deserialize Unix"),
+            serde_json::from_str::<NetAddress>(r#""unix:/temp/path""#).expect("failed to deserialize Unix"),
             NetAddress::Unix(PathBuf::from("/temp/path"))
         );
     }

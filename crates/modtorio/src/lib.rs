@@ -28,7 +28,7 @@ use factorio::Factorio;
 use mod_portal::ModPortal;
 use rpc::{
     mod_rpc_server::{ModRpc, ModRpcServer},
-    server_status::{game::GameStatus, Game},
+    server_status::{game::GameStatus, Game, InstanceStatus},
     Empty, ImportRequest, Progress, ServerStatus, UpdateCacheRequest,
 };
 use std::{path::Path, sync::Arc};
@@ -56,6 +56,8 @@ pub struct Modtorio {
     games: Arc<Mutex<Vec<Factorio>>>,
     /// Timestamp when this Modtorio instance was started.
     started_at: Arc<DateTime<Utc>>,
+    /// The instance's status.
+    status: Arc<Mutex<InstanceStatus>>,
 }
 
 impl Modtorio {
@@ -66,41 +68,61 @@ impl Modtorio {
         let store = Arc::new(store);
 
         let portal = Arc::new(ModPortal::new(&config)?);
-
-        info!("Loading previous games...");
-        let cached_games = store.cache.get_games().await?;
-        let mut games = Vec::new();
-        debug!("Got cached games: {:?}", cached_games);
-
-        for cached_game in &cached_games {
-            info!(
-                "Importing cached game ID {} from path {}...",
-                cached_game.id, cached_game.path
-            );
-
-            let game = factorio::Importer::from_cache(cached_game)
-                .import(Arc::clone(&config), Arc::clone(&portal), Arc::clone(&store))
-                .await?;
-
-            info!(
-                "Cached game ID {} imported from {}. {} mods",
-                cached_game.id,
-                cached_game.path,
-                game.mods.count()
-            );
-            debug!("Cached game: {:?}", cached_game);
-            games.push(game);
-        }
-
-        info!("{} previous games loaded.", games.len());
-
-        Ok(Modtorio {
+        let instance = Modtorio {
             config,
             portal,
             store,
-            games: Arc::new(Mutex::new(games)),
+            games: Arc::new(Mutex::new(Vec::new())),
             started_at: Arc::new(Utc::now()),
-        })
+            status: Arc::new(Mutex::new(InstanceStatus::Starting)),
+        };
+
+        let i = instance.clone();
+        task::spawn(async move {
+            info!("Loading previous games...");
+            let cached_games = match i.store.cache.get_games().await {
+                Ok(games) => games,
+                Err(e) => {
+                    error!("Failed to get cached games: {}", e);
+                    return;
+                }
+            };
+            let mut games = Vec::new();
+            debug!("Got cached games: {:?}", cached_games);
+
+            for cached_game in &cached_games {
+                info!(
+                    "Importing cached game ID {} from path {}...",
+                    cached_game.id, cached_game.path
+                );
+
+                let game = match factorio::Importer::from_cache(cached_game)
+                    .import(Arc::clone(&i.config), Arc::clone(&i.portal), Arc::clone(&i.store))
+                    .await
+                {
+                    Ok(game) => game,
+                    Err(e) => {
+                        error!("Failed to import cached game: {}", e);
+                        return;
+                    }
+                };
+
+                info!(
+                    "Cached game ID {} imported from {}. {} mods",
+                    cached_game.id,
+                    cached_game.path,
+                    game.mods.count()
+                );
+                debug!("Cached game: {:?}", cached_game);
+                games.push(game);
+            }
+
+            info!("{} previous games loaded.", games.len());
+            i.games.lock().await.extend(games);
+            *i.status.lock().await = InstanceStatus::Running;
+        });
+
+        Ok(instance)
     }
 
     /// Runs a given Modtorio instance.
@@ -140,6 +162,28 @@ impl Modtorio {
         Ok(())
     }
 
+    /// Asserts that the instance's current status is `wanted`.
+    async fn assert_instance_status(&self, wanted: InstanceStatus, prog_tx: status::AsyncProgressChannel) -> bool {
+        let status = self.get_instance_status().await;
+        if status == InstanceStatus::Starting {
+            error!(
+                "RPC instance status assertion failed: wanted {:?}, actual {:?}",
+                wanted, status
+            );
+            if let Err(e) = status::send_status(
+                Some(prog_tx.clone()),
+                status::error("Modtorio instance is still starting up"),
+            )
+            .await
+            {
+                error!("Failed to send status update: {}", e);
+            }
+            false
+        } else {
+            true
+        }
+    }
+
     /// Returns this instance's uptime.
     async fn get_uptime(&self) -> chrono::Duration {
         Utc::now() - *self.started_at
@@ -157,11 +201,42 @@ impl Modtorio {
             .collect()
     }
 
+    /// Returns this instance's status.
+    async fn get_instance_status(&self) -> InstanceStatus {
+        *self.status.lock().await
+    }
+
     /// Imports a new Factorio instance from a given path to its root directory.
     async fn import_game<P>(self, path: P, prog_tx: status::AsyncProgressChannel)
     where
         P: AsRef<Path>,
     {
+        if !self
+            .assert_instance_status(InstanceStatus::Running, prog_tx.clone())
+            .await
+        {
+            return;
+        }
+
+        if self.games.lock().await.iter().any(|game| game.root() == path.as_ref()) {
+            error!(
+                "RPC tried to import already existing game from path {}",
+                path.as_ref().display()
+            );
+            if let Err(e) = status::send_status(
+                Some(prog_tx.clone()),
+                status::error(&format!(
+                    "A game from the directory {} already exists.",
+                    path.as_ref().display()
+                )),
+            )
+            .await
+            {
+                error!("Failed to send status update: {}", e);
+            }
+            return;
+        }
+
         let path = path.as_ref().to_path_buf();
         task::spawn(async move {
             let game = match factorio::Importer::from_root(&path)
@@ -174,15 +249,9 @@ impl Modtorio {
                 .await
             {
                 Ok(game) => {
-                    info!(
-                        "Imported new Factorio server instance from {}",
-                        path.display()
-                    );
-                    if let Err(e) = status::send_status(
-                        Some(prog_tx.clone()),
-                        status::indefinite("Game imported"),
-                    )
-                    .await
+                    info!("Imported new Factorio server instance from {}", path.display());
+                    if let Err(e) =
+                        status::send_status(Some(prog_tx.clone()), status::indefinite("Game imported")).await
                     {
                         error!("Failed to send status update: {}", e);
                         return;
@@ -191,9 +260,7 @@ impl Modtorio {
                 }
                 Err(e) => {
                     error!("Failed to import game: {}", e);
-                    if let Err(nested) =
-                        status::send_status(Some(prog_tx.clone()), status::error(&e.to_string()))
-                            .await
+                    if let Err(nested) = status::send_status(Some(prog_tx.clone()), status::error(&e.to_string())).await
                     {
                         error!("Failed to send status update: {}", nested);
                         return;
@@ -204,20 +271,15 @@ impl Modtorio {
 
             if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
                 error!("Failed to update game cache: {}", e);
-                if let Err(e) = status::send_status(
-                    Some(prog_tx.clone()),
-                    status::error("Failed to update game cache"),
-                )
-                .await
+                if let Err(e) =
+                    status::send_status(Some(prog_tx.clone()), status::error("Failed to update game cache")).await
                 {
                     error!("Failed to send status update: {}", e);
                     return;
                 }
             }
 
-            if let Err(e) =
-                status::send_status(Some(prog_tx.clone()), status::indefinite("Done")).await
-            {
+            if let Err(e) = status::send_status(Some(prog_tx.clone()), status::indefinite("Done")).await {
                 error!("Failed to send status update: {}", e);
                 return;
             }
@@ -226,26 +288,28 @@ impl Modtorio {
 
     /// Updates a given game instance's cache.
     async fn update_cache(self, server_index: usize, prog_tx: status::AsyncProgressChannel) {
+        if !self
+            .assert_instance_status(InstanceStatus::Running, prog_tx.clone())
+            .await
+        {
+            return;
+        }
+
         task::spawn(async move {
             let games = self.games.lock().await;
             let game = games.get(server_index);
             if let Some(game) = game {
                 if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
                     error!("Failed to update game cache: {}", e);
-                    if let Err(e) = status::send_status(
-                        Some(prog_tx.clone()),
-                        status::error("Failed to update game cache"),
-                    )
-                    .await
+                    if let Err(e) =
+                        status::send_status(Some(prog_tx.clone()), status::error("Failed to update game cache")).await
                     {
                         error!("Failed to send status update: {}", e);
                         return;
                     }
                 }
 
-                if let Err(e) =
-                    status::send_status(Some(prog_tx.clone()), status::indefinite("Done")).await
-                {
+                if let Err(e) = status::send_status(Some(prog_tx.clone()), status::indefinite("Done")).await {
                     error!("Failed to send status update: {}", e);
                     return;
                 }
@@ -267,45 +331,48 @@ impl ModRpc for Modtorio {
     type ImportGameStream = mpsc::Receiver<Result<Progress, Status>>;
     type UpdateCacheStream = mpsc::Receiver<Result<Progress, Status>>;
 
-    async fn get_server_status(
-        &self,
-        request: Request<Empty>,
-    ) -> Result<Response<ServerStatus>, Status> {
-        log_rpc_request(&request);
+    async fn get_server_status(&self, req: Request<Empty>) -> Result<Response<ServerStatus>, Status> {
+        log_rpc_request(&req);
 
         let uptime = self.get_uptime().await;
         let games = self.get_rpc_games().await;
+        let instance_status = self.get_instance_status().await;
 
-        Ok(Response::new(ServerStatus {
+        let response = Response::new(ServerStatus {
             uptime: uptime.num_seconds(),
             games,
-        }))
+            instance_status: instance_status.into(),
+        });
+        log_rpc_response(&response);
+
+        Ok(response)
     }
 
-    async fn import_game(
-        &self,
-        request: Request<ImportRequest>,
-    ) -> Result<Response<Self::ImportGameStream>, Status> {
-        log_rpc_request(&request);
+    async fn import_game(&self, req: Request<ImportRequest>) -> Result<Response<Self::ImportGameStream>, Status> {
+        log_rpc_request(&req);
         let (tx, rx) = channel();
 
-        self.clone()
-            .import_game(request.into_inner().path, tx)
-            .await;
-        Ok(Response::new(rx))
+        self.clone().import_game(req.into_inner().path, tx).await;
+        let resp = Response::new(rx);
+        log_rpc_response(&resp);
+
+        Ok(resp)
     }
 
     async fn update_cache(
         &self,
-        request: Request<UpdateCacheRequest>,
+        req: Request<UpdateCacheRequest>,
     ) -> Result<Response<Self::UpdateCacheStream>, Status> {
-        log_rpc_request(&request);
+        log_rpc_request(&req);
         let (tx, rx) = channel();
 
         self.clone()
-            .update_cache(request.into_inner().server_index as usize, tx)
+            .update_cache(req.into_inner().server_index as usize, tx)
             .await;
-        Ok(Response::new(rx))
+        let resp = Response::new(rx);
+        log_rpc_response(&resp);
+
+        Ok(resp)
     }
 }
 
@@ -326,4 +393,9 @@ fn log_rpc_request<T: std::fmt::Debug>(request: &Request<T>) {
             .unwrap_or_else(|| String::from("unknown"))
     );
     debug!("{:?}", request);
+}
+
+/// Logs a given RPC response.
+fn log_rpc_response<T: std::fmt::Debug>(response: &Response<T>) {
+    debug!("{:?}", response);
 }

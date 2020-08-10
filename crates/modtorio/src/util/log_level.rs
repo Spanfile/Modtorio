@@ -5,9 +5,7 @@ use serde::{Deserialize, Serialize};
 use strum_macros::{Display, EnumString, EnumVariantNames};
 
 /// Represents the various logging levels.
-#[derive(
-    Debug, Deserialize, Serialize, Eq, PartialEq, EnumString, Display, EnumVariantNames, Copy, Clone,
-)]
+#[derive(Debug, Deserialize, Serialize, Eq, PartialEq, EnumString, Display, EnumVariantNames, Copy, Clone)]
 #[serde(rename_all = "lowercase")]
 pub enum LogLevel {
     /// The `trace` level.

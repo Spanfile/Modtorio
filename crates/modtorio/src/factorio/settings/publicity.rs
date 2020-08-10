@@ -124,8 +124,7 @@ impl GameFormatConversion for Publicity {
 
         game_format.require_user_verification = self.require_user_verification;
         game_format.max_players = self.player_limit.max.into();
-        game_format.ignore_player_limit_for_returning_players =
-            self.player_limit.ignore_for_returning;
+        game_format.ignore_player_limit_for_returning_players = self.player_limit.ignore_for_returning;
         game_format.afk_autokick_interval = self.player_limit.autokick.into();
         game_format.game_password = self.password.clone();
 

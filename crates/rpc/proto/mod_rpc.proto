@@ -36,6 +36,12 @@ message ServerStatus {
     GameStatus status = 2;
   };
   repeated Game games = 2;
+
+  enum InstanceStatus {
+    STARTING = 0;
+    RUNNING = 1;
+  };
+  InstanceStatus instance_status = 3;
 }
 
 message ImportRequest { string path = 1; }

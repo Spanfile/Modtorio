@@ -35,11 +35,10 @@ pub enum Requirement {
 ///
 /// A `Dependency` can be parsed from a string in the form of `requirement name
 /// version-requirement`. The following restrictions and allowances apply:
-/// * The `requirement` component can be one of `?` (optional), `(?)` (optional hidden), `!`
-///   (incompatible) or empty, in which case it is assumed to be mandatory.
+/// * The `requirement` component can be one of `?` (optional), `(?)` (optional hidden), `!` (incompatible) or empty, in
+///   which case it is assumed to be mandatory.
 /// * The `name` component is required.
-/// * The `version-requirement` is optional. It is a
-///   [`HumanVersionReq`](crate::util::HumanVersionReq).
+/// * The `version-requirement` is optional. It is a [`HumanVersionReq`](crate::util::HumanVersionReq).
 ///
 /// Examples of valid dependency strings:
 /// * A mandatory dependency: `cool-mod >= 1.0.0`.
@@ -96,9 +95,9 @@ impl FromStr for Dependency {
             .trim()
             .to_string();
 
-        let version = captures.get(3).map_or(Ok(None), |c| {
-            c.as_str().parse::<HumanVersionReq>().map(Some)
-        })?;
+        let version = captures
+            .get(3)
+            .map_or(Ok(None), |c| c.as_str().parse::<HumanVersionReq>().map(Some))?;
 
         Ok(Dependency {
             requirement,
@@ -117,9 +116,7 @@ impl FromStr for Requirement {
             "!" => Ok(Requirement::Incompatible),
             "(?)" => Ok(Requirement::OptionalHidden),
             "" => Ok(Requirement::Mandatory),
-            _ => Err(DependencyParsingError::InvalidRequirementString(
-                s.to_owned(),
-            )),
+            _ => Err(DependencyParsingError::InvalidRequirementString(s.to_owned())),
         }
     }
 }

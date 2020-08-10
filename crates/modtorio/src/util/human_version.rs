@@ -101,18 +101,11 @@ impl FromStr for HumanVersion {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let args: Vec<&str> = s.split('.').collect();
 
-        let major = args
-            .get(0)
-            .ok_or(HumanVersionError::MissingComponent)?
-            .parse::<u64>()?;
+        let major = args.get(0).ok_or(HumanVersionError::MissingComponent)?.parse::<u64>()?;
         let minor = args.get(1).map_or(Ok(0), |c| c.parse::<u64>())?;
         let patch = args.get(2).map_or(Ok(0), |c| c.parse::<u64>())?;
 
-        Ok(Self {
-            major,
-            minor,
-            patch,
-        })
+        Ok(Self { major, minor, patch })
     }
 }
 
@@ -168,10 +161,7 @@ impl FromStr for HumanVersionReq {
             .as_str()
             .parse()?;
 
-        Ok(Self {
-            comparator,
-            version,
-        })
+        Ok(Self { comparator, version })
     }
 }
 

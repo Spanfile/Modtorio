@@ -34,10 +34,7 @@ pub(crate) fn has_attribute(attrs: &[Attribute], attribute: &str) -> bool {
     false
 }
 
-pub(crate) fn get_attribute_value(
-    attrs: &[Attribute],
-    attribute: &str,
-) -> Result<Option<String>, MacroError> {
+pub(crate) fn get_attribute_value(attrs: &[Attribute], attribute: &str) -> Result<Option<String>, MacroError> {
     for attr in attrs.iter() {
         if let Ok(Meta::NameValue(name_value)) = attr.parse_meta() {
             if name_value.path.is_ident(attribute) {

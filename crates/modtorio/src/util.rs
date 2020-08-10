@@ -20,11 +20,7 @@ pub fn get_last_path_segment<P>(path: P) -> PathBuf
 where
     P: AsRef<Path>,
 {
-    let component = path
-        .as_ref()
-        .components()
-        .last()
-        .expect("no last component in path");
+    let component = path.as_ref().components().last().expect("no last component in path");
     let last: &Path = component.as_ref();
     last.to_path_buf()
 }
