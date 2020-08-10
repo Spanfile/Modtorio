@@ -1,3 +1,5 @@
+//! Provides types and functions used to report status updates into a `tokio::mpsc` channel from an async task.
+
 use log::*;
 use rpc::{progress::ProgressType, Progress};
 use std::sync::Arc;

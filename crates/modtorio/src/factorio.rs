@@ -142,6 +142,7 @@ impl Importer {
         }
     }
 
+    /// Specifies an `AsyncProgressChannel` to use for status updates when importing the game.
     pub fn with_status_updates(self, prog_tx: status::AsyncProgressChannel) -> Self {
         Self {
             prog_tx: Some(prog_tx),

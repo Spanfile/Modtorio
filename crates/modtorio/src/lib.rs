@@ -218,7 +218,13 @@ impl Modtorio {
             return;
         }
 
-        if self.games.lock().await.iter().any(|game| game.root() == path.as_ref()) {
+        if self
+            .games
+            .lock()
+            .await
+            .iter()
+            .any(|game| util::file::are_same(game.root(), path.as_ref()).expect("failed to compare file paths"))
+        {
             error!(
                 "RPC tried to import already existing game from path {}",
                 path.as_ref().display()

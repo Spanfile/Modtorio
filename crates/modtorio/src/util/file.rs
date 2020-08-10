@@ -1,6 +1,10 @@
 //! Provides several utilities related filesystem files.
 
-use std::{fs, os::unix::fs::PermissionsExt, path::Path};
+use std::{
+    fs,
+    os::unix::fs::{MetadataExt, PermissionsExt},
+    path::Path,
+};
 
 /// The world rwx permission bits (007: `------rwx`).
 const W_RWX: u32 = 0o7;
@@ -8,6 +12,18 @@ const W_RWX: u32 = 0o7;
 const G_RWX: u32 = 0o70;
 /// The user rwx permission bits (007: `rwx------`).
 const U_RWX: u32 = 0o700;
+
+/// Returns whether two given paths point to the same file or directory.
+pub fn are_same<P1, P2>(first: P1, second: P2) -> anyhow::Result<bool>
+where
+    P1: AsRef<Path>,
+    P2: AsRef<Path>,
+{
+    let meta1 = fs::metadata(first)?;
+    let meta2 = fs::metadata(second)?;
+
+    Ok((meta1.dev(), meta1.ino()) == (meta2.dev(), meta2.ino()))
+}
 
 /// Returns a given file's Unix permission mode.
 pub fn get_permissions<P>(path: P) -> anyhow::Result<u32>
