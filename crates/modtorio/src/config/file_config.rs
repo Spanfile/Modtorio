@@ -47,6 +47,7 @@ impl ConfigSource for FileConfig {
         Config {
             log_level: self.debug.log_level,
             cache_expiry: self.cache.expiry,
+            listen: self.network.listen,
             ..config
         }
     }

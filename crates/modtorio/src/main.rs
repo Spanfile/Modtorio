@@ -23,6 +23,7 @@ use ::log::*;
 use config::Config;
 use mod_portal::ModPortal;
 use opts::Opts;
+use rpc::server;
 use std::{fs::File, path::Path, sync::Arc};
 use store::Store;
 
@@ -95,15 +96,28 @@ async fn main() -> anyhow::Result<()> {
 
     info!("{} previous games loaded.", games.len());
 
-    for factorio in &mut games {
-        // factorio.mods.add_from_portal("FARL", None).await?;
+    // for factorio in &mut games {
+    //     // factorio.mods.add_from_portal("FARL", None).await?;
 
-        // factorio.mods.update().await?;
-        // factorio.mods.ensure_dependencies().await?;
-        factorio.update_cache().await?;
+    //     // factorio.mods.update().await?;
+    //     // factorio.mods.ensure_dependencies().await?;
+    //     factorio.update_cache().await?;
+    // }
+
+    let listen_addresses = config.listen();
+    if listen_addresses.len() > 1 {
+        unimplemented!("listening to multiple addresses not yet supported");
     }
 
-    Ok(())
+    let listen = listen_addresses.first().unwrap().clone();
+    let server_task = tokio::spawn(server::run(listen));
+
+    if let Err(e) = tokio::try_join!(server_task) {
+        error!("Async task failed with: {}", e);
+        Err(e.into())
+    } else {
+        Ok(())
+    }
 }
 
 /// Builds a complete configuration object with given command-line Opts and a program Store.

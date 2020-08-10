@@ -12,7 +12,7 @@ use std::{
 const UNIX_SOCKET_PREFIX: &str = "unix:";
 
 /// An combined address used with client-server connections.
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum NetAddress {
     /// An address used with a TCP connection. Consists of a `SocketAddr`; an address-port pair.
     TCP(SocketAddr),

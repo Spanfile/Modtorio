@@ -6,6 +6,7 @@ mod opts_config;
 mod store_config;
 
 use crate::{opts::Opts, store::Store, util};
+use common::net::NetAddress;
 use env_config::EnvConfig;
 use file_config::FileConfig;
 use opts_config::OptsConfig;
@@ -55,6 +56,8 @@ pub struct Config {
     portal_token: String,
     /// The program cache expiry in seconds.
     cache_expiry: u64,
+    /// The server listen addresses
+    listen: Vec<NetAddress>,
 }
 
 /// Builds new [`Config`](Config) instances.
@@ -153,13 +156,18 @@ impl Config {
     pub fn cache_expiry(&self) -> u64 {
         self.cache_expiry
     }
+
+    /// Returns the network listen addresses
+    pub fn listen(&self) -> &[NetAddress] {
+        self.listen.as_slice()
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::store::{self, option};
-    use std::{env, io::Cursor};
+    use std::{env, io::Cursor, path::PathBuf};
 
     fn temp_config_file() -> Cursor<Vec<u8>> {
         let contents = String::from(
@@ -229,5 +237,15 @@ listen = ["0.0.0.0:1337", "unix:/temp/path"]"#,
         assert_eq!(config.cache_expiry, 60);
         assert_eq!(config.portal_username, "env_username");
         assert_eq!(config.portal_token, "env_token");
+        assert_eq!(
+            config.listen,
+            vec![
+                NetAddress::TCP(std::net::SocketAddr::new(
+                    std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
+                    1337
+                )),
+                NetAddress::Unix(PathBuf::from("/temp/path")),
+            ]
+        )
     }
 }
