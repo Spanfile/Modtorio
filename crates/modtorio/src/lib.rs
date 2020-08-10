@@ -20,8 +20,10 @@ pub mod store;
 pub mod util;
 
 use ::log::*;
+use chrono::{DateTime, Utc};
 use common::net::NetAddress;
 use config::Config;
+use factorio::Factorio;
 use mod_portal::ModPortal;
 use rpc::{
     mod_rpc_server::{ModRpc, ModRpcServer},
@@ -29,6 +31,7 @@ use rpc::{
 };
 use std::sync::Arc;
 use store::Store;
+use tokio::sync::Mutex;
 use tonic::{transport::Server, Request, Response, Status};
 
 /// Location of the sample server used during development.
@@ -42,6 +45,8 @@ pub struct Modtorio {
     config: Arc<Config>,
     /// The program store.
     store: Arc<Store>,
+    games: Arc<Mutex<Vec<Factorio>>>,
+    started_at: DateTime<Utc>,
 }
 
 /// The RPC server implementation.
@@ -85,7 +90,12 @@ impl Modtorio {
 
         info!("{} previous games loaded.", games.len());
 
-        Ok(Modtorio { config, store })
+        Ok(Modtorio {
+            config,
+            store,
+            games: Arc::new(Mutex::new(games)),
+            started_at: Utc::now(),
+        })
     }
 
     /// Runs a given Modtorio instance.
@@ -101,6 +111,12 @@ impl Modtorio {
     }
 }
 
+impl Modtorio {
+    fn get_uptime(&self) -> chrono::Duration {
+        Utc::now() - self.started_at
+    }
+}
+
 #[tonic::async_trait]
 impl ModRpc for ModtorioRpc {
     async fn get_server_status(
@@ -109,7 +125,9 @@ impl ModRpc for ModtorioRpc {
     ) -> Result<Response<ServerStatus>, Status> {
         debug!("Got status request");
 
-        let reply = ServerStatus { uptime: 1 };
+        let reply = ServerStatus {
+            uptime: self.modtorio.get_uptime().num_seconds(),
+        };
 
         Ok(Response::new(reply))
     }
