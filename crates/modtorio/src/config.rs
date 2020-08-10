@@ -33,6 +33,16 @@ lazy_static::lazy_static! {
     static ref SERIAL_MUTEX: std::sync::Mutex<()> = std::sync::Mutex::new(());
 }
 
+/// Defines the `apply_to_config` method which must be implemented by all various config sources.
+trait ConfigSource
+where
+    Self: Sized,
+{
+    /// Consumes `self` and applies any config values to a given `Config` object, consuming it and
+    /// returning a new, possibly edited one.
+    fn apply_to_config(self, config: Config) -> Config;
+}
+
 /// Allows access to various program configuration options, which are combined from separate
 /// sources.
 #[derive(Debug, Deserialize, Default)]
@@ -69,7 +79,17 @@ impl Builder {
             dotenv::dotenv()?;
         }
 
-        Ok(EnvConfig::from_env()?)
+        Ok(EnvConfig::new()?)
+    }
+
+    /// Applies a given object that implements `ConfigSource` to the config.
+    fn apply_source<T>(self, source: T) -> Self
+    where
+        T: ConfigSource,
+    {
+        Self {
+            config: source.apply_to_config(self.config),
+        }
     }
 
     /// Applies a given config file reader to the current config.
@@ -77,34 +97,26 @@ impl Builder {
     where
         R: Read,
     {
-        let file_config = FileConfig::from_file(file)?;
-        Ok(Builder {
-            config: file_config.apply_to_config(self.config),
-        })
+        let file_config = FileConfig::new(file)?;
+        Ok(self.apply_source(file_config))
     }
 
     /// Applies given command line `Opts` to the current config.
     pub fn apply_opts(self, opts: &Opts) -> Self {
-        let opts_config = OptsConfig::from_opts(opts);
-        Builder {
-            config: opts_config.apply_to_config(self.config),
-        }
+        let opts_config = OptsConfig::new(opts);
+        self.apply_source(opts_config)
     }
 
     /// Applies the current environment variables to the current config.
     pub fn apply_env(self) -> anyhow::Result<Self> {
         let env_config = Builder::get_env_config()?;
-        Ok(Builder {
-            config: env_config.apply_to_config(self.config),
-        })
+        Ok(self.apply_source(env_config))
     }
 
     /// Applies options from a given program store to the current config.
     pub async fn apply_store(self, store: &Store) -> anyhow::Result<Self> {
         let store_config = StoreConfig::from_store(store).await?;
-        Ok(Builder {
-            config: store_config.apply_to_config(self.config),
-        })
+        Ok(self.apply_source(store_config))
     }
 
     /// Finalise the builder and return the built config.

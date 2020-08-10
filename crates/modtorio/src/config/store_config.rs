@@ -1,6 +1,6 @@
 //! Provides the `StoreConfig` object, used to access config values from the program store.
 
-use super::Config;
+use super::{Config, ConfigSource};
 use crate::store;
 use serde::Deserialize;
 
@@ -30,13 +30,15 @@ impl StoreConfig {
             portal_token,
         })
     }
+}
 
+impl ConfigSource for StoreConfig {
     /// Applies the contained config values to a given `Config`, returning a new `Config` with the
     /// values set.
     // clippy complains that the config parameter should be taken by reference, but if it is the
     // '..config' bit will fail
     #[allow(clippy::needless_pass_by_value)]
-    pub fn apply_to_config(self, config: Config) -> Config {
+    fn apply_to_config(self, config: Config) -> Config {
         Config {
             portal_username: self.portal_username.unwrap_or(config.portal_username),
             portal_token: self.portal_token.unwrap_or(config.portal_token),

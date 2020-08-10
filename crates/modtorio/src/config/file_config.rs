@@ -1,6 +1,6 @@
 //! Provides the `FileConfig` object, used to access config values from a config file.
 
-use super::{Config, DEFAULT_CACHE_EXPIRY};
+use super::{Config, ConfigSource, DEFAULT_CACHE_EXPIRY};
 use crate::util::LogLevel;
 use common::net::NetAddress;
 use serde::{Deserialize, Serialize};
@@ -40,7 +40,29 @@ pub struct NetworkOptions {
     listen: Vec<NetAddress>,
 }
 
+impl ConfigSource for FileConfig {
+    /// Applies the contained config values to a given `Config`, returning a new `Config` with the
+    /// values set.
+    fn apply_to_config(self, config: Config) -> Config {
+        Config {
+            log_level: self.debug.log_level,
+            cache_expiry: self.cache.expiry,
+            ..config
+        }
+    }
+}
+
 impl FileConfig {
+    /// Returns a new `FileConfig` built from a given config file reader.
+    pub fn new<R>(file: &mut R) -> anyhow::Result<Self>
+    where
+        R: Read,
+    {
+        let mut file_contents = String::new();
+        file.read_to_string(&mut file_contents)?;
+        Ok(toml::from_str(&file_contents)?)
+    }
+
     /// Writes a config file with all values set to their config defaults to a given writer.
     pub fn write_default_to_writer<W>(writer: &mut W) -> anyhow::Result<()>
     where
@@ -51,26 +73,6 @@ impl FileConfig {
 
         write!(writer, "{}", serialised)?;
         Ok(())
-    }
-
-    /// Returns a new `FileConfig` built from a given config file reader.
-    pub fn from_file<R>(file: &mut R) -> anyhow::Result<Self>
-    where
-        R: Read,
-    {
-        let mut file_contents = String::new();
-        file.read_to_string(&mut file_contents)?;
-        Ok(toml::from_str(&file_contents)?)
-    }
-
-    /// Applies the contained config values to a given `Config`, returning a new `Config` with the
-    /// values set.
-    pub fn apply_to_config(self, config: Config) -> Config {
-        Config {
-            log_level: self.debug.log_level,
-            cache_expiry: self.cache.expiry,
-            ..config
-        }
     }
 }
 
@@ -98,7 +100,7 @@ expiry = 60
 listen = ["0.0.0.0:1337", "unix:/temp/path"]"#,
         );
         let mut contents = Cursor::new(contents.into_bytes());
-        let config = FileConfig::from_file(&mut contents).expect("failed to create FileConfig");
+        let config = FileConfig::new(&mut contents).expect("failed to create FileConfig");
 
         assert_eq!(config.debug.log_level, LogLevel::Trace);
         assert_eq!(config.cache.expiry, 60);
@@ -119,7 +121,7 @@ listen = ["0.0.0.0:1337", "unix:/temp/path"]"#,
         let contents = String::new();
         let mut contents = Cursor::new(contents.into_bytes());
 
-        assert!(FileConfig::from_file(&mut contents).is_err());
+        assert!(FileConfig::new(&mut contents).is_err());
     }
 
     #[test]
@@ -129,7 +131,7 @@ listen = ["0.0.0.0:1337", "unix:/temp/path"]"#,
 listen = ["0.0.0.0:1337"]"#,
         );
         let mut contents = Cursor::new(contents.into_bytes());
-        let config = FileConfig::from_file(&mut contents).expect("failed to create FileConfig");
+        let config = FileConfig::new(&mut contents).expect("failed to create FileConfig");
 
         assert_eq!(config.debug.log_level, LogLevel::default());
         assert_eq!(config.cache.expiry, DEFAULT_CACHE_EXPIRY);
