@@ -25,7 +25,6 @@ strum_macros = "0.19.2"
 tempfile = "3.1.0"
 thiserror = "1.0.20"
 toml = "0.5.6"
-tonic = "0.3.0"
 url = "2.1.1"
 zip = "0.5.6"
 
@@ -65,6 +64,10 @@ version = "0.9.0"
 [dependencies.clap]
 default-features = false
 version = "2.33.2"
+
+[dependencies.tonic]
+features = ["tls"]
+version = "0.3.0"
 
 [build-dependencies]
 blake2 = "0.9.0"

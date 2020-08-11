@@ -173,6 +173,7 @@ impl Modtorio {
         };
 
         // TODO: add shutdown signal
+        // TODO: TLS
         debug!("Starting RPC server. Listening on {}", addr);
         Server::builder()
             .add_service(ModRpcServer::new(self))
