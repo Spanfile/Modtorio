@@ -232,107 +232,90 @@ impl Modtorio {
     where
         P: AsRef<Path>,
     {
-        if self.assert_instance_status(InstanceStatus::Running).await.is_ok() {
-            if self.game_exists_by_path(&path).await {
-                error!(
-                    "RPC tried to import already existing game from path {}",
-                    path.as_ref().display()
-                );
-                send_status(
-                    &prog_tx,
-                    status::invalid_argument(&format!(
-                        "A game from the directory {} already exists.",
-                        path.as_ref().display()
-                    )),
+        if let Err(e) = self.assert_instance_status(InstanceStatus::Running).await {
+            if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
+                send_status(&prog_tx, Err(rpc_error.into())).await;
+            } else {
+                send_status(&prog_tx, Err(RpcError::from(e).into())).await;
+            }
+            return;
+        }
+
+        if self.game_exists_by_path(&path).await {
+            error!(
+                "RPC tried to import already existing game from path {}",
+                path.as_ref().display()
+            );
+            send_status(
+                &prog_tx,
+                Err(RpcError::GameAlreadyExists(path.as_ref().to_path_buf()).into()),
+            )
+            .await;
+            return;
+        }
+
+        let path = path.as_ref().to_path_buf();
+        task::spawn(async move {
+            let game = match factorio::Importer::from_root(&path)
+                .with_status_updates(prog_tx.clone())
+                .import(
+                    Arc::clone(&self.config),
+                    Arc::clone(&self.portal),
+                    Arc::clone(&self.store),
                 )
-                .await;
+                .await
+            {
+                Ok(game) => {
+                    info!("Imported new Factorio server instance from {}", path.display());
+                    if !send_status(&prog_tx, status::indefinite("Game imported")).await {
+                        return;
+                    }
+                    game
+                }
+                Err(e) => {
+                    error!("Failed to import game: {}", e);
+                    send_status(&prog_tx, Err(RpcError::from(e).into())).await;
+                    return;
+                }
+            };
+
+            if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
+                error!("Failed to update game cache: {}", e);
+                send_status(&prog_tx, Err(RpcError::from(e).into())).await;
                 return;
             }
 
-            let path = path.as_ref().to_path_buf();
-            task::spawn(async move {
-                let game = match factorio::Importer::from_root(&path)
-                    .with_status_updates(prog_tx.clone())
-                    .import(
-                        Arc::clone(&self.config),
-                        Arc::clone(&self.portal),
-                        Arc::clone(&self.store),
-                    )
-                    .await
-                {
-                    Ok(game) => {
-                        info!("Imported new Factorio server instance from {}", path.display());
-                        if !send_status(&prog_tx, status::indefinite("Game imported")).await {
-                            return;
-                        }
-                        game
-                    }
-                    Err(e) => {
-                        error!("Failed to import game: {}", e);
-                        send_status(
-                            &prog_tx,
-                            status::internal_error(&format!("Failed to import game: {}", e)),
-                        )
-                        .await;
-                        return;
-                    }
-                };
-
-                if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
-                    error!("Failed to update game cache: {}", e);
-                    send_status(
-                        &prog_tx,
-                        status::internal_error(&format!("Failed to update game cache: {}", e)),
-                    )
-                    .await;
-                    return;
-                }
-
-                self.games.lock().await.push(game);
-                send_status(&prog_tx, status::indefinite("Done")).await;
-            });
-        } else {
-            send_status(
-                &prog_tx,
-                status::failed_precondition("Modtorio instance is still starting up"),
-            )
-            .await;
-        }
+            self.games.lock().await.push(game);
+            send_status(&prog_tx, status::done()).await;
+        });
     }
 
     /// Updates a given game instance's cache.
     async fn update_cache(self, game_index: usize, prog_tx: status::AsyncProgressChannel) {
-        if self.assert_instance_status(InstanceStatus::Running).await.is_ok() {
-            task::spawn(async move {
-                let games = self.games.lock().await;
-                let game = games.get(game_index);
-                if let Some(game) = game {
-                    if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
-                        error!("Failed to update game cache: {}", e);
-                        send_status(
-                            &prog_tx,
-                            status::internal_error(&format!("Failed to update game cache: {}", e)),
-                        )
-                        .await;
-                        return;
-                    }
-
-                    send_status(&prog_tx, status::indefinite("Done")).await;
-                } else {
-                    send_status(
-                        &prog_tx,
-                        status::invalid_argument(&format!("No such game index: {}", game_index)),
-                    )
-                    .await;
-                }
-            });
-        } else {
-            send_status(
-                &prog_tx,
-                status::failed_precondition("Modtorio instance is still starting up"),
-            )
-            .await;
+        if let Err(e) = self.assert_instance_status(InstanceStatus::Running).await {
+            if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
+                send_status(&prog_tx, Err(rpc_error.into())).await;
+            } else {
+                send_status(&prog_tx, Err(RpcError::from(e).into())).await;
+            }
+            return;
         }
+
+        task::spawn(async move {
+            let games = self.games.lock().await;
+            let game = games.get(game_index);
+            if let Some(game) = game {
+                if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
+                    error!("Failed to update game cache: {}", e);
+                    send_status(&prog_tx, Err(RpcError::from(e).into())).await;
+                    return;
+                }
+
+                send_status(&prog_tx, status::done()).await;
+            } else {
+                send_status(&prog_tx, Err(RpcError::NoSuchGame(game_index).into())).await;
+            }
+        });
     }
 
     /// Installs a mod to a given game instance.
@@ -343,123 +326,95 @@ impl Modtorio {
         version: Option<HumanVersion>,
         prog_tx: status::AsyncProgressChannel,
     ) {
-        if self.assert_instance_status(InstanceStatus::Running).await.is_ok() {
-            task::spawn(async move {
-                let mut games = self.games.lock().await;
-                let game = games.get_mut(game_index);
-                if let Some(game) = game {
-                    if let Err(e) = game
-                        .mods
-                        .add_from_portal(&mod_name, version, Some(prog_tx.clone()))
-                        .await
-                    {
-                        if let Some(ModPortalError::ClientError(reqwest::StatusCode::NOT_FOUND)) = e.downcast_ref() {
-                            error!("Failed to install mod '{}': not found ({})", mod_name, e);
-                            send_status(
-                                &prog_tx,
-                                status::invalid_argument(&format!(
-                                    "Failed to install mod '{}': not found ({})",
-                                    mod_name, e
-                                )),
-                            )
-                            .await;
-                        } else {
-                            error!("Failed to install mod '{}': {}", mod_name, e);
-                            send_status(
-                                &prog_tx,
-                                status::internal_error(&format!("Failed to install mod: {}", e)),
-                            )
-                            .await;
-                        }
-                        return;
-                    }
-
-                    send_status(&prog_tx, status::indefinite("Done")).await;
-                } else {
-                    send_status(
-                        &prog_tx,
-                        status::invalid_argument(&format!("No such game index: {}", game_index)),
-                    )
-                    .await;
-                }
-            });
-        } else {
-            send_status(
-                &prog_tx,
-                status::failed_precondition("Modtorio instance is still starting up"),
-            )
-            .await;
+        if let Err(e) = self.assert_instance_status(InstanceStatus::Running).await {
+            if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
+                send_status(&prog_tx, Err(rpc_error.into())).await;
+            } else {
+                send_status(&prog_tx, Err(RpcError::from(e).into())).await;
+            }
+            return;
         }
+
+        task::spawn(async move {
+            let mut games = self.games.lock().await;
+            let game = games.get_mut(game_index);
+            if let Some(game) = game {
+                if let Err(e) = game
+                    .mods
+                    .add_from_portal(&mod_name, version, Some(prog_tx.clone()))
+                    .await
+                {
+                    if let Some(ModPortalError::ClientError(reqwest::StatusCode::NOT_FOUND)) = e.downcast_ref() {
+                        error!("Failed to install mod '{}': not found ({})", mod_name, e);
+                        send_status(&prog_tx, Err(RpcError::NoSuchMod(mod_name).into())).await;
+                    } else {
+                        error!("Failed to install mod '{}': {}", mod_name, e);
+                        send_status(&prog_tx, Err(RpcError::from(e).into())).await;
+                    }
+                    return;
+                }
+
+                send_status(&prog_tx, status::done()).await;
+            } else {
+                send_status(&prog_tx, Err(RpcError::NoSuchGame(game_index).into())).await;
+            }
+        });
     }
 
     /// Updates the installed mods of a given game instance.
     async fn update_mods(self, game_index: usize, prog_tx: status::AsyncProgressChannel) {
-        if self.assert_instance_status(InstanceStatus::Running).await.is_ok() {
-            task::spawn(async move {
-                let mut games = self.games.lock().await;
-                let game = games.get_mut(game_index);
-                if let Some(game) = game {
-                    if let Err(e) = game.mods.update(Some(prog_tx.clone())).await {
-                        error!("Failed to update mods: {}", e);
-                        send_status(
-                            &prog_tx,
-                            status::internal_error(&format!("Failed to update mods: {}", e)),
-                        )
-                        .await;
-                        return;
-                    }
-
-                    send_status(&prog_tx, status::indefinite("Done")).await;
-                } else {
-                    send_status(
-                        &prog_tx,
-                        status::invalid_argument(&format!("No such game index: {}", game_index)),
-                    )
-                    .await;
-                }
-            });
-        } else {
-            send_status(
-                &prog_tx,
-                status::failed_precondition("Modtorio instance is still starting up"),
-            )
-            .await;
+        if let Err(e) = self.assert_instance_status(InstanceStatus::Running).await {
+            if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
+                send_status(&prog_tx, Err(rpc_error.into())).await;
+            } else {
+                send_status(&prog_tx, Err(RpcError::from(e).into())).await;
+            }
+            return;
         }
+
+        task::spawn(async move {
+            let mut games = self.games.lock().await;
+            let game = games.get_mut(game_index);
+            if let Some(game) = game {
+                if let Err(e) = game.mods.update(Some(prog_tx.clone())).await {
+                    error!("Failed to update mods: {}", e);
+                    send_status(&prog_tx, Err(RpcError::from(e).into())).await;
+                    return;
+                }
+
+                send_status(&prog_tx, status::done()).await;
+            } else {
+                send_status(&prog_tx, Err(RpcError::NoSuchGame(game_index).into())).await;
+            }
+        });
     }
 
     /// Updates the installed mods of a given game instance.
     async fn ensure_mod_dependencies(self, game_index: usize, prog_tx: status::AsyncProgressChannel) {
-        if self.assert_instance_status(InstanceStatus::Running).await.is_ok() {
-            task::spawn(async move {
-                let mut games = self.games.lock().await;
-                let game = games.get_mut(game_index);
-                if let Some(game) = game {
-                    if let Err(e) = game.mods.ensure_dependencies(Some(prog_tx.clone())).await {
-                        error!("Failed to ensure mod dependencies: {}", e);
-                        send_status(
-                            &prog_tx,
-                            status::internal_error(&format!("Failed to ensure mod dependencies: {}", e)),
-                        )
-                        .await;
-                        return;
-                    }
-
-                    send_status(&prog_tx, status::indefinite("Done")).await;
-                } else {
-                    send_status(
-                        &prog_tx,
-                        status::invalid_argument(&format!("No such game index: {}", game_index)),
-                    )
-                    .await;
-                }
-            });
-        } else {
-            send_status(
-                &prog_tx,
-                status::failed_precondition("Modtorio instance is still starting up"),
-            )
-            .await;
+        if let Err(e) = self.assert_instance_status(InstanceStatus::Running).await {
+            if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
+                send_status(&prog_tx, Err(rpc_error.into())).await;
+            } else {
+                send_status(&prog_tx, Err(RpcError::from(e).into())).await;
+            }
+            return;
         }
+
+        task::spawn(async move {
+            let mut games = self.games.lock().await;
+            let game = games.get_mut(game_index);
+            if let Some(game) = game {
+                if let Err(e) = game.mods.ensure_dependencies(Some(prog_tx.clone())).await {
+                    error!("Failed to ensure mod dependencies: {}", e);
+                    send_status(&prog_tx, Err(RpcError::from(e).into())).await;
+                    return;
+                }
+
+                send_status(&prog_tx, status::done()).await;
+            } else {
+                send_status(&prog_tx, Err(RpcError::NoSuchGame(game_index).into())).await;
+            }
+        });
     }
 
     /// Retrieves a given game instance's server settings.
@@ -608,12 +563,9 @@ impl ModRpc for Modtorio {
             Err(e) => {
                 error!("RPC get server settings failed: {}", e);
                 if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
-                    Err(tonic::Status::from(rpc_error))
+                    Err(rpc_error.into())
                 } else {
-                    Err(tonic::Status::internal(&format!(
-                        "Retrieving server settings failed: {}",
-                        e
-                    )))
+                    Err(RpcError::Internal(e).into())
                 }
             }
         }

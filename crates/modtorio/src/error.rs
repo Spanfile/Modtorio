@@ -171,7 +171,7 @@ pub enum StoreError {
 pub enum ConfigError {
     /// Returned when trying to run a Modtorio instance which has no RPC listen addresses specified
     /// in its config.
-    #[error("No listen addresses specified.")]
+    #[error("No listen addresses specified")]
     NoListenAddresses,
 }
 
@@ -181,6 +181,12 @@ pub enum RpcError {
     /// Returned when trying to interact with a non-existent game index.
     #[error("No such game index: {0}")]
     NoSuchGame(usize),
+    /// Returned when trying to import a Factorio server instance which is already managed by the Modtorio instance.
+    #[error("A game in the root directory '{0}' is already managed by this Modtorio instance")]
+    GameAlreadyExists(PathBuf),
+    /// Returned when trying to install a non-existent mod.
+    #[error("No such mod: {0}")]
+    NoSuchMod(String),
     /// Returned when asserting the Modtorio instance's status fails.
     #[error("Instance status assertion failed: wanted {wanted:?}, actual {actual:?}")]
     InvalidInstanceStatus {
@@ -189,18 +195,24 @@ pub enum RpcError {
         /// The actual instance status.
         actual: rpc::server_status::InstanceStatus,
     },
+    /// Returned when an unknown or internal error occurred.
+    #[error("An internal error occurred: {0}")]
+    Internal(#[from] anyhow::Error),
+}
+
+impl From<RpcError> for tonic::Status {
+    fn from(e: RpcError) -> Self {
+        tonic::Status::from(&e)
+    }
 }
 
 impl From<&RpcError> for tonic::Status {
     fn from(e: &RpcError) -> Self {
         match e {
-            RpcError::NoSuchGame(game_index) => {
-                tonic::Status::invalid_argument(&format!("No such game index: {}", game_index))
-            }
-            RpcError::InvalidInstanceStatus { wanted, actual } => tonic::Status::failed_precondition(&format!(
-                "Instance status assertion failed: wanted: {:?}, actual: {:?}",
-                wanted, actual
-            )),
+            RpcError::Internal(int) => tonic::Status::internal(int.to_string()),
+            RpcError::NoSuchMod(_) | RpcError::NoSuchGame(_) => tonic::Status::invalid_argument(e.to_string()),
+            RpcError::GameAlreadyExists(_) => tonic::Status::already_exists(e.to_string()),
+            RpcError::InvalidInstanceStatus { .. } => tonic::Status::failed_precondition(e.to_string()),
         }
     }
 }

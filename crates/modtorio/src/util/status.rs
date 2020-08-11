@@ -64,17 +64,12 @@ pub fn definite(message: &str, value: u32, max: u32) -> AsyncProgressResult {
     })
 }
 
-/// Returns a new internal error status.
-pub fn internal_error(message: &str) -> AsyncProgressResult {
-    Err(tonic::Status::internal(message))
-}
-
-/// Returns a new failed precondition error status.
-pub fn failed_precondition(message: &str) -> AsyncProgressResult {
-    Err(tonic::Status::failed_precondition(message))
-}
-
-/// Returns a new invalid argument error status.
-pub fn invalid_argument(message: &str) -> AsyncProgressResult {
-    Err(tonic::Status::invalid_argument(message))
+/// Returns a new done status.
+pub fn done() -> AsyncProgressResult {
+    Ok(Progress {
+        message: String::new(),
+        prog_type: ProgressType::Done.into(),
+        value: 0,
+        max: 0,
+    })
 }

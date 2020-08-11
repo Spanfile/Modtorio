@@ -29,6 +29,7 @@ message Progress {
   enum ProgressType {
     INDEFINITE = 0;
     DEFINITE = 1;
+    DONE = 2;
   };
   ProgressType prog_type = 2;
   uint32 value = 3;
