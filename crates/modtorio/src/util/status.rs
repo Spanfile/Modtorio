@@ -69,3 +69,8 @@ pub fn internal_error(message: &str) -> AsyncProgressResult {
 pub fn failed_precondition(message: &str) -> AsyncProgressResult {
     Err(tonic::Status::failed_precondition(message))
 }
+
+/// Returns a new invalid argument error status.
+pub fn invalid_argument(message: &str) -> AsyncProgressResult {
+    Err(tonic::Status::invalid_argument(message))
+}

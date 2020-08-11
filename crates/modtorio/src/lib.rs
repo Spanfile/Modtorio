@@ -239,7 +239,7 @@ impl Modtorio {
             );
             send_status(
                 &prog_tx,
-                status::internal_error(&format!(
+                status::invalid_argument(&format!(
                     "A game from the directory {} already exists.",
                     path.as_ref().display()
                 )),
@@ -261,27 +261,33 @@ impl Modtorio {
             {
                 Ok(game) => {
                     info!("Imported new Factorio server instance from {}", path.display());
-                    if send_status(&prog_tx, status::indefinite("Game imported")).await {
+                    if !send_status(&prog_tx, status::indefinite("Game imported")).await {
                         return;
                     }
                     game
                 }
                 Err(e) => {
                     error!("Failed to import game: {}", e);
-                    if send_status(&prog_tx, status::internal_error(&e.to_string())).await {
-                        return;
-                    }
+                    send_status(
+                        &prog_tx,
+                        status::internal_error(&format!("Failed to import game: {}", e)),
+                    )
+                    .await;
                     return;
                 }
             };
 
             if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
                 error!("Failed to update game cache: {}", e);
-                if send_status(&prog_tx, status::internal_error("Failed to update game cache")).await {
-                    return;
-                }
+                send_status(
+                    &prog_tx,
+                    status::internal_error(&format!("Failed to update game cache: {}", e)),
+                )
+                .await;
+                return;
             }
 
+            self.games.lock().await.push(game);
             send_status(&prog_tx, status::indefinite("Done")).await;
         });
     }
@@ -298,7 +304,11 @@ impl Modtorio {
                 if let Some(game) = game {
                     if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
                         error!("Failed to update game cache: {}", e);
-                        send_status(&prog_tx, status::internal_error("Failed to update game cache")).await;
+                        send_status(
+                            &prog_tx,
+                            status::internal_error(&format!("Failed to update game cache: {}", e)),
+                        )
+                        .await;
                         return;
                     }
 
@@ -306,7 +316,7 @@ impl Modtorio {
                 } else {
                     send_status(
                         &prog_tx,
-                        status::internal_error(&format!("No such game index: {}", server_index)),
+                        status::invalid_argument(&format!("No such game index: {}", server_index)),
                     )
                     .await;
                 }
@@ -330,13 +340,19 @@ impl Modtorio {
                 let mut games = self.games.lock().await;
                 let game = games.get_mut(game_index);
                 if let Some(game) = game {
+                    // TODO: if the error is that the given mod name/version doesn't exist, send an invalid argument
+                    // error
                     if let Err(e) = game
                         .mods
                         .add_from_portal(&mod_name, version, Some(prog_tx.clone()))
                         .await
                     {
                         error!("Failed to install mod: {}", e);
-                        send_status(&prog_tx, status::internal_error("Failed to install mod")).await;
+                        send_status(
+                            &prog_tx,
+                            status::internal_error(&format!("Failed to install mod: {}", e)),
+                        )
+                        .await;
                         return;
                     }
 
@@ -344,7 +360,7 @@ impl Modtorio {
                 } else {
                     send_status(
                         &prog_tx,
-                        status::internal_error(&format!("No such game index: {}", game_index)),
+                        status::invalid_argument(&format!("No such game index: {}", game_index)),
                     )
                     .await;
                 }
@@ -364,7 +380,11 @@ impl Modtorio {
                 if let Some(game) = game {
                     if let Err(e) = game.mods.update(Some(prog_tx.clone())).await {
                         error!("Failed to update mods: {}", e);
-                        send_status(&prog_tx, status::internal_error("Failed to update mods")).await;
+                        send_status(
+                            &prog_tx,
+                            status::internal_error(&format!("Failed to update mods: {}", e)),
+                        )
+                        .await;
                         return;
                     }
 
@@ -372,7 +392,7 @@ impl Modtorio {
                 } else {
                     send_status(
                         &prog_tx,
-                        status::internal_error(&format!("No such game index: {}", game_index)),
+                        status::invalid_argument(&format!("No such game index: {}", game_index)),
                     )
                     .await;
                 }
@@ -392,7 +412,11 @@ impl Modtorio {
                 if let Some(game) = game {
                     if let Err(e) = game.mods.ensure_dependencies(Some(prog_tx.clone())).await {
                         error!("Failed to ensure mod dependencies: {}", e);
-                        send_status(&prog_tx, status::internal_error("Failed to ensure mod dependencies")).await;
+                        send_status(
+                            &prog_tx,
+                            status::internal_error(&format!("Failed to ensure mod dependencies: {}", e)),
+                        )
+                        .await;
                         return;
                     }
 
@@ -400,7 +424,7 @@ impl Modtorio {
                 } else {
                     send_status(
                         &prog_tx,
-                        status::internal_error(&format!("No such game index: {}", game_index)),
+                        status::invalid_argument(&format!("No such game index: {}", game_index)),
                     )
                     .await;
                 }
