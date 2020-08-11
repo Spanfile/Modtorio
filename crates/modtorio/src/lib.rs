@@ -32,7 +32,6 @@ use rpc::{
     Empty, EnsureModDependenciesRequest, ImportRequest, InstallModRequest, Progress, ServerStatus, UpdateCacheRequest,
     UpdateModsRequest,
 };
-use status::AsyncProgressChannelExt;
 use std::{path::Path, sync::Arc};
 use store::Store;
 use tokio::{
@@ -40,7 +39,11 @@ use tokio::{
     task,
 };
 use tonic::{transport::Server, Request, Response, Status};
-use util::{status, HumanVersion};
+use util::{
+    status,
+    status::{AsyncProgressChannel, AsyncProgressChannelExt, AsyncProgressResult},
+    HumanVersion,
+};
 
 /// The prefix used with every environment value related to the program configuration.
 pub const APP_PREFIX: &str = "MODTORIO_";
@@ -172,12 +175,11 @@ impl Modtorio {
                 "RPC instance status assertion failed: wanted {:?}, actual {:?}",
                 wanted, status
             );
-            if let Err(e) = prog_tx
-                .send_status(status::failed_precondition("Modtorio instance is still starting up"))
-                .await
-            {
-                error!("Failed to send status update: {}", e);
-            }
+            send_status(
+                &prog_tx,
+                status::failed_precondition("Modtorio instance is still starting up"),
+            )
+            .await;
             false
         } else {
             true
@@ -235,15 +237,14 @@ impl Modtorio {
                 "RPC tried to import already existing game from path {}",
                 path.as_ref().display()
             );
-            if let Err(e) = prog_tx
-                .send_status(status::internal_error(&format!(
+            send_status(
+                &prog_tx,
+                status::internal_error(&format!(
                     "A game from the directory {} already exists.",
                     path.as_ref().display()
-                )))
-                .await
-            {
-                error!("Failed to send status update: {}", e);
-            }
+                )),
+            )
+            .await;
             return;
         }
 
@@ -260,16 +261,14 @@ impl Modtorio {
             {
                 Ok(game) => {
                     info!("Imported new Factorio server instance from {}", path.display());
-                    if let Err(e) = prog_tx.send_status(status::indefinite("Game imported")).await {
-                        error!("Failed to send status update: {}", e);
+                    if send_status(&prog_tx, status::indefinite("Game imported")).await {
                         return;
                     }
                     game
                 }
                 Err(e) => {
                     error!("Failed to import game: {}", e);
-                    if let Err(nested) = prog_tx.send_status(status::internal_error(&e.to_string())).await {
-                        error!("Failed to send status update: {}", nested);
+                    if send_status(&prog_tx, status::internal_error(&e.to_string())).await {
                         return;
                     }
                     return;
@@ -278,19 +277,12 @@ impl Modtorio {
 
             if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
                 error!("Failed to update game cache: {}", e);
-                if let Err(e) = prog_tx
-                    .send_status(status::internal_error("Failed to update game cache"))
-                    .await
-                {
-                    error!("Failed to send status update: {}", e);
+                if send_status(&prog_tx, status::internal_error("Failed to update game cache")).await {
                     return;
                 }
             }
 
-            if let Err(e) = prog_tx.send_status(status::indefinite("Done")).await {
-                error!("Failed to send status update: {}", e);
-                return;
-            }
+            send_status(&prog_tx, status::indefinite("Done")).await;
         });
     }
 
@@ -306,25 +298,17 @@ impl Modtorio {
                 if let Some(game) = game {
                     if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
                         error!("Failed to update game cache: {}", e);
-                        if let Err(e) = prog_tx
-                            .send_status(status::internal_error("Failed to update game cache"))
-                            .await
-                        {
-                            error!("Failed to send status update: {}", e);
-                            return;
-                        }
-                    }
-
-                    if let Err(e) = prog_tx.send_status(status::indefinite("Done")).await {
-                        error!("Failed to send status update: {}", e);
+                        send_status(&prog_tx, status::internal_error("Failed to update game cache")).await;
                         return;
                     }
-                } else if let Err(e) = prog_tx
-                    .send_status(status::internal_error(&format!("No such game index: {}", server_index)))
-                    .await
-                {
-                    error!("Failed to send status update: {}", e);
-                    return;
+
+                    send_status(&prog_tx, status::indefinite("Done")).await;
+                } else {
+                    send_status(
+                        &prog_tx,
+                        status::internal_error(&format!("No such game index: {}", server_index)),
+                    )
+                    .await;
                 }
             });
         }
@@ -352,25 +336,17 @@ impl Modtorio {
                         .await
                     {
                         error!("Failed to install mod: {}", e);
-                        if let Err(e) = prog_tx
-                            .send_status(status::internal_error("Failed to install mod"))
-                            .await
-                        {
-                            error!("Failed to send status update: {}", e);
-                            return;
-                        }
-                    }
-
-                    if let Err(e) = prog_tx.send_status(status::indefinite("Done")).await {
-                        error!("Failed to send status update: {}", e);
+                        send_status(&prog_tx, status::internal_error("Failed to install mod")).await;
                         return;
                     }
-                } else if let Err(e) = prog_tx
-                    .send_status(status::internal_error(&format!("No such game index: {}", game_index)))
-                    .await
-                {
-                    error!("Failed to send status update: {}", e);
-                    return;
+
+                    send_status(&prog_tx, status::indefinite("Done")).await;
+                } else {
+                    send_status(
+                        &prog_tx,
+                        status::internal_error(&format!("No such game index: {}", game_index)),
+                    )
+                    .await;
                 }
             });
         }
@@ -388,25 +364,17 @@ impl Modtorio {
                 if let Some(game) = game {
                     if let Err(e) = game.mods.update(Some(prog_tx.clone())).await {
                         error!("Failed to update mods: {}", e);
-                        if let Err(e) = prog_tx
-                            .send_status(status::internal_error("Failed to update mods"))
-                            .await
-                        {
-                            error!("Failed to send status update: {}", e);
-                            return;
-                        }
-                    }
-
-                    if let Err(e) = prog_tx.send_status(status::indefinite("Done")).await {
-                        error!("Failed to send status update: {}", e);
+                        send_status(&prog_tx, status::internal_error("Failed to update mods")).await;
                         return;
                     }
-                } else if let Err(e) = prog_tx
-                    .send_status(status::internal_error(&format!("No such game index: {}", game_index)))
-                    .await
-                {
-                    error!("Failed to send status update: {}", e);
-                    return;
+
+                    send_status(&prog_tx, status::indefinite("Done")).await;
+                } else {
+                    send_status(
+                        &prog_tx,
+                        status::internal_error(&format!("No such game index: {}", game_index)),
+                    )
+                    .await;
                 }
             });
         }
@@ -424,25 +392,17 @@ impl Modtorio {
                 if let Some(game) = game {
                     if let Err(e) = game.mods.ensure_dependencies(Some(prog_tx.clone())).await {
                         error!("Failed to ensure mod dependencies: {}", e);
-                        if let Err(e) = prog_tx
-                            .send_status(status::internal_error("Failed to ensure mod dependencies"))
-                            .await
-                        {
-                            error!("Failed to send status update: {}", e);
-                            return;
-                        }
-                    }
-
-                    if let Err(e) = prog_tx.send_status(status::indefinite("Done")).await {
-                        error!("Failed to send status update: {}", e);
+                        send_status(&prog_tx, status::internal_error("Failed to ensure mod dependencies")).await;
                         return;
                     }
-                } else if let Err(e) = prog_tx
-                    .send_status(status::internal_error(&format!("No such game index: {}", game_index)))
-                    .await
-                {
-                    error!("Failed to send status update: {}", e);
-                    return;
+
+                    send_status(&prog_tx, status::indefinite("Done")).await;
+                } else {
+                    send_status(
+                        &prog_tx,
+                        status::internal_error(&format!("No such game index: {}", game_index)),
+                    )
+                    .await;
                 }
             });
         }
@@ -567,4 +527,14 @@ fn log_rpc_request<T: std::fmt::Debug>(request: &Request<T>) {
 /// Logs a given RPC response.
 fn log_rpc_response<T: std::fmt::Debug>(response: &Response<T>) {
     debug!("{:?}", response);
+}
+
+/// Sends a status update to a given channel, returning a boolean on whether the sending succeeded or not.
+async fn send_status(prog_tx: &AsyncProgressChannel, status: AsyncProgressResult) -> bool {
+    if let Err(e) = prog_tx.send_status(status).await {
+        error!("Failed to send status update: {}", e);
+        false
+    } else {
+        true
+    }
 }

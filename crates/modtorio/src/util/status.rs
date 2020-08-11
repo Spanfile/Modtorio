@@ -6,7 +6,7 @@ use rpc::{progress::ProgressType, Progress};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
-type AsyncProgressResult = Result<Progress, tonic::Status>;
+pub type AsyncProgressResult = Result<Progress, tonic::Status>;
 pub type AsyncProgressChannel = Arc<Mutex<mpsc::Sender<AsyncProgressResult>>>;
 
 #[async_trait]
