@@ -7,9 +7,9 @@ version = "0.1.0"
 
 [dependencies]
 heck = "0.3.1"
-proc-macro2 = "1.0.18"
+proc-macro2 = "1.0.19"
 quote = "1.0.7"
-syn = "1.0.34"
+syn = "1.0.38"
 thiserror = "1.0.20"
 
 [lib]
