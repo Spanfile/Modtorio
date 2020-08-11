@@ -32,9 +32,9 @@ pub type GameCacheId = i64;
 /// Built using an [`Importer`](Importer).
 pub struct Factorio {
     /// The server's settings.
-    pub settings: ServerSettings,
+    settings: ServerSettings,
     /// The server's mods.
-    pub mods: Mods,
+    mods: Mods,
     /// The server's root directory.
     root: PathBuf,
     /// The program's cache ID.
@@ -106,6 +106,26 @@ impl Factorio {
     /// Returns the instance's root directory.
     pub fn root(&self) -> &Path {
         &self.root
+    }
+
+    /// Immutably borrows the server's mods.
+    pub fn mods(&self) -> &Mods {
+        &self.mods
+    }
+
+    /// Mutably borrows the server's mods.
+    pub fn mods_mut(&mut self) -> &mut Mods {
+        &mut self.mods
+    }
+
+    /// Immutably borrows the server's settings.
+    pub fn settings(&self) -> &ServerSettings {
+        &self.settings
+    }
+
+    /// Mutably borrows the server's settings.
+    pub fn settings_mut(&mut self) -> &mut ServerSettings {
+        &mut self.settings
     }
 }
 

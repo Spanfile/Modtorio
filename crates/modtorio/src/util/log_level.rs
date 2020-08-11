@@ -27,7 +27,7 @@ pub enum LogLevel {
 
 impl LogLevel {
     /// Returns a logging `LevelFilter` based on this `LogLevel`.
-    pub fn to_level_filter(&self) -> LevelFilter {
+    pub fn to_level_filter(self) -> LevelFilter {
         match self {
             LogLevel::Trace => LevelFilter::Trace,
             LogLevel::Debug => LevelFilter::Debug,

@@ -31,8 +31,8 @@ use mod_portal::ModPortal;
 use rpc::{
     mod_rpc_server::{ModRpc, ModRpcServer},
     server_status::{game::GameStatus, Game, InstanceStatus},
-    Empty, EnsureModDependenciesRequest, ImportRequest, InstallModRequest, Progress, ServerSettings,
-    ServerSettingsRequest, ServerStatus, UpdateCacheRequest, UpdateModsRequest, VersionInformation,
+    Empty, EnsureModDependenciesRequest, GetServerSettingsRequest, ImportRequest, InstallModRequest, Progress,
+    ServerSettings, ServerStatus, SetServerSettingsRequest, UpdateCacheRequest, UpdateModsRequest, VersionInformation,
 };
 use std::{path::Path, sync::Arc};
 use store::Store;
@@ -128,7 +128,7 @@ impl Modtorio {
                     "Cached game ID {} imported from {}. {} mods",
                     cached_game.id,
                     cached_game.path,
-                    game.mods.count()
+                    game.mods().count()
                 );
                 debug!("Cached game: {:?}", cached_game);
                 games.push(game);
@@ -162,6 +162,7 @@ impl Modtorio {
             return Err(error::ConfigError::NoListenAddresses.into());
         }
         if listen_addresses.len() > 1 {
+            // TODO
             unimplemented!("listening to multiple addresses not yet supported");
         }
 
@@ -171,6 +172,7 @@ impl Modtorio {
             NetAddress::Unix(_) => unimplemented!(),
         };
 
+        // TODO: add shutdown signal
         debug!("Starting RPC server. Listening on {}", addr);
         Server::builder()
             .add_service(ModRpcServer::new(self))
@@ -340,7 +342,7 @@ impl Modtorio {
             let game = games.get_mut(game_index);
             if let Some(game) = game {
                 if let Err(e) = game
-                    .mods
+                    .mods_mut()
                     .add_from_portal(&mod_name, version, Some(prog_tx.clone()))
                     .await
                 {
@@ -376,7 +378,7 @@ impl Modtorio {
             let mut games = self.games.lock().await;
             let game = games.get_mut(game_index);
             if let Some(game) = game {
-                if let Err(e) = game.mods.update(Some(prog_tx.clone())).await {
+                if let Err(e) = game.mods_mut().update(Some(prog_tx.clone())).await {
                     error!("Failed to update mods: {}", e);
                     send_status(&prog_tx, Err(RpcError::from(e).into())).await;
                     return;
@@ -404,7 +406,7 @@ impl Modtorio {
             let mut games = self.games.lock().await;
             let game = games.get_mut(game_index);
             if let Some(game) = game {
-                if let Err(e) = game.mods.ensure_dependencies(Some(prog_tx.clone())).await {
+                if let Err(e) = game.mods_mut().ensure_dependencies(Some(prog_tx.clone())).await {
                     error!("Failed to ensure mod dependencies: {}", e);
                     send_status(&prog_tx, Err(RpcError::from(e).into())).await;
                     return;
@@ -425,9 +427,33 @@ impl Modtorio {
         let game = games.get_mut(game_index);
         if let Some(game) = game {
             let mut rpc_server_settings = ServerSettings::default();
-            game.settings.to_rpc_format(&mut rpc_server_settings)?;
+            game.settings().to_rpc_format(&mut rpc_server_settings)?;
 
             Ok(rpc_server_settings)
+        } else {
+            Err(RpcError::NoSuchGame(game_index).into())
+        }
+    }
+
+    /// Sets a given game instance's server settings.
+    async fn set_server_settings(&self, game_index: usize, settings: Option<ServerSettings>) -> anyhow::Result<()> {
+        self.assert_instance_status(InstanceStatus::Running).await?;
+
+        let mut games = self.games.lock().await;
+        let game = games.get_mut(game_index);
+        if let Some(game) = game {
+            let server_settings = if let Some(settings) = settings {
+                info!("Updating server {}'s settings", game_index);
+                factorio::settings::ServerSettings::from_rpc_format(&settings)?
+            } else {
+                info!("Resetting server {}'s settings to default", game_index);
+                factorio::settings::ServerSettings::default()
+            };
+
+            debug!("{:?}", server_settings);
+            *game.settings_mut() = server_settings;
+
+            Ok(())
         } else {
             Err(RpcError::NoSuchGame(game_index).into())
         }
@@ -549,7 +575,7 @@ impl ModRpc for Modtorio {
 
     async fn get_server_settings(
         &self,
-        req: Request<ServerSettingsRequest>,
+        req: Request<GetServerSettingsRequest>,
     ) -> Result<Response<ServerSettings>, Status> {
         log_rpc_request(&req);
 
@@ -570,6 +596,27 @@ impl ModRpc for Modtorio {
             }
         }
     }
+
+    async fn set_server_settings(&self, req: Request<SetServerSettingsRequest>) -> Result<Response<Empty>, Status> {
+        log_rpc_request(&req);
+
+        let msg = req.into_inner();
+        match self.set_server_settings(msg.game_index as usize, msg.settings).await {
+            Ok(_) => {
+                let resp = Response::new(Empty {});
+                log_rpc_response(&resp);
+                Ok(resp)
+            }
+            Err(e) => {
+                error!("RPC set server settings failed: {}", e);
+                if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
+                    Err(rpc_error.into())
+                } else {
+                    Err(RpcError::Internal(e).into())
+                }
+            }
+        }
+    }
 }
 
 /// Creates a new bounded channel and returns the receiver and sender, the sender wrapped in an
@@ -582,11 +629,10 @@ fn channel<T>() -> (Arc<Mutex<mpsc::Sender<T>>>, mpsc::Receiver<T>) {
 /// Logs a given RPC request.
 fn log_rpc_request<T: std::fmt::Debug>(request: &Request<T>) {
     info!(
-        "Got an RPC request from '{}'",
+        "RPC request from '{}'",
         request
             .remote_addr()
-            .map(|addr| addr.to_string())
-            .unwrap_or_else(|| String::from("unknown"))
+            .map_or_else(|| String::from("unknown"), |addr| addr.to_string())
     );
     debug!("{:?}", request);
 }

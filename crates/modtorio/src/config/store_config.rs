@@ -19,11 +19,11 @@ impl StoreConfig {
         let portal_username = store
             .get_option(store::option::Field::PortalUsername)
             .await?
-            .and_then(|v| v.take_value());
+            .and_then(store::option::Value::take_value);
         let portal_token = store
             .get_option(store::option::Field::PortalToken)
             .await?
-            .and_then(|v| v.take_value());
+            .and_then(store::option::Value::take_value);
 
         Ok(Self {
             portal_username,

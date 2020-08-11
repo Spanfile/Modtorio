@@ -13,7 +13,8 @@ service ModRpc {
   rpc EnsureModDependencies(EnsureModDependenciesRequest)
       returns (stream Progress);
 
-  rpc GetServerSettings(ServerSettingsRequest) returns (ServerSettings);
+  rpc GetServerSettings(GetServerSettingsRequest) returns (ServerSettings);
+  rpc SetServerSettings(SetServerSettingsRequest) returns (Empty);
 }
 
 message Empty {}
@@ -73,7 +74,11 @@ message InstallModRequest {
 }
 message UpdateModsRequest { uint32 game_index = 1; }
 message EnsureModDependenciesRequest { uint32 game_index = 1; }
-message ServerSettingsRequest { uint32 game_index = 1; }
+message GetServerSettingsRequest { uint32 game_index = 1; }
+message SetServerSettingsRequest {
+  uint32 game_index = 1;
+  ServerSettings settings = 2;
+}
 
 message ServerSettings {
   string name = 1;
