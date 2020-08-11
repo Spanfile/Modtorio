@@ -22,6 +22,8 @@ use std::{
 };
 use tokio::{fs, sync::Mutex};
 
+// TODO: function to scan and remove duplicate mods
+
 /// A collection of installed mods in a Factorio server.
 pub struct Mods {
     /// The mod's root directory.
