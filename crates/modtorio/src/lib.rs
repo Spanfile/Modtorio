@@ -24,6 +24,7 @@ use ::log::*;
 use chrono::{DateTime, Utc};
 use common::net::NetAddress;
 use config::Config;
+use error::ModPortalError;
 use factorio::Factorio;
 use mod_portal::ModPortal;
 use rpc::{
@@ -225,71 +226,69 @@ impl Modtorio {
     where
         P: AsRef<Path>,
     {
-        if !self
+        if self
             .assert_instance_status(InstanceStatus::Running, prog_tx.clone())
             .await
         {
-            return;
-        }
-
-        if self.game_exists_by_path(&path).await {
-            error!(
-                "RPC tried to import already existing game from path {}",
-                path.as_ref().display()
-            );
-            send_status(
-                &prog_tx,
-                status::invalid_argument(&format!(
-                    "A game from the directory {} already exists.",
+            if self.game_exists_by_path(&path).await {
+                error!(
+                    "RPC tried to import already existing game from path {}",
                     path.as_ref().display()
-                )),
-            )
-            .await;
-            return;
-        }
-
-        let path = path.as_ref().to_path_buf();
-        task::spawn(async move {
-            let game = match factorio::Importer::from_root(&path)
-                .with_status_updates(prog_tx.clone())
-                .import(
-                    Arc::clone(&self.config),
-                    Arc::clone(&self.portal),
-                    Arc::clone(&self.store),
-                )
-                .await
-            {
-                Ok(game) => {
-                    info!("Imported new Factorio server instance from {}", path.display());
-                    if !send_status(&prog_tx, status::indefinite("Game imported")).await {
-                        return;
-                    }
-                    game
-                }
-                Err(e) => {
-                    error!("Failed to import game: {}", e);
-                    send_status(
-                        &prog_tx,
-                        status::internal_error(&format!("Failed to import game: {}", e)),
-                    )
-                    .await;
-                    return;
-                }
-            };
-
-            if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
-                error!("Failed to update game cache: {}", e);
+                );
                 send_status(
                     &prog_tx,
-                    status::internal_error(&format!("Failed to update game cache: {}", e)),
+                    status::invalid_argument(&format!(
+                        "A game from the directory {} already exists.",
+                        path.as_ref().display()
+                    )),
                 )
                 .await;
                 return;
             }
 
-            self.games.lock().await.push(game);
-            send_status(&prog_tx, status::indefinite("Done")).await;
-        });
+            let path = path.as_ref().to_path_buf();
+            task::spawn(async move {
+                let game = match factorio::Importer::from_root(&path)
+                    .with_status_updates(prog_tx.clone())
+                    .import(
+                        Arc::clone(&self.config),
+                        Arc::clone(&self.portal),
+                        Arc::clone(&self.store),
+                    )
+                    .await
+                {
+                    Ok(game) => {
+                        info!("Imported new Factorio server instance from {}", path.display());
+                        if !send_status(&prog_tx, status::indefinite("Game imported")).await {
+                            return;
+                        }
+                        game
+                    }
+                    Err(e) => {
+                        error!("Failed to import game: {}", e);
+                        send_status(
+                            &prog_tx,
+                            status::internal_error(&format!("Failed to import game: {}", e)),
+                        )
+                        .await;
+                        return;
+                    }
+                };
+
+                if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
+                    error!("Failed to update game cache: {}", e);
+                    send_status(
+                        &prog_tx,
+                        status::internal_error(&format!("Failed to update game cache: {}", e)),
+                    )
+                    .await;
+                    return;
+                }
+
+                self.games.lock().await.push(game);
+                send_status(&prog_tx, status::indefinite("Done")).await;
+            });
+        }
     }
 
     /// Updates a given game instance's cache.
@@ -340,19 +339,29 @@ impl Modtorio {
                 let mut games = self.games.lock().await;
                 let game = games.get_mut(game_index);
                 if let Some(game) = game {
-                    // TODO: if the error is that the given mod name/version doesn't exist, send an invalid argument
-                    // error
                     if let Err(e) = game
                         .mods
                         .add_from_portal(&mod_name, version, Some(prog_tx.clone()))
                         .await
                     {
-                        error!("Failed to install mod: {}", e);
-                        send_status(
-                            &prog_tx,
-                            status::internal_error(&format!("Failed to install mod: {}", e)),
-                        )
-                        .await;
+                        if let Some(ModPortalError::ClientError(reqwest::StatusCode::NOT_FOUND)) = e.downcast_ref() {
+                            error!("Failed to install mod '{}': not found ({})", mod_name, e);
+                            send_status(
+                                &prog_tx,
+                                status::invalid_argument(&format!(
+                                    "Failed to install mod '{}': not found ({})",
+                                    mod_name, e
+                                )),
+                            )
+                            .await;
+                        } else {
+                            error!("Failed to install mod '{}': {}", mod_name, e);
+                            send_status(
+                                &prog_tx,
+                                status::internal_error(&format!("Failed to install mod: {}", e)),
+                            )
+                            .await;
+                        }
                         return;
                     }
 

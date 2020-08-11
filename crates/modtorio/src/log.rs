@@ -27,6 +27,8 @@ pub fn setup_logging(config: &Config) -> anyhow::Result<()> {
         .level_for("mio", log::LevelFilter::Info)
         .level_for("module", log::LevelFilter::Info)
         .level_for("h2", log::LevelFilter::Info)
+        .level_for("tokio_util", log::LevelFilter::Info)
+        .level_for("want", log::LevelFilter::Info)
         .chain(std::io::stdout())
         .apply()?;
     Ok(())

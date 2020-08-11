@@ -1,9 +1,8 @@
 //! Provides the [`ModPortal`](ModPortal) object to interact with the Factorio mod portal via HTTP.
 
 use crate::{config::Config, error::ModPortalError, util::ext::ResponseExt};
-use anyhow::ensure;
 use log::*;
-use reqwest::{Client, StatusCode};
+use reqwest::Client;
 use std::path::{Path, PathBuf};
 use tempfile::tempfile;
 use tokio::{fs, io};
@@ -80,9 +79,6 @@ impl ModPortal {
         debug!("Downloading mod from {}", download_url);
 
         let mut response = self.get(download_url).await?;
-        let status = response.status();
-
-        ensure!(status == StatusCode::OK, ModPortalError::ErrorStatus(status));
 
         let mut temp = fs::File::from_std(tempfile()?);
         let written = response.to_writer(&mut temp).await?;
@@ -117,13 +113,24 @@ impl ModPortal {
             .send()
             .await?;
 
-        Ok(response)
+        let status = response.status();
+        if status.is_success() {
+            Ok(response)
+        } else if status.is_client_error() {
+            Err(ModPortalError::ClientError(status).into())
+        } else if status.is_server_error() {
+            Err(ModPortalError::ServerError(status).into())
+        } else {
+            Err(ModPortalError::UnexpectedStatus(status).into())
+        }
     }
 
     /// GETs a given URL and returns the response as a string. Will include the current mod portal
     /// credentials in the request query.
     async fn get_string(&self, url: Url) -> anyhow::Result<String> {
-        Ok(self.get(url).await?.text().await?)
+        let response = self.get(url).await?;
+        trace!("{:?}", response);
+        Ok(response.text().await?)
     }
 
     /// GETs a given URL and returns the response as a object deserialized from JSON. Will include

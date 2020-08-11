@@ -7,9 +7,15 @@ use thiserror::Error;
 /// Represents all types of errors that can occur when interacting with the mod portal.
 #[derive(Debug, Error)]
 pub enum ModPortalError {
-    /// The mod portal responded with an HTTP error status code.
-    #[error("Portal returned status {0}")]
-    ErrorStatus(reqwest::StatusCode),
+    /// The mod portal responded with an HTTP client error status code.
+    #[error("Portal returned client error status {0}")]
+    ClientError(reqwest::StatusCode),
+    /// The mod portal responded with an HTTP server error status code.
+    #[error("Portal returned server error status {0}")]
+    ServerError(reqwest::StatusCode),
+    /// The mod portal responded with an unexpected HTTP error status code.
+    #[error("Portal returned unexpected status {0}")]
+    UnexpectedStatus(reqwest::StatusCode),
 }
 
 /// Represents all types of errors that can occur when transforming paths.
