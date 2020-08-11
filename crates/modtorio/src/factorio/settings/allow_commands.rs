@@ -1,7 +1,8 @@
 //! Provides the [`AllowCommands`](AllowCommands) enum which corresponds to the `allow_commands`
 //! field.
 
-use super::{GameFormatConversion, ServerSettingsGameFormat};
+use super::{GameFormatConversion, RpcFormatConversion, ServerSettingsGameFormat};
+use rpc::server_settings;
 use serde::{Deserialize, Serialize};
 
 /// The string-value for the [`Yes`](./enum.AllowCommands.html#variant.Yes) variant
@@ -45,6 +46,27 @@ impl GameFormatConversion for AllowCommands {
             Self::Yes => String::from(YES_GAME_VALUE),
             Self::No => String::from(NO_GAME_VALUE),
             Self::AdminsOnly => String::from(ADMINS_ONLY_GAME_VALUE),
+        };
+        Ok(())
+    }
+}
+
+impl RpcFormatConversion for AllowCommands {
+    fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
+        // TODO: ugly integer match
+        Ok(match rpc_format.allow_commands {
+            0 => AllowCommands::Yes,
+            1 => AllowCommands::No,
+            2 => AllowCommands::AdminsOnly,
+            i => panic!("invalid allow_commands value in RPC format: {}", i),
+        })
+    }
+
+    fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
+        rpc_format.allow_commands = match self {
+            Self::Yes => server_settings::AllowCommands::Yes.into(),
+            Self::No => server_settings::AllowCommands::No.into(),
+            Self::AdminsOnly => server_settings::AllowCommands::AdminsOnly.into(),
         };
         Ok(())
     }

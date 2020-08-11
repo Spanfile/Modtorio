@@ -4,12 +4,16 @@ package mod_rpc;
 service ModRpc {
   rpc GetVersionInformation(Empty) returns (VersionInformation);
   rpc GetServerStatus(Empty) returns (ServerStatus);
+
   rpc ImportGame(ImportRequest) returns (stream Progress);
   rpc UpdateCache(UpdateCacheRequest) returns (stream Progress);
+
   rpc InstallMod(InstallModRequest) returns (stream Progress);
   rpc UpdateMods(UpdateModsRequest) returns (stream Progress);
   rpc EnsureModDependencies(EnsureModDependenciesRequest)
       returns (stream Progress);
+
+  rpc GetServerSettings(ServerSettingsRequest) returns (ServerSettings);
 }
 
 message Empty {}
@@ -68,3 +72,44 @@ message InstallModRequest {
 }
 message UpdateModsRequest { uint32 game_index = 1; }
 message EnsureModDependenciesRequest { uint32 game_index = 1; }
+message ServerSettingsRequest { uint32 game_index = 1; }
+
+message ServerSettings {
+  string name = 1;
+  string description = 2;
+  repeated string tags = 3;
+  uint64 max_players = 4;
+
+  message Visibility {
+    bool public = 1;
+    bool lan = 2;
+  }
+  Visibility visibility = 5;
+  string username = 6;
+  string password = 7;
+  string token = 8;
+  string game_password = 9;
+  bool require_user_verification = 10;
+  uint64 max_upload_in_kilobytes_per_second = 11;
+  uint64 max_upload_slots = 12;
+  uint64 minimum_latency_in_ticks = 13;
+  bool ignore_player_limit_for_returning_players = 14;
+
+  enum AllowCommands {
+    YES = 0;
+    NO = 1;
+    ADMINS_ONLY = 2;
+  }
+  AllowCommands allow_commands = 15;
+  uint64 autosave_interval = 16;
+  uint64 autosave_slots = 17;
+  uint64 afk_autokick_interval = 18;
+  bool auto_pause = 19;
+  bool only_admins_can_pause_the_game = 20;
+  bool autosave_only_on_server = 21;
+  bool non_blocking_saving = 22;
+  uint64 minimum_segment_size = 23;
+  uint64 minimum_segment_size_peer_count = 24;
+  uint64 maximum_segment_size = 25;
+  uint64 maximum_segment_size_peer_count = 26;
+}

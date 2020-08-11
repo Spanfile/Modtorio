@@ -1,6 +1,6 @@
 //! Provides the object which corresponds to a Factorio server's settings about publicity.
 
-use super::{GameFormatConversion, ServerSettingsGameFormat};
+use super::{rpc_format::RpcFormatConversion, GameFormatConversion, ServerSettingsGameFormat};
 use crate::util::Limit;
 use serde::{Deserialize, Serialize};
 
@@ -127,6 +127,59 @@ impl GameFormatConversion for Publicity {
         game_format.ignore_player_limit_for_returning_players = self.player_limit.ignore_for_returning;
         game_format.afk_autokick_interval = self.player_limit.autokick.into();
         game_format.game_password = self.password.clone();
+
+        Ok(())
+    }
+}
+
+impl RpcFormatConversion for Publicity {
+    fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
+        let default_vis = rpc::server_settings::Visibility::default();
+        let visibility = rpc_format.visibility.as_ref().unwrap_or(&default_vis);
+
+        Ok(Self {
+            public: if visibility.public {
+                Some(PublicVisibility {
+                    username: rpc_format.username.clone(),
+                    credential: if rpc_format.token.is_empty() {
+                        Credential::Password(rpc_format.password.clone())
+                    } else {
+                        Credential::Token(rpc_format.token.clone())
+                    },
+                })
+            } else {
+                None
+            },
+            lan: visibility.lan,
+            require_user_verification: rpc_format.require_user_verification,
+            player_limit: PlayerLimit {
+                max: Limit::from(rpc_format.max_players),
+                ignore_for_returning: rpc_format.ignore_player_limit_for_returning_players,
+                autokick: Limit::from(rpc_format.afk_autokick_interval),
+            },
+            password: rpc_format.game_password.clone(),
+        })
+    }
+
+    fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
+        rpc_format.visibility = Some(rpc::server_settings::Visibility {
+            public: self.public.is_some(),
+            lan: self.lan,
+        });
+
+        if let Some(publicity) = self.public.clone() {
+            rpc_format.username = publicity.username;
+            match publicity.credential {
+                Credential::Password(password) => rpc_format.password = password,
+                Credential::Token(token) => rpc_format.token = token,
+            }
+        }
+
+        rpc_format.require_user_verification = self.require_user_verification;
+        rpc_format.max_players = self.player_limit.max.into();
+        rpc_format.ignore_player_limit_for_returning_players = self.player_limit.ignore_for_returning;
+        rpc_format.afk_autokick_interval = self.player_limit.autokick.into();
+        rpc_format.game_password = self.password.clone();
 
         Ok(())
     }

@@ -24,15 +24,15 @@ use ::log::*;
 use chrono::{DateTime, Utc};
 use common::net::NetAddress;
 use config::Config;
-use error::ModPortalError;
-use factorio::Factorio;
+use error::{ModPortalError, RpcError};
+use factorio::{settings::RpcFormatConversion, Factorio};
 use lazy_static::lazy_static;
 use mod_portal::ModPortal;
 use rpc::{
     mod_rpc_server::{ModRpc, ModRpcServer},
     server_status::{game::GameStatus, Game, InstanceStatus},
-    Empty, EnsureModDependenciesRequest, ImportRequest, InstallModRequest, Progress, ServerStatus, UpdateCacheRequest,
-    UpdateModsRequest, VersionInformation,
+    Empty, EnsureModDependenciesRequest, ImportRequest, InstallModRequest, Progress, ServerSettings,
+    ServerSettingsRequest, ServerStatus, UpdateCacheRequest, UpdateModsRequest, VersionInformation,
 };
 use std::{path::Path, sync::Arc};
 use store::Store;
@@ -180,21 +180,16 @@ impl Modtorio {
     }
 
     /// Asserts that the instance's current status is `wanted`.
-    async fn assert_instance_status(&self, wanted: InstanceStatus, prog_tx: status::AsyncProgressChannel) -> bool {
+    async fn assert_instance_status(&self, wanted: InstanceStatus) -> anyhow::Result<()> {
         let status = self.get_instance_status().await;
         if status == InstanceStatus::Starting {
             error!(
                 "RPC instance status assertion failed: wanted {:?}, actual {:?}",
                 wanted, status
             );
-            send_status(
-                &prog_tx,
-                status::failed_precondition("Modtorio instance is still starting up"),
-            )
-            .await;
-            false
+            Err(RpcError::InvalidInstanceStatus { wanted, actual: status }.into())
         } else {
-            true
+            Ok(())
         }
     }
 
@@ -237,10 +232,7 @@ impl Modtorio {
     where
         P: AsRef<Path>,
     {
-        if self
-            .assert_instance_status(InstanceStatus::Running, prog_tx.clone())
-            .await
-        {
+        if self.assert_instance_status(InstanceStatus::Running).await.is_ok() {
             if self.game_exists_by_path(&path).await {
                 error!(
                     "RPC tried to import already existing game from path {}",
@@ -299,18 +291,21 @@ impl Modtorio {
                 self.games.lock().await.push(game);
                 send_status(&prog_tx, status::indefinite("Done")).await;
             });
+        } else {
+            send_status(
+                &prog_tx,
+                status::failed_precondition("Modtorio instance is still starting up"),
+            )
+            .await;
         }
     }
 
     /// Updates a given game instance's cache.
-    async fn update_cache(self, server_index: usize, prog_tx: status::AsyncProgressChannel) {
-        if self
-            .assert_instance_status(InstanceStatus::Running, prog_tx.clone())
-            .await
-        {
+    async fn update_cache(self, game_index: usize, prog_tx: status::AsyncProgressChannel) {
+        if self.assert_instance_status(InstanceStatus::Running).await.is_ok() {
             task::spawn(async move {
                 let games = self.games.lock().await;
-                let game = games.get(server_index);
+                let game = games.get(game_index);
                 if let Some(game) = game {
                     if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
                         error!("Failed to update game cache: {}", e);
@@ -326,11 +321,17 @@ impl Modtorio {
                 } else {
                     send_status(
                         &prog_tx,
-                        status::invalid_argument(&format!("No such game index: {}", server_index)),
+                        status::invalid_argument(&format!("No such game index: {}", game_index)),
                     )
                     .await;
                 }
             });
+        } else {
+            send_status(
+                &prog_tx,
+                status::failed_precondition("Modtorio instance is still starting up"),
+            )
+            .await;
         }
     }
 
@@ -342,10 +343,7 @@ impl Modtorio {
         version: Option<HumanVersion>,
         prog_tx: status::AsyncProgressChannel,
     ) {
-        if self
-            .assert_instance_status(InstanceStatus::Running, prog_tx.clone())
-            .await
-        {
+        if self.assert_instance_status(InstanceStatus::Running).await.is_ok() {
             task::spawn(async move {
                 let mut games = self.games.lock().await;
                 let game = games.get_mut(game_index);
@@ -385,15 +383,18 @@ impl Modtorio {
                     .await;
                 }
             });
+        } else {
+            send_status(
+                &prog_tx,
+                status::failed_precondition("Modtorio instance is still starting up"),
+            )
+            .await;
         }
     }
 
     /// Updates the installed mods of a given game instance.
     async fn update_mods(self, game_index: usize, prog_tx: status::AsyncProgressChannel) {
-        if self
-            .assert_instance_status(InstanceStatus::Running, prog_tx.clone())
-            .await
-        {
+        if self.assert_instance_status(InstanceStatus::Running).await.is_ok() {
             task::spawn(async move {
                 let mut games = self.games.lock().await;
                 let game = games.get_mut(game_index);
@@ -417,15 +418,18 @@ impl Modtorio {
                     .await;
                 }
             });
+        } else {
+            send_status(
+                &prog_tx,
+                status::failed_precondition("Modtorio instance is still starting up"),
+            )
+            .await;
         }
     }
 
     /// Updates the installed mods of a given game instance.
     async fn ensure_mod_dependencies(self, game_index: usize, prog_tx: status::AsyncProgressChannel) {
-        if self
-            .assert_instance_status(InstanceStatus::Running, prog_tx.clone())
-            .await
-        {
+        if self.assert_instance_status(InstanceStatus::Running).await.is_ok() {
             task::spawn(async move {
                 let mut games = self.games.lock().await;
                 let game = games.get_mut(game_index);
@@ -449,6 +453,28 @@ impl Modtorio {
                     .await;
                 }
             });
+        } else {
+            send_status(
+                &prog_tx,
+                status::failed_precondition("Modtorio instance is still starting up"),
+            )
+            .await;
+        }
+    }
+
+    /// Retrieves a given game instance's server settings.
+    async fn get_server_settings(&self, game_index: usize) -> anyhow::Result<ServerSettings> {
+        self.assert_instance_status(InstanceStatus::Running).await?;
+
+        let mut games = self.games.lock().await;
+        let game = games.get_mut(game_index);
+        if let Some(game) = game {
+            let mut rpc_server_settings = ServerSettings::default();
+            game.settings.to_rpc_format(&mut rpc_server_settings)?;
+
+            Ok(rpc_server_settings)
+        } else {
+            Err(RpcError::NoSuchGame(game_index).into())
         }
     }
 }
@@ -501,7 +527,8 @@ impl ModRpc for Modtorio {
         log_rpc_request(&req);
         let (tx, rx) = channel();
 
-        self.clone().import_game(req.into_inner().path, tx).await;
+        let msg = req.into_inner();
+        self.clone().import_game(msg.path, tx).await;
         let resp = Response::new(rx);
         log_rpc_response(&resp);
 
@@ -563,6 +590,33 @@ impl ModRpc for Modtorio {
         log_rpc_response(&resp);
 
         Ok(resp)
+    }
+
+    async fn get_server_settings(
+        &self,
+        req: Request<ServerSettingsRequest>,
+    ) -> Result<Response<ServerSettings>, Status> {
+        log_rpc_request(&req);
+
+        let msg = req.into_inner();
+        match self.get_server_settings(msg.game_index as usize).await {
+            Ok(s) => {
+                let resp = Response::new(s);
+                log_rpc_response(&resp);
+                Ok(resp)
+            }
+            Err(e) => {
+                error!("RPC get server settings failed: {}", e);
+                if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
+                    Err(tonic::Status::from(rpc_error))
+                } else {
+                    Err(tonic::Status::internal(&format!(
+                        "Retrieving server settings failed: {}",
+                        e
+                    )))
+                }
+            }
+        }
     }
 }
 

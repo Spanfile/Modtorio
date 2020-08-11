@@ -7,6 +7,7 @@ mod game_format;
 mod information;
 mod pause;
 mod publicity;
+mod rpc_format;
 mod traffic;
 
 use allow_commands::AllowCommands;
@@ -15,6 +16,7 @@ use game_format::{GameFormatConversion, ServerSettingsGameFormat};
 use information::Information;
 use pause::Pause;
 use publicity::Publicity;
+pub use rpc_format::RpcFormatConversion;
 use serde::{Deserialize, Serialize};
 use traffic::Traffic;
 
@@ -71,6 +73,29 @@ impl GameFormatConversion for ServerSettings {
         self.pause.to_game_format(game_format)?;
         self.allow_commands.to_game_format(game_format)?;
         self.traffic.to_game_format(game_format)?;
+
+        Ok(())
+    }
+}
+
+impl RpcFormatConversion for ServerSettings {
+    fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
+        Ok(Self {
+            information: Information::from_rpc_format(rpc_format)?,
+            publicity: Publicity::from_rpc_format(rpc_format)?,
+            autosave: Autosave::from_rpc_format(rpc_format)?,
+            pause: Pause::from_rpc_format(rpc_format)?,
+            allow_commands: AllowCommands::from_rpc_format(rpc_format)?,
+            traffic: Traffic::from_rpc_format(rpc_format)?,
+        })
+    }
+    fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
+        self.information.to_rpc_format(rpc_format)?;
+        self.publicity.to_rpc_format(rpc_format)?;
+        self.autosave.to_rpc_format(rpc_format)?;
+        self.pause.to_rpc_format(rpc_format)?;
+        self.allow_commands.to_rpc_format(rpc_format)?;
+        self.traffic.to_rpc_format(rpc_format)?;
 
         Ok(())
     }

@@ -1,7 +1,7 @@
 //! Provides the [Information](Information) struct which contains a server's settings related to its
 //! public display.
 
-use super::{GameFormatConversion, ServerSettingsGameFormat};
+use super::{GameFormatConversion, RpcFormatConversion, ServerSettingsGameFormat};
 use serde::{Deserialize, Serialize};
 
 /// Contains a server's settings related to its public display.
@@ -38,6 +38,24 @@ impl GameFormatConversion for Information {
         game_format.name = self.name.clone();
         game_format.description = self.description.clone();
         game_format.tags = self.tags.clone();
+
+        Ok(())
+    }
+}
+
+impl RpcFormatConversion for Information {
+    fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
+        Ok(Self {
+            name: rpc_format.name.clone(),
+            description: rpc_format.description.clone(),
+            tags: rpc_format.tags.clone(),
+        })
+    }
+
+    fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
+        rpc_format.name = self.name.clone();
+        rpc_format.description = self.description.clone();
+        rpc_format.tags = self.tags.clone();
 
         Ok(())
     }

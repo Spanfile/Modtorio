@@ -1,8 +1,8 @@
 //! The whole point. Provides the [`Factorio`](Factorio) struct used to interact with a single
 //! instance of a Factorio server.
 
-mod mods;
-mod settings;
+pub mod mods;
+pub mod settings;
 
 use crate::{
     store::{cache::models, Store},

@@ -1,6 +1,6 @@
 //! Provides the [Autosave](Autosave) struct which contains a server's autosave settings.
 
-use super::{GameFormatConversion, ServerSettingsGameFormat};
+use super::{rpc_format::RpcFormatConversion, GameFormatConversion, ServerSettingsGameFormat};
 use serde::{Deserialize, Serialize};
 
 /// Contains a server's autosave settings.
@@ -42,6 +42,26 @@ impl GameFormatConversion for Autosave {
         game_format.autosave_slots = self.slots;
         game_format.autosave_only_on_server = self.only_on_server;
         game_format.non_blocking_saving = self.non_blocking;
+
+        Ok(())
+    }
+}
+
+impl RpcFormatConversion for Autosave {
+    fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
+        Ok(Self {
+            interval: rpc_format.autosave_interval,
+            slots: rpc_format.autosave_slots,
+            only_on_server: rpc_format.autosave_only_on_server,
+            non_blocking: rpc_format.non_blocking_saving,
+        })
+    }
+
+    fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
+        rpc_format.autosave_interval = self.interval;
+        rpc_format.autosave_slots = self.slots;
+        rpc_format.autosave_only_on_server = self.only_on_server;
+        rpc_format.non_blocking_saving = self.non_blocking;
 
         Ok(())
     }

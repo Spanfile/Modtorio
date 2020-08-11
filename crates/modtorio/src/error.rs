@@ -174,3 +174,33 @@ pub enum ConfigError {
     #[error("No listen addresses specified.")]
     NoListenAddresses,
 }
+
+/// Represents all types of errors that can occur in RPC calls.
+#[derive(Debug, Error)]
+pub enum RpcError {
+    /// Returned when trying to interact with a non-existent game index.
+    #[error("No such game index: {0}")]
+    NoSuchGame(usize),
+    /// Returned when asserting the Modtorio instance's status fails.
+    #[error("Instance status assertion failed: wanted {wanted:?}, actual {actual:?}")]
+    InvalidInstanceStatus {
+        /// The wanted instance status.
+        wanted: rpc::server_status::InstanceStatus,
+        /// The actual instance status.
+        actual: rpc::server_status::InstanceStatus,
+    },
+}
+
+impl From<&RpcError> for tonic::Status {
+    fn from(e: &RpcError) -> Self {
+        match e {
+            RpcError::NoSuchGame(game_index) => {
+                tonic::Status::invalid_argument(&format!("No such game index: {}", game_index))
+            }
+            RpcError::InvalidInstanceStatus { wanted, actual } => tonic::Status::failed_precondition(&format!(
+                "Instance status assertion failed: wanted: {:?}, actual: {:?}",
+                wanted, actual
+            )),
+        }
+    }
+}

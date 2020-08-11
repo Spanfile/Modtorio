@@ -1,7 +1,7 @@
 //! Provides the [Traffic](Traffic) object which corresponds to a server's settings about its
 //! network traffic.
 
-use super::{GameFormatConversion, ServerSettingsGameFormat};
+use super::{rpc_format::RpcFormatConversion, GameFormatConversion, ServerSettingsGameFormat};
 use crate::util::{Limit, Range};
 use serde::{Deserialize, Serialize};
 
@@ -85,6 +85,40 @@ impl GameFormatConversion for Traffic {
         game_format.maximum_segment_size = self.segment_size.size.max;
         game_format.minimum_segment_size_peer_count = self.segment_size.peer_count.min;
         game_format.maximum_segment_size_peer_count = self.segment_size.peer_count.max;
+
+        Ok(())
+    }
+}
+
+impl RpcFormatConversion for Traffic {
+    fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
+        Ok(Self {
+            upload: Upload {
+                max: Limit::from(rpc_format.max_upload_in_kilobytes_per_second),
+                slots: Limit::from(rpc_format.max_upload_slots),
+            },
+            minimum_latency: rpc_format.minimum_latency_in_ticks,
+            segment_size: SegmentSize {
+                size: Range {
+                    min: rpc_format.minimum_segment_size,
+                    max: rpc_format.maximum_segment_size,
+                },
+                peer_count: Range {
+                    min: rpc_format.minimum_segment_size_peer_count,
+                    max: rpc_format.maximum_segment_size_peer_count,
+                },
+            },
+        })
+    }
+
+    fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
+        rpc_format.max_upload_in_kilobytes_per_second = self.upload.max.into();
+        rpc_format.max_upload_slots = self.upload.slots.into();
+        rpc_format.minimum_latency_in_ticks = self.minimum_latency;
+        rpc_format.minimum_segment_size = self.segment_size.size.min;
+        rpc_format.maximum_segment_size = self.segment_size.size.max;
+        rpc_format.minimum_segment_size_peer_count = self.segment_size.peer_count.min;
+        rpc_format.maximum_segment_size_peer_count = self.segment_size.peer_count.max;
 
         Ok(())
     }
