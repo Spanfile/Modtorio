@@ -12,6 +12,11 @@ service ModRpc {
 }
 
 message Empty {}
+message Version {
+  uint64 major = 1;
+  uint64 minor = 2;
+  uint64 patch = 3;
+}
 
 message Progress {
   string message = 1;
@@ -53,7 +58,7 @@ message UpdateCacheRequest { uint32 game_index = 1; }
 message InstallModRequest {
   uint32 game_index = 1;
   string mod_name = 2;
-  string mod_version = 3;
+  Version mod_version = 3;
 }
 message UpdateModsRequest { uint32 game_index = 1; }
 message EnsureModDependenciesRequest { uint32 game_index = 1; }

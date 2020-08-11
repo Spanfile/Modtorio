@@ -14,6 +14,7 @@ use crate::{
 pub use mods_builder::ModsBuilder;
 
 use log::*;
+use status::AsyncProgressChannelExt;
 use std::{
     collections::{hash_map::Entry, HashMap},
     path::PathBuf,
@@ -58,15 +59,13 @@ impl Mods {
             let mod_name = fact_mod.name().await;
             let mod_display = fact_mod.display().await;
 
-            status::send_status(
-                prog_tx.clone(),
-                status::definite(
+            prog_tx
+                .send_status(status::definite(
                     &format!("Updating mod cache for {}...", mod_display),
                     index as u32 + 1,
                     max_mods,
-                ),
-            )
-            .await?;
+                ))
+                .await?;
 
             match fact_mod.update_cache().await {
                 Ok(()) => debug!("Updated Factorio mod cache for {}", mod_name),
@@ -121,7 +120,9 @@ impl Mods {
             info!("Adding latest '{}'", name);
         }
 
-        status::send_status(prog_tx.clone(), status::indefinite(&format!("Installing {}...", name))).await?;
+        prog_tx
+            .send_status(status::indefinite(&format!("Installing {}...", name)))
+            .await?;
 
         let new_mod = self.add_or_update_in_place(name, version).await?;
         info!("Added {}", new_mod.display().await);
@@ -140,15 +141,13 @@ impl Mods {
         for (index, m) in self.mods.values_mut().enumerate() {
             let mod_display = m.display().await;
             info!("Checking for updates to {}...", mod_display);
-            status::send_status(
-                prog_tx.clone(),
-                status::definite(
+            prog_tx
+                .send_status(status::definite(
                     &format!("Checking for updates to {}...", mod_display),
                     index as u32 + 1,
                     max_mods,
-                ),
-            )
-            .await?;
+                ))
+                .await?;
 
             m.ensure_portal_info().await?;
             let release = m.latest_release().await?;
@@ -176,11 +175,13 @@ impl Mods {
         let max_updates = updates.len() as u32;
         for (index, update) in updates.iter().enumerate() {
             info!("Updating {}...", update);
-            status::send_status(
-                prog_tx.clone(),
-                status::definite(&format!("Updating {}...", update), index as u32 + 1, max_updates),
-            )
-            .await?;
+            prog_tx
+                .send_status(status::definite(
+                    &format!("Updating {}...", update),
+                    index as u32 + 1,
+                    max_updates,
+                ))
+                .await?;
 
             self.add_or_update_in_place(update, None).await?;
         }
@@ -205,15 +206,13 @@ impl Mods {
         for (index, fact_mod) in mods.into_iter().enumerate() {
             let title = fact_mod.title().await;
             info!("Ensuring '{}'s dependencies are met...", title);
-            status::send_status(
-                prog_tx.clone(),
-                status::definite(
+            prog_tx
+                .send_status(status::definite(
                     &format!("Ensuring '{}'s dependencies are met...", title),
                     index as u32 + 1,
                     max_mods,
-                ),
-            )
-            .await?;
+                ))
+                .await?;
 
             missing.extend(self.ensure_single_dependencies(fact_mod).await?.into_iter());
         }
@@ -225,15 +224,13 @@ impl Mods {
 
             let max_missing = missing.len() as u32;
             for (index, miss) in missing.iter().enumerate() {
-                status::send_status(
-                    prog_tx.clone(),
-                    status::definite(
+                prog_tx
+                    .send_status(status::definite(
                         &format!("Installing missing mod '{}'...", miss),
                         index as u32 + 1,
                         max_missing,
-                    ),
-                )
-                .await?;
+                    ))
+                    .await?;
 
                 self.add_from_portal(&miss, None, None).await?;
             }

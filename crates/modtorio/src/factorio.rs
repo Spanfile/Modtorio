@@ -6,7 +6,7 @@ mod settings;
 
 use crate::{
     store::{cache::models, Store},
-    util::{ext::PathExt, status},
+    util::{ext::PathExt, status, status::AsyncProgressChannelExt},
     Config, ModPortal,
 };
 use log::*;
@@ -73,7 +73,9 @@ impl Factorio {
                 .await?;
 
             info!("Updating existing game ID {} cache", c);
-            status::send_status(prog_tx.clone(), status::indefinite("Updating existing cached game...")).await?;
+            prog_tx
+                .send_status(status::indefinite("Updating existing cached game..."))
+                .await?;
             c
         } else {
             let new_id = self
@@ -88,7 +90,9 @@ impl Factorio {
             *cache_id = Some(new_id);
 
             info!("Creating new game cache with ID {}", new_id);
-            status::send_status(prog_tx.clone(), status::indefinite("Creating new cached game...")).await?;
+            prog_tx
+                .send_status(status::indefinite("Creating new cached game..."))
+                .await?;
             new_id
         };
 
@@ -173,10 +177,12 @@ impl Importer {
             mods_builder = mods_builder.with_status_updates(Arc::clone(prog_tx));
         }
 
-        status::send_status(self.prog_tx.clone(), status::indefinite("Reading server settings...")).await?;
+        self.prog_tx
+            .send_status(status::indefinite("Reading server settings..."))
+            .await?;
         let settings = ServerSettings::from_game_json(&fs::read_to_string(settings_path)?)?;
 
-        status::send_status(self.prog_tx.clone(), status::indefinite("Loading mods...")).await?;
+        self.prog_tx.send_status(status::indefinite("Loading mods...")).await?;
         let mods = mods_builder.build(config, portal, Arc::clone(&store)).await?;
 
         Ok(Factorio {

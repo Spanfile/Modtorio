@@ -13,6 +13,7 @@ use crate::{
     util::{ext::PathExt, status},
 };
 use log::*;
+use status::AsyncProgressChannelExt;
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     path::PathBuf,
@@ -80,15 +81,13 @@ impl<'a> ModsBuilder {
         let mut mod_zips = HashSet::new();
 
         for (index, game_mod) in mods.into_iter().enumerate() {
-            status::send_status(
-                self.prog_tx.clone(),
-                status::definite(
+            self.prog_tx
+                .send_status(status::definite(
                     &format!("Loading mod from cache: {}", game_mod.factorio_mod),
                     index as u32 + 1,
                     max_mods,
-                ),
-            )
-            .await?;
+                ))
+                .await?;
 
             let created_mod = match Mod::from_cache(
                 &game_mod,
@@ -119,11 +118,9 @@ impl<'a> ModsBuilder {
             created_mods.push(created_mod);
         }
 
-        status::send_status(
-            self.prog_tx.clone(),
-            status::indefinite("Checking for non-cached mod zip archives..."),
-        )
-        .await?;
+        self.prog_tx
+            .send_status(status::indefinite("Checking for non-cached mod zip archives..."))
+            .await?;
         debug!(
             "{} mods loaded from cache, checking for non-cached zips...",
             created_mods.len()
@@ -135,26 +132,26 @@ impl<'a> ModsBuilder {
         for (index, entry) in zips.into_iter().enumerate() {
             let entry_file_name = entry.get_file_name()?;
             trace!("Checking if {} is loaded...", entry_file_name);
-            status::send_status(
-                self.prog_tx.clone(),
-                status::definite(
+            self.prog_tx
+                .send_status(status::definite(
                     &format!("Checking if {} is loaded...", entry.display()),
                     index as u32 + 1,
                     max_zips,
-                ),
-            )
-            .await?;
+                ))
+                .await?;
 
             if !mod_zips.contains(&entry_file_name) {
                 warn!(
                     "Found non-cached mod from filesystem: {}, loading from zip...",
                     entry.display()
                 );
-                status::send_status(
-                    self.prog_tx.clone(),
-                    status::definite(&format!("Loading {}...", entry.display()), index as u32 + 1, max_zips),
-                )
-                .await?;
+                self.prog_tx
+                    .send_status(status::definite(
+                        &format!("Loading {}...", entry.display()),
+                        index as u32 + 1,
+                        max_zips,
+                    ))
+                    .await?;
 
                 let created_mod =
                     match Mod::from_zip(&entry, Arc::clone(&config), Arc::clone(&portal), Arc::clone(&store)).await {
@@ -191,15 +188,13 @@ impl<'a> ModsBuilder {
         let entries = util::glob(&zips)?;
         let max_entries = entries.len() as u32;
         for (index, entry) in entries.iter().enumerate() {
-            status::send_status(
-                self.prog_tx.clone(),
-                status::definite(
+            self.prog_tx
+                .send_status(status::definite(
                     &format!("Loading mod from zip archive: {}", entry.display()),
                     index as u32 + 1,
                     max_entries,
-                ),
-            )
-            .await?;
+                ))
+                .await?;
 
             let created_mod =
                 match Mod::from_zip(&entry, Arc::clone(&config), Arc::clone(&portal), Arc::clone(&store)).await {

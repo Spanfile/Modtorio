@@ -32,6 +32,7 @@ use rpc::{
     Empty, EnsureModDependenciesRequest, ImportRequest, InstallModRequest, Progress, ServerStatus, UpdateCacheRequest,
     UpdateModsRequest,
 };
+use status::AsyncProgressChannelExt;
 use std::{path::Path, sync::Arc};
 use store::Store;
 use tokio::{
@@ -171,11 +172,9 @@ impl Modtorio {
                 "RPC instance status assertion failed: wanted {:?}, actual {:?}",
                 wanted, status
             );
-            if let Err(e) = status::send_status(
-                Some(prog_tx.clone()),
-                status::failed_precondition("Modtorio instance is still starting up"),
-            )
-            .await
+            if let Err(e) = prog_tx
+                .send_status(status::failed_precondition("Modtorio instance is still starting up"))
+                .await
             {
                 error!("Failed to send status update: {}", e);
             }
@@ -183,6 +182,18 @@ impl Modtorio {
         } else {
             true
         }
+    }
+
+    /// Returns a boolean on whether this instance manages a game identified by its root path.
+    async fn game_exists_by_path<P>(&self, path: P) -> bool
+    where
+        P: AsRef<Path>,
+    {
+        self.games
+            .lock()
+            .await
+            .iter()
+            .any(|game| util::file::are_same(game.root(), path.as_ref()).expect("failed to compare file paths"))
     }
 
     /// Returns this instance's uptime.
@@ -219,25 +230,17 @@ impl Modtorio {
             return;
         }
 
-        if self
-            .games
-            .lock()
-            .await
-            .iter()
-            .any(|game| util::file::are_same(game.root(), path.as_ref()).expect("failed to compare file paths"))
-        {
+        if self.game_exists_by_path(&path).await {
             error!(
                 "RPC tried to import already existing game from path {}",
                 path.as_ref().display()
             );
-            if let Err(e) = status::send_status(
-                Some(prog_tx.clone()),
-                status::internal_error(&format!(
+            if let Err(e) = prog_tx
+                .send_status(status::internal_error(&format!(
                     "A game from the directory {} already exists.",
                     path.as_ref().display()
-                )),
-            )
-            .await
+                )))
+                .await
             {
                 error!("Failed to send status update: {}", e);
             }
@@ -257,9 +260,7 @@ impl Modtorio {
             {
                 Ok(game) => {
                     info!("Imported new Factorio server instance from {}", path.display());
-                    if let Err(e) =
-                        status::send_status(Some(prog_tx.clone()), status::indefinite("Game imported")).await
-                    {
+                    if let Err(e) = prog_tx.send_status(status::indefinite("Game imported")).await {
                         error!("Failed to send status update: {}", e);
                         return;
                     }
@@ -267,9 +268,7 @@ impl Modtorio {
                 }
                 Err(e) => {
                     error!("Failed to import game: {}", e);
-                    if let Err(nested) =
-                        status::send_status(Some(prog_tx.clone()), status::internal_error(&e.to_string())).await
-                    {
+                    if let Err(nested) = prog_tx.send_status(status::internal_error(&e.to_string())).await {
                         error!("Failed to send status update: {}", nested);
                         return;
                     }
@@ -279,18 +278,16 @@ impl Modtorio {
 
             if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
                 error!("Failed to update game cache: {}", e);
-                if let Err(e) = status::send_status(
-                    Some(prog_tx.clone()),
-                    status::internal_error("Failed to update game cache"),
-                )
-                .await
+                if let Err(e) = prog_tx
+                    .send_status(status::internal_error("Failed to update game cache"))
+                    .await
                 {
                     error!("Failed to send status update: {}", e);
                     return;
                 }
             }
 
-            if let Err(e) = status::send_status(Some(prog_tx.clone()), status::indefinite("Done")).await {
+            if let Err(e) = prog_tx.send_status(status::indefinite("Done")).await {
                 error!("Failed to send status update: {}", e);
                 return;
             }
@@ -299,44 +296,38 @@ impl Modtorio {
 
     /// Updates a given game instance's cache.
     async fn update_cache(self, server_index: usize, prog_tx: status::AsyncProgressChannel) {
-        if !self
+        if self
             .assert_instance_status(InstanceStatus::Running, prog_tx.clone())
             .await
         {
-            return;
-        }
+            task::spawn(async move {
+                let games = self.games.lock().await;
+                let game = games.get(server_index);
+                if let Some(game) = game {
+                    if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
+                        error!("Failed to update game cache: {}", e);
+                        if let Err(e) = prog_tx
+                            .send_status(status::internal_error("Failed to update game cache"))
+                            .await
+                        {
+                            error!("Failed to send status update: {}", e);
+                            return;
+                        }
+                    }
 
-        task::spawn(async move {
-            let games = self.games.lock().await;
-            let game = games.get(server_index);
-            if let Some(game) = game {
-                if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
-                    error!("Failed to update game cache: {}", e);
-                    if let Err(e) = status::send_status(
-                        Some(prog_tx.clone()),
-                        status::internal_error("Failed to update game cache"),
-                    )
-                    .await
-                    {
+                    if let Err(e) = prog_tx.send_status(status::indefinite("Done")).await {
                         error!("Failed to send status update: {}", e);
                         return;
                     }
-                }
-
-                if let Err(e) = status::send_status(Some(prog_tx.clone()), status::indefinite("Done")).await {
+                } else if let Err(e) = prog_tx
+                    .send_status(status::internal_error(&format!("No such game index: {}", server_index)))
+                    .await
+                {
                     error!("Failed to send status update: {}", e);
                     return;
                 }
-            } else if let Err(e) = status::send_status(
-                Some(prog_tx.clone()),
-                status::internal_error(&format!("No such game index: {}", server_index)),
-            )
-            .await
-            {
-                error!("Failed to send status update: {}", e);
-                return;
-            }
-        });
+            });
+        }
     }
 
     /// Installs a mod to a given game instance.
@@ -347,128 +338,114 @@ impl Modtorio {
         version: Option<HumanVersion>,
         prog_tx: status::AsyncProgressChannel,
     ) {
-        if !self
+        if self
             .assert_instance_status(InstanceStatus::Running, prog_tx.clone())
             .await
         {
-            return;
-        }
-
-        task::spawn(async move {
-            let mut games = self.games.lock().await;
-            let game = games.get_mut(game_index);
-            if let Some(game) = game {
-                if let Err(e) = game
-                    .mods
-                    .add_from_portal(&mod_name, version, Some(prog_tx.clone()))
-                    .await
-                {
-                    error!("Failed to install mod: {}", e);
-                    if let Err(e) =
-                        status::send_status(Some(prog_tx.clone()), status::internal_error("Failed to install mod"))
-                            .await
+            task::spawn(async move {
+                let mut games = self.games.lock().await;
+                let game = games.get_mut(game_index);
+                if let Some(game) = game {
+                    if let Err(e) = game
+                        .mods
+                        .add_from_portal(&mod_name, version, Some(prog_tx.clone()))
+                        .await
                     {
+                        error!("Failed to install mod: {}", e);
+                        if let Err(e) = prog_tx
+                            .send_status(status::internal_error("Failed to install mod"))
+                            .await
+                        {
+                            error!("Failed to send status update: {}", e);
+                            return;
+                        }
+                    }
+
+                    if let Err(e) = prog_tx.send_status(status::indefinite("Done")).await {
                         error!("Failed to send status update: {}", e);
                         return;
                     }
-                }
-
-                if let Err(e) = status::send_status(Some(prog_tx.clone()), status::indefinite("Done")).await {
+                } else if let Err(e) = prog_tx
+                    .send_status(status::internal_error(&format!("No such game index: {}", game_index)))
+                    .await
+                {
                     error!("Failed to send status update: {}", e);
                     return;
                 }
-            } else if let Err(e) = status::send_status(
-                Some(prog_tx.clone()),
-                status::internal_error(&format!("No such game index: {}", game_index)),
-            )
-            .await
-            {
-                error!("Failed to send status update: {}", e);
-                return;
-            }
-        });
+            });
+        }
     }
 
     /// Updates the installed mods of a given game instance.
     async fn update_mods(self, game_index: usize, prog_tx: status::AsyncProgressChannel) {
-        if !self
+        if self
             .assert_instance_status(InstanceStatus::Running, prog_tx.clone())
             .await
         {
-            return;
-        }
-
-        task::spawn(async move {
-            let mut games = self.games.lock().await;
-            let game = games.get_mut(game_index);
-            if let Some(game) = game {
-                if let Err(e) = game.mods.update(Some(prog_tx.clone())).await {
-                    error!("Failed to update mods: {}", e);
-                    if let Err(e) =
-                        status::send_status(Some(prog_tx.clone()), status::internal_error("Failed to update mods"))
+            task::spawn(async move {
+                let mut games = self.games.lock().await;
+                let game = games.get_mut(game_index);
+                if let Some(game) = game {
+                    if let Err(e) = game.mods.update(Some(prog_tx.clone())).await {
+                        error!("Failed to update mods: {}", e);
+                        if let Err(e) = prog_tx
+                            .send_status(status::internal_error("Failed to update mods"))
                             .await
-                    {
+                        {
+                            error!("Failed to send status update: {}", e);
+                            return;
+                        }
+                    }
+
+                    if let Err(e) = prog_tx.send_status(status::indefinite("Done")).await {
                         error!("Failed to send status update: {}", e);
                         return;
                     }
-                }
-
-                if let Err(e) = status::send_status(Some(prog_tx.clone()), status::indefinite("Done")).await {
+                } else if let Err(e) = prog_tx
+                    .send_status(status::internal_error(&format!("No such game index: {}", game_index)))
+                    .await
+                {
                     error!("Failed to send status update: {}", e);
                     return;
                 }
-            } else if let Err(e) = status::send_status(
-                Some(prog_tx.clone()),
-                status::internal_error(&format!("No such game index: {}", game_index)),
-            )
-            .await
-            {
-                error!("Failed to send status update: {}", e);
-                return;
-            }
-        });
+            });
+        }
     }
 
     /// Updates the installed mods of a given game instance.
     async fn ensure_mod_dependencies(self, game_index: usize, prog_tx: status::AsyncProgressChannel) {
-        if !self
+        if self
             .assert_instance_status(InstanceStatus::Running, prog_tx.clone())
             .await
         {
-            return;
-        }
+            task::spawn(async move {
+                let mut games = self.games.lock().await;
+                let game = games.get_mut(game_index);
+                if let Some(game) = game {
+                    if let Err(e) = game.mods.ensure_dependencies(Some(prog_tx.clone())).await {
+                        error!("Failed to ensure mod dependencies: {}", e);
+                        if let Err(e) = prog_tx
+                            .send_status(status::internal_error("Failed to ensure mod dependencies"))
+                            .await
+                        {
+                            error!("Failed to send status update: {}", e);
+                            return;
+                        }
+                    }
 
-        task::spawn(async move {
-            let mut games = self.games.lock().await;
-            let game = games.get_mut(game_index);
-            if let Some(game) = game {
-                if let Err(e) = game.mods.ensure_dependencies(Some(prog_tx.clone())).await {
-                    error!("Failed to ensure mod dependencies: {}", e);
-                    if let Err(e) = status::send_status(
-                        Some(prog_tx.clone()),
-                        status::internal_error("Failed to ensure mod dependencies"),
-                    )
-                    .await
-                    {
+                    if let Err(e) = prog_tx.send_status(status::indefinite("Done")).await {
                         error!("Failed to send status update: {}", e);
                         return;
                     }
-                }
-
-                if let Err(e) = status::send_status(Some(prog_tx.clone()), status::indefinite("Done")).await {
+                } else if let Err(e) = prog_tx
+                    .send_status(status::internal_error(&format!("No such game index: {}", game_index)))
+                    .await
+                {
                     error!("Failed to send status update: {}", e);
                     return;
                 }
-            } else if let Err(e) = status::send_status(
-                Some(prog_tx.clone()),
-                status::internal_error(&format!("No such game index: {}", game_index)),
-            )
-            .await
-            {
-                error!("Failed to send status update: {}", e);
-                return;
-            }
-        });
+            });
+        }
     }
 }
 
@@ -497,6 +474,8 @@ impl ModRpc for Modtorio {
         Ok(response)
     }
 
+    // I tried to macro these repetitive functions into DRYness but the tonic::async_trait macro messes with them in
+    // some funky way that a macro_rules! didn't work
     async fn import_game(&self, req: Request<ImportRequest>) -> Result<Response<Self::ImportGameStream>, Status> {
         log_rpc_request(&req);
         let (tx, rx) = channel();
@@ -528,19 +507,7 @@ impl ModRpc for Modtorio {
         let (tx, rx) = channel();
 
         let msg = req.into_inner();
-        let version = if msg.mod_version.is_empty() {
-            None
-        } else {
-            match msg.mod_version.parse() {
-                Ok(v) => Some(v),
-                Err(e) => {
-                    error!("Failed to parse given mod version: {}", e);
-                    return Err(tonic::Status::invalid_argument(
-                        "Failed to parse mod_version as a version.",
-                    ));
-                }
-            }
-        };
+        let version = msg.mod_version.map(HumanVersion::from);
         self.clone()
             .install_mod(msg.game_index as usize, msg.mod_name, version, tx)
             .await;

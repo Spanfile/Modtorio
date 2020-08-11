@@ -1,5 +1,6 @@
 //! Provides types and functions used to report status updates into a `tokio::mpsc` channel from an async task.
 
+use async_trait::async_trait;
 use log::*;
 use rpc::{progress::ProgressType, Progress};
 use std::sync::Arc;
@@ -7,6 +8,25 @@ use tokio::sync::{mpsc, Mutex};
 
 type AsyncProgressResult = Result<Progress, tonic::Status>;
 pub type AsyncProgressChannel = Arc<Mutex<mpsc::Sender<AsyncProgressResult>>>;
+
+#[async_trait]
+pub trait AsyncProgressChannelExt {
+    async fn send_status(&self, status: AsyncProgressResult) -> anyhow::Result<()>;
+}
+
+#[async_trait]
+impl AsyncProgressChannelExt for AsyncProgressChannel {
+    async fn send_status(&self, status: AsyncProgressResult) -> anyhow::Result<()> {
+        send_status(Some(self.clone()), status).await
+    }
+}
+
+#[async_trait]
+impl AsyncProgressChannelExt for Option<AsyncProgressChannel> {
+    async fn send_status(&self, status: AsyncProgressResult) -> anyhow::Result<()> {
+        send_status(self.clone(), status).await
+    }
+}
 
 /// Sends a given status update to an optional progress channel.
 pub async fn send_status(channel: Option<AsyncProgressChannel>, status: AsyncProgressResult) -> anyhow::Result<()> {

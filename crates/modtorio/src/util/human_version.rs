@@ -195,6 +195,16 @@ impl FromSql for HumanVersionReq {
     }
 }
 
+impl From<rpc::Version> for HumanVersion {
+    fn from(rpc_version: rpc::Version) -> Self {
+        Self {
+            major: rpc_version.major,
+            minor: rpc_version.minor,
+            patch: rpc_version.patch,
+        }
+    }
+}
+
 impl<'de> Deserialize<'de> for HumanVersion {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
