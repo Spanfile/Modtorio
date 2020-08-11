@@ -26,12 +26,13 @@ use common::net::NetAddress;
 use config::Config;
 use error::ModPortalError;
 use factorio::Factorio;
+use lazy_static::lazy_static;
 use mod_portal::ModPortal;
 use rpc::{
     mod_rpc_server::{ModRpc, ModRpcServer},
     server_status::{game::GameStatus, Game, InstanceStatus},
     Empty, EnsureModDependenciesRequest, ImportRequest, InstallModRequest, Progress, ServerStatus, UpdateCacheRequest,
-    UpdateModsRequest,
+    UpdateModsRequest, VersionInformation,
 };
 use std::{path::Path, sync::Arc};
 use store::Store;
@@ -48,6 +49,16 @@ use util::{
 
 /// The prefix used with every environment value related to the program configuration.
 pub const APP_PREFIX: &str = "MODTORIO_";
+/// The program's version at build-time.
+pub const VERSION: &str = env!("CARGO_PKG_VERSION");
+
+lazy_static! {
+    static ref HVER_VERSION: HumanVersion = {
+        VERSION
+            .parse()
+            .expect("failed to parse VERSION constant as HumanVersion")
+    };
+}
 
 #[derive(Clone)]
 /// A wrapper for a headless Linux Factorio server.
@@ -450,6 +461,23 @@ impl ModRpc for Modtorio {
     type UpdateModsStream = mpsc::Receiver<Result<Progress, Status>>;
     type EnsureModDependenciesStream = mpsc::Receiver<Result<Progress, Status>>;
 
+    async fn get_version_information(&self, req: Request<Empty>) -> Result<Response<VersionInformation>, Status> {
+        log_rpc_request(&req);
+
+        let resp = Response::new(VersionInformation {
+            version: Some((*HVER_VERSION).into()),
+            protocol_version: Some(
+                rpc::VERSION
+                    .parse::<HumanVersion>()
+                    .expect("failed to parse RPC protocol buffer specification version as HumanVersion")
+                    .into(),
+            ),
+        });
+        log_rpc_response(&resp);
+
+        Ok(resp)
+    }
+
     async fn get_server_status(&self, req: Request<Empty>) -> Result<Response<ServerStatus>, Status> {
         log_rpc_request(&req);
 
@@ -457,14 +485,14 @@ impl ModRpc for Modtorio {
         let games = self.get_rpc_games().await;
         let instance_status = self.get_instance_status().await;
 
-        let response = Response::new(ServerStatus {
+        let resp = Response::new(ServerStatus {
             uptime: uptime.num_seconds(),
             games,
             instance_status: instance_status.into(),
         });
-        log_rpc_response(&response);
+        log_rpc_response(&resp);
 
-        Ok(response)
+        Ok(resp)
     }
 
     // I tried to macro these repetitive functions into DRYness but the tonic::async_trait macro messes with them in

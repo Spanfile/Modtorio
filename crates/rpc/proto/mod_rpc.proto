@@ -2,6 +2,7 @@ syntax = "proto3";
 package mod_rpc;
 
 service ModRpc {
+  rpc GetVersionInformation(Empty) returns (VersionInformation);
   rpc GetServerStatus(Empty) returns (ServerStatus);
   rpc ImportGame(ImportRequest) returns (stream Progress);
   rpc UpdateCache(UpdateCacheRequest) returns (stream Progress);
@@ -28,6 +29,11 @@ message Progress {
   ProgressType prog_type = 2;
   uint32 value = 3;
   uint32 max = 4;
+}
+
+message VersionInformation {
+  Version version = 1;
+  Version protocol_version = 2;
 }
 
 message ServerStatus {

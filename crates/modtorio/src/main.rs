@@ -2,8 +2,6 @@ use ::log::*;
 use modtorio::*;
 use std::{env, fs::File, path::Path};
 
-/// The program's version at build-time.
-const VERSION: &str = env!("CARGO_PKG_VERSION");
 /// The name of the environment variable used to store the mod portal username
 const PORTAL_USERNAME_ENV_VARIABLE: &str = "MODTORIO_PORTAL_USERNAME";
 /// The name of the environment variable used to store the mod portal token
@@ -101,7 +99,8 @@ async fn update_store_from_env(store: &store::Store) -> anyhow::Result<()> {
 
 /// Logs the program's information.
 fn log_program_information() {
-    info!("Program version: {}", VERSION);
+    info!("Program version: {}", modtorio::VERSION);
+    info!("RPC protocol buffer specification version: {}", rpc::VERSION);
     info!(
         "Working directory: {}",
         env::current_dir()

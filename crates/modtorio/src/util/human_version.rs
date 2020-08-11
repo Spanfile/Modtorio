@@ -205,6 +205,16 @@ impl From<rpc::Version> for HumanVersion {
     }
 }
 
+impl Into<rpc::Version> for HumanVersion {
+    fn into(self) -> rpc::Version {
+        rpc::Version {
+            major: self.major,
+            minor: self.minor,
+            patch: self.patch,
+        }
+    }
+}
+
 impl<'de> Deserialize<'de> for HumanVersion {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where

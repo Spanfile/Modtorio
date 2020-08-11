@@ -6,11 +6,15 @@ use rpc::{progress::ProgressType, Progress};
 use std::sync::Arc;
 use tokio::sync::{mpsc, Mutex};
 
+/// The Result type used to reprsent the status of an async task.
 pub type AsyncProgressResult = Result<Progress, tonic::Status>;
+/// The channel used to send async task results into.
 pub type AsyncProgressChannel = Arc<Mutex<mpsc::Sender<AsyncProgressResult>>>;
 
+/// Defines functions used with `AsyncProgressChannel`.
 #[async_trait]
 pub trait AsyncProgressChannelExt {
+    /// Sends a given `AsyncProgressResult` status update to this channel.
     async fn send_status(&self, status: AsyncProgressResult) -> anyhow::Result<()>;
 }
 
