@@ -69,7 +69,7 @@ pub fn done() -> AsyncProgressResult {
     Ok(Progress {
         message: String::new(),
         prog_type: ProgressType::Done.into(),
-        value: 0,
-        max: 0,
+        value: 1,
+        max: 1,
     })
 }

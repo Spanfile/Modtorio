@@ -62,7 +62,7 @@ impl Mods {
             prog_tx
                 .send_status(status::definite(
                     &format!("Updating mod cache for {}...", mod_display),
-                    index as u32 + 1,
+                    index as u32,
                     max_mods,
                 ))
                 .await?;
@@ -144,7 +144,7 @@ impl Mods {
             prog_tx
                 .send_status(status::definite(
                     &format!("Checking for updates to {}...", mod_display),
-                    index as u32 + 1,
+                    index as u32,
                     max_mods,
                 ))
                 .await?;
@@ -178,7 +178,7 @@ impl Mods {
             prog_tx
                 .send_status(status::definite(
                     &format!("Updating {}...", update),
-                    index as u32 + 1,
+                    index as u32,
                     max_updates,
                 ))
                 .await?;
@@ -209,7 +209,7 @@ impl Mods {
             prog_tx
                 .send_status(status::definite(
                     &format!("Ensuring '{}'s dependencies are met...", title),
-                    index as u32 + 1,
+                    index as u32,
                     max_mods,
                 ))
                 .await?;
@@ -227,7 +227,7 @@ impl Mods {
                 prog_tx
                     .send_status(status::definite(
                         &format!("Installing missing mod '{}'...", miss),
-                        index as u32 + 1,
+                        index as u32,
                         max_missing,
                     ))
                     .await?;

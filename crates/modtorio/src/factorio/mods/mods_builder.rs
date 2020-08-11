@@ -84,7 +84,7 @@ impl<'a> ModsBuilder {
             self.prog_tx
                 .send_status(status::definite(
                     &format!("Loading mod from cache: {}", game_mod.factorio_mod),
-                    index as u32 + 1,
+                    index as u32,
                     max_mods,
                 ))
                 .await?;
@@ -135,7 +135,7 @@ impl<'a> ModsBuilder {
             self.prog_tx
                 .send_status(status::definite(
                     &format!("Checking if {} is loaded...", entry.display()),
-                    index as u32 + 1,
+                    index as u32,
                     max_zips,
                 ))
                 .await?;
@@ -148,7 +148,7 @@ impl<'a> ModsBuilder {
                 self.prog_tx
                     .send_status(status::definite(
                         &format!("Loading {}...", entry.display()),
-                        index as u32 + 1,
+                        index as u32,
                         max_zips,
                     ))
                     .await?;
@@ -191,7 +191,7 @@ impl<'a> ModsBuilder {
             self.prog_tx
                 .send_status(status::definite(
                     &format!("Loading mod from zip archive: {}", entry.display()),
-                    index as u32 + 1,
+                    index as u32,
                     max_entries,
                 ))
                 .await?;
