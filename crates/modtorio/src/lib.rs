@@ -639,10 +639,11 @@ fn channel<T>() -> (Arc<Mutex<mpsc::Sender<T>>>, mpsc::Receiver<T>) {
 /// Logs a given RPC request.
 fn log_rpc_request<T: std::fmt::Debug>(request: &Request<T>) {
     info!(
-        "RPC request from '{}'",
+        "RPC request from '{}': {:?}",
         request
             .remote_addr()
-            .map_or_else(|| String::from("unknown"), |addr| addr.to_string())
+            .map_or_else(|| String::from("unknown"), |addr| addr.to_string()),
+        request.get_ref()
     );
     debug!("{:?}", request);
 }

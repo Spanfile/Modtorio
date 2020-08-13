@@ -5,20 +5,20 @@ mod allow_commands;
 mod autosave;
 mod game_format;
 mod information;
+mod network;
 mod pause;
 mod publicity;
 mod rpc_format;
-mod traffic;
 
 use allow_commands::AllowCommands;
 use autosave::Autosave;
 use game_format::{GameFormatConversion, ServerSettingsGameFormat};
 use information::Information;
+use network::Network;
 use pause::Pause;
 use publicity::Publicity;
 pub use rpc_format::RpcFormatConversion;
 use serde::{Deserialize, Serialize};
-use traffic::Traffic;
 
 /// Stores a server's settings in a structured manner.
 #[derive(Deserialize, Serialize, Debug, Default)]
@@ -33,8 +33,8 @@ pub struct ServerSettings {
     pub pause: Pause,
     /// Represents the `allow_commands` setting.
     pub allow_commands: AllowCommands,
-    /// Contains settings related to the server's traffic use.
-    pub traffic: Traffic,
+    /// Contains settings related to the server's network options and traffic use.
+    pub network: Network,
 }
 
 #[allow(dead_code)]
@@ -62,7 +62,7 @@ impl GameFormatConversion for ServerSettings {
             autosave: Autosave::from_game_format(game_format)?,
             pause: Pause::from_game_format(game_format)?,
             allow_commands: AllowCommands::from_game_format(game_format)?,
-            traffic: Traffic::from_game_format(game_format)?,
+            network: Network::from_game_format(game_format)?,
         })
     }
 
@@ -72,7 +72,7 @@ impl GameFormatConversion for ServerSettings {
         self.autosave.to_game_format(game_format)?;
         self.pause.to_game_format(game_format)?;
         self.allow_commands.to_game_format(game_format)?;
-        self.traffic.to_game_format(game_format)?;
+        self.network.to_game_format(game_format)?;
 
         Ok(())
     }
@@ -86,7 +86,7 @@ impl RpcFormatConversion for ServerSettings {
             autosave: Autosave::from_rpc_format(rpc_format)?,
             pause: Pause::from_rpc_format(rpc_format)?,
             allow_commands: AllowCommands::from_rpc_format(rpc_format)?,
-            traffic: Traffic::from_rpc_format(rpc_format)?,
+            network: Network::from_rpc_format(rpc_format)?,
         })
     }
     fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
@@ -95,7 +95,7 @@ impl RpcFormatConversion for ServerSettings {
         self.autosave.to_rpc_format(rpc_format)?;
         self.pause.to_rpc_format(rpc_format)?;
         self.allow_commands.to_rpc_format(rpc_format)?;
-        self.traffic.to_rpc_format(rpc_format)?;
+        self.network.to_rpc_format(rpc_format)?;
 
         Ok(())
     }
@@ -193,17 +193,18 @@ mod tests {
         assert_eq!(obj.allow_commands, AllowCommands::AdminsOnly);
 
         assert_eq!(
-            obj.traffic,
-            Traffic {
+            obj.network,
+            Network {
                 minimum_latency: 0,
-                segment_size: traffic::SegmentSize {
+                segment_size: network::SegmentSize {
                     size: Range { min: 25, max: 100 },
                     peer_count: Range { min: 20, max: 10 }
                 },
-                upload: traffic::Upload {
+                upload: network::Upload {
                     max: Limit::Unlimited,
                     slots: Limit::Limited(5)
-                }
+                },
+                bind_address: Network::default().bind_address,
             }
         );
 

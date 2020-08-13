@@ -118,4 +118,13 @@ message ServerSettings {
   uint64 minimum_segment_size_peer_count = 24;
   uint64 maximum_segment_size = 25;
   uint64 maximum_segment_size_peer_count = 26;
+
+  message SocketAddr {
+    oneof addr {
+      fixed32 v4 = 1;
+      bytes v6 = 2;
+    }
+    fixed32 port = 3;
+  }
+  SocketAddr bind = 27;
 }

@@ -3,7 +3,12 @@
 
 use super::{rpc_format::RpcFormatConversion, GameFormatConversion, ServerSettingsGameFormat};
 use crate::util::{Limit, Range};
+use rpc::{server_settings, server_settings::socket_addr};
 use serde::{Deserialize, Serialize};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+
+/// Factorio's default server listen port.
+pub const DEFAULT_LISTEN_PORT: u16 = 34197;
 
 /// Contains a server's settings related to its upload capabilities.
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
@@ -28,14 +33,16 @@ pub struct SegmentSize {
 }
 
 /// Contains a server's settings related to its network traffic.
-#[derive(Deserialize, Serialize, Debug, Default, PartialEq)]
-pub struct Traffic {
+#[derive(Deserialize, Serialize, Debug, PartialEq)]
+pub struct Network {
     /// Corresponds to the various upload settings.
     pub upload: Upload,
     /// Corresponds to the `minimum_latency_in_ticks` field. Defaults to 0.
     pub minimum_latency: u64,
     /// Corresponds to the various network message segment size settings.
     pub segment_size: SegmentSize,
+    /// Corresponds to the `--bind` command line option.
+    pub bind_address: SocketAddr,
 }
 
 impl Default for Upload {
@@ -56,7 +63,18 @@ impl Default for SegmentSize {
     }
 }
 
-impl GameFormatConversion for Traffic {
+impl Default for Network {
+    fn default() -> Self {
+        Self {
+            upload: Default::default(),
+            minimum_latency: Default::default(),
+            segment_size: Default::default(),
+            bind_address: SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, DEFAULT_LISTEN_PORT)),
+        }
+    }
+}
+
+impl GameFormatConversion for Network {
     fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
         Ok(Self {
             upload: Upload {
@@ -74,6 +92,8 @@ impl GameFormatConversion for Traffic {
                     max: game_format.maximum_segment_size_peer_count,
                 },
             },
+            // the game format does not include the listen address
+            ..Default::default()
         })
     }
 
@@ -90,8 +110,31 @@ impl GameFormatConversion for Traffic {
     }
 }
 
-impl RpcFormatConversion for Traffic {
+impl RpcFormatConversion for Network {
     fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
+        let bind_address = if let Some(bind_addr) = &rpc_format.bind {
+            let port = bind_addr.port as u16;
+            if let Some(addr) = &bind_addr.addr {
+                match addr {
+                    socket_addr::Addr::V4(v4_addr) => SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::from(*v4_addr), port)),
+                    socket_addr::Addr::V6(v6_bytes) => {
+                        // the byte array from protobuf may contain any number of bytes. copy up to the first 16 bytes
+                        // into a static array to build a v6 address
+                        let mut v6_addr = [0u8; 16];
+                        for (i, byte) in v6_bytes.iter().take(16).enumerate() {
+                            v6_addr[i] = *byte;
+                        }
+
+                        SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::from(v6_addr), port, 0, 0))
+                    }
+                }
+            } else {
+                SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port))
+            }
+        } else {
+            Self::default().bind_address
+        };
+
         Ok(Self {
             upload: Upload {
                 max: Limit::from(rpc_format.max_upload_in_kilobytes_per_second),
@@ -108,6 +151,7 @@ impl RpcFormatConversion for Traffic {
                     max: rpc_format.maximum_segment_size_peer_count,
                 },
             },
+            bind_address,
         })
     }
 
@@ -119,6 +163,13 @@ impl RpcFormatConversion for Traffic {
         rpc_format.maximum_segment_size = self.segment_size.size.max;
         rpc_format.minimum_segment_size_peer_count = self.segment_size.peer_count.min;
         rpc_format.maximum_segment_size_peer_count = self.segment_size.peer_count.max;
+        rpc_format.bind = Some(server_settings::SocketAddr {
+            port: self.bind_address.port() as u32,
+            addr: Some(match self.bind_address.ip() {
+                IpAddr::V4(v4_addr) => socket_addr::Addr::V4(u32::from(v4_addr)),
+                IpAddr::V6(v6_addr) => socket_addr::Addr::V6(v6_addr.octets().to_vec()),
+            }),
+        });
 
         Ok(())
     }
