@@ -1,7 +1,7 @@
 //! Provides the object which corresponds to a Factorio server's settings about publicity.
 
-use super::{rpc_format::RpcFormatConversion, GameFormatConversion, ServerSettingsGameFormat};
-use crate::util::Limit;
+use super::{rpc_format::RpcFormatConversion, GameFormatConversion, ServerSettingsGameFormat, StoreFormatConversion};
+use crate::{store::models::GameSettings, util::Limit};
 use serde::{Deserialize, Serialize};
 
 /// Represents the `password` and `token` fields.
@@ -127,6 +127,54 @@ impl GameFormatConversion for Publicity {
         game_format.ignore_player_limit_for_returning_players = self.player_limit.ignore_for_returning;
         game_format.afk_autokick_interval = self.player_limit.autokick.into();
         game_format.game_password = self.password.clone();
+
+        Ok(())
+    }
+}
+
+impl StoreFormatConversion for Publicity {
+    fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
+        Ok(Self {
+            public: if store_format.public_visibility == 0 {
+                None
+            } else {
+                Some(PublicVisibility {
+                    username: store_format.username.clone(),
+                    credential: if store_format.token.is_empty() {
+                        Credential::Password(store_format.password.clone())
+                    } else {
+                        Credential::Token(store_format.token.clone())
+                    },
+                })
+            },
+            lan: store_format.lan_visibility != 0,
+            require_user_verification: store_format.require_user_verification != 0,
+            player_limit: PlayerLimit {
+                max: Limit::from(store_format.max_players as u64),
+                ignore_for_returning: store_format.ignore_player_limit_for_returning_players != 0,
+                autokick: Limit::from(store_format.afk_autokick_interval as u64),
+            },
+            password: store_format.game_password.clone(),
+        })
+    }
+
+    fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
+        store_format.public_visibility = self.public.is_some() as i64;
+        store_format.lan_visibility = self.lan as i64;
+
+        if let Some(publicity) = self.public.clone() {
+            store_format.username = publicity.username;
+            match publicity.credential {
+                Credential::Password(password) => store_format.password = password,
+                Credential::Token(token) => store_format.token = token,
+            }
+        }
+
+        store_format.require_user_verification = self.require_user_verification as i64;
+        store_format.max_players = u64::from(self.player_limit.max) as i64;
+        store_format.ignore_player_limit_for_returning_players = self.player_limit.ignore_for_returning as i64;
+        store_format.afk_autokick_interval = u64::from(self.player_limit.autokick) as i64;
+        store_format.game_password = self.password.clone();
 
         Ok(())
     }

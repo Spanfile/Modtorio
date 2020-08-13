@@ -1,7 +1,8 @@
 //! Provides the [Pause](Pause) struct which contains a Factorio server's settings
 //! related to pausing the game.
 
-use super::{rpc_format::RpcFormatConversion, GameFormatConversion, ServerSettingsGameFormat};
+use super::{rpc_format::RpcFormatConversion, GameFormatConversion, ServerSettingsGameFormat, StoreFormatConversion};
+use crate::store::models::GameSettings;
 use serde::{Deserialize, Serialize};
 
 /// Contains a server's settings related to pausing the game.
@@ -33,6 +34,22 @@ impl GameFormatConversion for Pause {
     fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
         game_format.auto_pause = self.auto;
         game_format.only_admins_can_pause_the_game = self.only_admins;
+
+        Ok(())
+    }
+}
+
+impl StoreFormatConversion for Pause {
+    fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
+        Ok(Self {
+            auto: store_format.auto_pause != 0,
+            only_admins: store_format.only_admins_can_pause_the_game != 0,
+        })
+    }
+
+    fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
+        store_format.auto_pause = self.auto as i64;
+        store_format.only_admins_can_pause_the_game = self.only_admins as i64;
 
         Ok(())
     }

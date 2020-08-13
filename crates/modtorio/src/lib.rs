@@ -119,8 +119,8 @@ impl Modtorio {
                 {
                     Ok(game) => game,
                     Err(e) => {
-                        error!("Failed to import stored game: {}", e.to_string());
-                        return;
+                        error!("Failed to import stored game ID {}: {}", stored_game.id, e);
+                        continue;
                     }
                 };
 

@@ -9,7 +9,9 @@ mod network;
 mod pause;
 mod publicity;
 mod rpc_format;
+mod store_format;
 
+use crate::store::models::GameSettings;
 use allow_commands::AllowCommands;
 use autosave::Autosave;
 use game_format::{GameFormatConversion, ServerSettingsGameFormat};
@@ -19,6 +21,7 @@ use pause::Pause;
 use publicity::Publicity;
 pub use rpc_format::RpcFormatConversion;
 use serde::{Deserialize, Serialize};
+pub use store_format::StoreFormatConversion;
 
 /// Stores a server's settings in a structured manner.
 #[derive(Deserialize, Serialize, Debug, Default)]
@@ -73,6 +76,30 @@ impl GameFormatConversion for ServerSettings {
         self.pause.to_game_format(game_format)?;
         self.allow_commands.to_game_format(game_format)?;
         self.network.to_game_format(game_format)?;
+
+        Ok(())
+    }
+}
+
+impl StoreFormatConversion for ServerSettings {
+    fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
+        Ok(Self {
+            information: Information::from_store_format(store_format)?,
+            publicity: Publicity::from_store_format(store_format)?,
+            autosave: Autosave::from_store_format(store_format)?,
+            pause: Pause::from_store_format(store_format)?,
+            allow_commands: AllowCommands::from_store_format(store_format)?,
+            network: Network::from_store_format(store_format)?,
+        })
+    }
+
+    fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
+        self.information.to_store_format(store_format)?;
+        self.publicity.to_store_format(store_format)?;
+        self.autosave.to_store_format(store_format)?;
+        self.pause.to_store_format(store_format)?;
+        self.allow_commands.to_store_format(store_format)?;
+        self.network.to_store_format(store_format)?;
 
         Ok(())
     }

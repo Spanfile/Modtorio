@@ -1,8 +1,11 @@
 //! Provides the [Traffic](Traffic) object which corresponds to a server's settings about its
 //! network traffic.
 
-use super::{rpc_format::RpcFormatConversion, GameFormatConversion, ServerSettingsGameFormat};
-use crate::util::{Limit, Range};
+use super::{rpc_format::RpcFormatConversion, GameFormatConversion, ServerSettingsGameFormat, StoreFormatConversion};
+use crate::{
+    store::models::GameSettings,
+    util::{Limit, Range},
+};
 use rpc::{server_settings, server_settings::socket_addr};
 use serde::{Deserialize, Serialize};
 use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
@@ -105,6 +108,42 @@ impl GameFormatConversion for Network {
         game_format.maximum_segment_size = self.segment_size.size.max;
         game_format.minimum_segment_size_peer_count = self.segment_size.peer_count.min;
         game_format.maximum_segment_size_peer_count = self.segment_size.peer_count.max;
+
+        Ok(())
+    }
+}
+
+impl StoreFormatConversion for Network {
+    fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
+        Ok(Self {
+            upload: Upload {
+                max: Limit::from(store_format.max_upload_in_kilobytes_per_second as u64),
+                slots: Limit::from(store_format.max_upload_slots as u64),
+            },
+            minimum_latency: store_format.minimum_latency_in_ticks as u64,
+            segment_size: SegmentSize {
+                size: Range {
+                    min: store_format.minimum_segment_size as u64,
+                    max: store_format.maximum_segment_size as u64,
+                },
+                peer_count: Range {
+                    min: store_format.minimum_segment_size_peer_count as u64,
+                    max: store_format.maximum_segment_size_peer_count as u64,
+                },
+            },
+            // the store format does not include the listen address
+            ..Default::default()
+        })
+    }
+
+    fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
+        store_format.max_upload_in_kilobytes_per_second = u64::from(self.upload.max) as i64;
+        store_format.max_upload_slots = u64::from(self.upload.slots) as i64;
+        store_format.minimum_latency_in_ticks = self.minimum_latency as i64;
+        store_format.minimum_segment_size = self.segment_size.size.min as i64;
+        store_format.maximum_segment_size = self.segment_size.size.max as i64;
+        store_format.minimum_segment_size_peer_count = self.segment_size.peer_count.min as i64;
+        store_format.maximum_segment_size_peer_count = self.segment_size.peer_count.max as i64;
 
         Ok(())
     }

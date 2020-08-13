@@ -1,7 +1,8 @@
 //! Provides the [`AllowCommands`](AllowCommands) enum which corresponds to the `allow_commands`
 //! field.
 
-use super::{GameFormatConversion, RpcFormatConversion, ServerSettingsGameFormat};
+use super::{GameFormatConversion, RpcFormatConversion, ServerSettingsGameFormat, StoreFormatConversion};
+use crate::store::models::GameSettings;
 use rpc::server_settings;
 use serde::{Deserialize, Serialize};
 
@@ -43,6 +44,26 @@ impl GameFormatConversion for AllowCommands {
 
     fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
         game_format.allow_commands = match self {
+            Self::Yes => String::from(YES_GAME_VALUE),
+            Self::No => String::from(NO_GAME_VALUE),
+            Self::AdminsOnly => String::from(ADMINS_ONLY_GAME_VALUE),
+        };
+        Ok(())
+    }
+}
+
+impl StoreFormatConversion for AllowCommands {
+    fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
+        Ok(match store_format.allow_commands.as_str() {
+            YES_GAME_VALUE => AllowCommands::Yes,
+            NO_GAME_VALUE => AllowCommands::No,
+            ADMINS_ONLY_GAME_VALUE => AllowCommands::AdminsOnly,
+            v => panic!("invalid allow_commands value in store format: {}", v),
+        })
+    }
+
+    fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
+        store_format.allow_commands = match self {
             Self::Yes => String::from(YES_GAME_VALUE),
             Self::No => String::from(NO_GAME_VALUE),
             Self::AdminsOnly => String::from(ADMINS_ONLY_GAME_VALUE),

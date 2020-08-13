@@ -135,7 +135,7 @@ pub struct ReleaseDependency {
 
 /// A Factorio server's settings, including both settings from its `server-settings.json` file and its command line
 /// parameters.
-#[derive(Debug, Model)]
+#[derive(Debug, Model, Default)]
 pub struct GameSettings {
     /// The game's ID these settings are for.
     #[index]
@@ -144,6 +144,8 @@ pub struct GameSettings {
     pub name: String,
     /// The `description` setting in `server-settings.json`.
     pub description: String,
+    /// The `tags` setting in `server-settings.json`, combined into a single string.
+    pub tags: String,
     /// The `max_players` setting in `server-settings.json`.
     pub max_players: i64,
     /// The `visibility.public` boolean setting in `server-settings.json`.
@@ -190,8 +192,8 @@ pub struct GameSettings {
     pub minimum_segment_size_peer_count: i64,
     /// The `maximum_segment_size` setting in `server-settings.json`.
     pub maximum_segment_size: i64,
-    /// The `maximimum_segment_size_peer_count` setting in `server-settings.json`.
-    pub maximimum_segment_size_peer_count: i64,
+    /// The `maximum_segment_size_peer_count` setting in `server-settings.json`.
+    pub maximum_segment_size_peer_count: i64,
     /// The `--bind` command line parameter's bind address' IP version (either 4 or 6).
     pub bind_address_ip_version: i64,
     /// The `--bind` command line parameter's bind address (four bytes for v4, 16 bytes for v6).

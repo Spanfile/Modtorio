@@ -10,6 +10,7 @@ pub trait GameFormatConversion
 where
     Self: Sized,
 {
+    // TODO: do these have to return result? I don't think so
     /// Creates a new instance of `Self` from a given `ServerSettingsGameFormat` struct.
     fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self>;
     /// Modifies an existing `ServerSettingsGameFormat` struct with self's own settings.

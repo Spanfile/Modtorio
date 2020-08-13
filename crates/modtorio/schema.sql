@@ -31,6 +31,8 @@ CREATE TABLE IF NOT EXISTS "game_settings" (
 	"game" INTEGER PRIMARY KEY,
 	"name" TEXT NOT NULL,
 	"description" TEXT NOT NULL,
+	/* yeah yeah it's not very normalized to store the tags as just values separated with some separator but fuck it */
+	"tags" TEXT NOT NULL,
 	"max_players" INTEGER NOT NULL,
 	"public_visibility" INTEGER NOT NULL,
 	"lan_visibility" INTEGER NOT NULL,
@@ -54,7 +56,7 @@ CREATE TABLE IF NOT EXISTS "game_settings" (
 	"minimum_segment_size" INTEGER NOT NULL,
 	"minimum_segment_size_peer_count" INTEGER NOT NULL,
 	"maximum_segment_size" INTEGER NOT NULL,
-	"maximimum_segment_size_peer_count" INTEGER NOT NULL,
+	"maximum_segment_size_peer_count" INTEGER NOT NULL,
 	"bind_address_ip_version" INTEGER NOT NULL,
 	"bind_address" BLOB NOT NULL,
 	"bind_port" INTEGER NOT NULL,

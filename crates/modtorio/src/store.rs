@@ -1,6 +1,5 @@
 //! The program store, used to store persistent data about the program in an SQLite database.
 
-pub mod game_settings;
 pub mod models;
 pub mod option;
 

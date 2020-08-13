@@ -12,8 +12,9 @@ use crate::{
 };
 use executable::Executable;
 use log::*;
+use models::GameSettings;
 use mods::{Mods, ModsBuilder};
-use settings::ServerSettings;
+use settings::{ServerSettings, StoreFormatConversion};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -70,6 +71,11 @@ impl Factorio {
         self.store.begin_transaction()?;
 
         let id = if let Some(c) = *store_id {
+            info!("Updating existing game ID {} store", c);
+            prog_tx
+                .send_status(status::indefinite("Updating existing stored game..."))
+                .await?;
+
             self.store
                 .update_game(models::Game {
                     id: c,
@@ -77,12 +83,13 @@ impl Factorio {
                 })
                 .await?;
 
-            info!("Updating existing game ID {} store", c);
-            prog_tx
-                .send_status(status::indefinite("Updating existing stored game..."))
-                .await?;
             c
         } else {
+            info!("Creating new stored game...");
+            prog_tx
+                .send_status(status::indefinite("Creating new stored game..."))
+                .await?;
+
             let new_id = self
                 .store
                 .insert_game(models::Game {
@@ -92,13 +99,15 @@ impl Factorio {
                 })
                 .await?;
             *store_id = Some(new_id);
+            debug!("New game store ID: {}", new_id);
 
-            info!("Creating new game store with ID {}", new_id);
-            prog_tx
-                .send_status(status::indefinite("Creating new stored game..."))
-                .await?;
             new_id
         };
+
+        let mut new_settings = GameSettings::default();
+        self.settings.to_store_format(&mut new_settings)?;
+        debug!("Created new settings to store: {:?}", new_settings);
+        self.store.set_settings(new_settings).await?;
 
         self.mods.update_store(id, prog_tx).await?;
         self.store.commit_transaction()?;
@@ -215,18 +224,25 @@ impl Importer {
 
         let mut mods_builder = ModsBuilder::root(mods_path);
 
-        if let Some(game_store_id) = self.game_store_id {
+        self.prog_tx
+            .send_status(status::indefinite("Reading server settings..."))
+            .await?;
+        let settings = if let Some(game_store_id) = self.game_store_id {
+            // TODO: ugly side effect
             mods_builder = mods_builder.with_game_store_id(game_store_id);
-        }
+
+            let settings = ServerSettings::from_store_format(&store.get_settings(game_store_id).await?)?;
+            debug!("Read settings from store: {:?}", settings);
+            settings
+        } else {
+            let settings = ServerSettings::from_game_json(&fs::read_to_string(settings_path)?)?;
+            debug!("Read settings from file: {:?}", settings);
+            settings
+        };
 
         if let Some(prog_tx) = &self.prog_tx {
             mods_builder = mods_builder.with_status_updates(Arc::clone(prog_tx));
         }
-
-        self.prog_tx
-            .send_status(status::indefinite("Reading server settings..."))
-            .await?;
-        let settings = ServerSettings::from_game_json(&fs::read_to_string(settings_path)?)?;
 
         self.prog_tx
             .send_status(status::indefinite("Verifying executable..."))
