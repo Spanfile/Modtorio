@@ -1,11 +1,11 @@
 //! Provides the [ModsBuilder](ModsBuilder) which is used to build a [Mods](super::Mods) object from
-//! a game's mod root directory, optionally loading them from the program cache.
+//! a game's mod root directory, optionally loading them from the program store.
 
 use super::Mods;
 use crate::{
     config::Config,
     error::ModError,
-    factorio::GameCacheId,
+    factorio::GameStoreId,
     mod_common::Mod,
     mod_portal::ModPortal,
     store::Store,
@@ -25,35 +25,35 @@ const ZIP_GLOB: &str = "*.zip";
 
 /// A builder used to build a game's mod collection from the game's mod directory.
 ///
-/// If the given game is cached, the mods will be built from the cache and verified against their
-/// corresponding mod zip archives. If a cached mod isn't found in the mod directory, it will be
-/// ignored. Any mods in the mod directory that weren't cached (i.e. mods added externally) will be
+/// If the given game is stored, the mods will be built from the store and verified against their
+/// corresponding mod zip archives. If a stored mod isn't found in the mod directory, it will be
+/// ignored. Any mods in the mod directory that weren't stored (i.e. mods added externally) will be
 /// loaded afterwards.
 // TODO: doctests
 pub struct ModsBuilder {
     /// The mods' root directory.
     directory: PathBuf,
-    /// The cache ID of the game these mods belong to.
-    game_cache_id: Option<GameCacheId>,
+    /// The store ID of the game these mods belong to.
+    game_store_id: Option<GameStoreId>,
     /// A status update channel.
     prog_tx: Option<status::AsyncProgressChannel>,
 }
 
 impl<'a> ModsBuilder {
-    /// Returns a new `ModsBuilder` with a given mod root directory. Doesn't have a game's cache ID
+    /// Returns a new `ModsBuilder` with a given mod root directory. Doesn't have a game's store ID
     /// set.
     pub fn root(directory: PathBuf) -> Self {
         ModsBuilder {
             directory,
-            game_cache_id: None,
+            game_store_id: None,
             prog_tx: None,
         }
     }
 
-    /// Sets a the cache ID of the game to load mods from the program cache for.
-    pub fn with_game_cache_id(self, game_cache_id: GameCacheId) -> Self {
+    /// Sets a the store ID of the game to load mods from the program store for.
+    pub fn with_game_store_id(self, game_store_id: GameStoreId) -> Self {
         Self {
-            game_cache_id: Some(game_cache_id),
+            game_store_id: Some(game_store_id),
             ..self
         }
     }
@@ -66,16 +66,16 @@ impl<'a> ModsBuilder {
         }
     }
 
-    /// Builds mods from the program cache with a given game cache ID.
-    async fn build_mods_from_cache(
+    /// Builds mods from the program store with a given game store ID.
+    async fn build_mods_from_store(
         &self,
-        game_cache_id: GameCacheId,
+        game_store_id: GameStoreId,
         config: Arc<Config>,
         portal: Arc<ModPortal>,
         store: Arc<Store>,
     ) -> anyhow::Result<Vec<Mod>> {
-        trace!("Building mods for cached game ID {}", game_cache_id);
-        let mods = store.cache.get_mods_of_game(game_cache_id).await?;
+        trace!("Building mods for stored game ID {}", game_store_id);
+        let mods = store.get_mods_of_game(game_store_id).await?;
         let max_mods = mods.len() as u32;
         let mut created_mods = Vec::new();
         let mut mod_zips = HashSet::new();
@@ -83,13 +83,13 @@ impl<'a> ModsBuilder {
         for (index, game_mod) in mods.into_iter().enumerate() {
             self.prog_tx
                 .send_status(status::definite(
-                    &format!("Loading mod from cache: {}", game_mod.factorio_mod),
+                    &format!("Loading mod from store: {}", game_mod.factorio_mod),
                     index as u32,
                     max_mods,
                 ))
                 .await?;
 
-            let created_mod = match Mod::from_cache(
+            let created_mod = match Mod::from_store(
                 &game_mod,
                 &self.directory,
                 Arc::clone(&config),
@@ -101,14 +101,14 @@ impl<'a> ModsBuilder {
                 Ok(created_mod) => created_mod,
                 Err(e) => {
                     error!(
-                        "Cached mod '{}' for game ID {} failed to load: {}",
-                        game_mod.factorio_mod, game_cache_id, e
+                        "Stored mod '{}' for game ID {} failed to load: {}",
+                        game_mod.factorio_mod, game_store_id, e
                     );
                     continue;
                 }
             };
 
-            info!("Loaded mod {} from cache", created_mod.display().await);
+            info!("Loaded mod {} from store", created_mod.display().await);
 
             let mod_zip = created_mod.zip_path().await?.get_str()?.to_string();
             if !mod_zips.insert(mod_zip.clone()) {
@@ -119,10 +119,10 @@ impl<'a> ModsBuilder {
         }
 
         self.prog_tx
-            .send_status(status::indefinite("Checking for non-cached mod zip archives..."))
+            .send_status(status::indefinite("Checking for non-stored mod zip archives..."))
             .await?;
         debug!(
-            "{} mods loaded from cache, checking for non-cached zips...",
+            "{} mods loaded from store, checking for non-stored zips...",
             created_mods.len()
         );
         trace!("Mod zips: {:?}", mod_zips);
@@ -142,7 +142,7 @@ impl<'a> ModsBuilder {
 
             if !mod_zips.contains(&entry_file_name) {
                 warn!(
-                    "Found non-cached mod from filesystem: {}, loading from zip...",
+                    "Found non-stored mod from filesystem: {}, loading from zip...",
                     entry.display()
                 );
                 self.prog_tx
@@ -163,7 +163,7 @@ impl<'a> ModsBuilder {
                     };
 
                 info!(
-                    "Loaded non-cached mod {} from zip ({})",
+                    "Loaded non-stored mod {} from zip ({})",
                     created_mod.display().await,
                     entry.display()
                 );
@@ -218,18 +218,18 @@ impl<'a> ModsBuilder {
 
     /// Finalises the builder and returns a new `Mods` object.
     pub async fn build(self, config: Arc<Config>, portal: Arc<ModPortal>, store: Arc<Store>) -> anyhow::Result<Mods> {
-        let built_mods = if let Some(game_cache_id) = self.game_cache_id {
-            debug!("Got cached game ID {}, loading mods from cache", game_cache_id);
+        let built_mods = if let Some(game_store_id) = self.game_store_id {
+            debug!("Got stored game ID {}, loading mods from store", game_store_id);
 
-            self.build_mods_from_cache(
-                game_cache_id,
+            self.build_mods_from_store(
+                game_store_id,
                 Arc::clone(&config),
                 Arc::clone(&portal),
                 Arc::clone(&store),
             )
             .await?
         } else {
-            debug!("No cached game, loading mods from filesystem");
+            debug!("No stored game, loading mods from filesystem");
 
             self.build_mods_from_filesystem(Arc::clone(&config), Arc::clone(&portal), Arc::clone(&store))
                 .await?

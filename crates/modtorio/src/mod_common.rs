@@ -5,7 +5,7 @@ mod info;
 
 use crate::{
     error::ModError,
-    store::{cache::models, Store},
+    store::{models, Store},
     util::{self, HumanVersion},
     Config, ModPortal,
 };
@@ -26,7 +26,7 @@ pub use info::Release;
 /// A Factorio mod.
 ///
 /// Consists of a combination of mod information from both a mod zip archive and the mod portal.
-/// Provides functions to build, download and update mods from the [program cache](crate::cache),
+/// Provides functions to build, download and update mods from the [program store](crate::store),
 /// zip archives and the [mod portal](crate::mod_portal).
 pub struct Mod {
     /// The mod's info.
@@ -67,8 +67,8 @@ enum ChecksumAlgorithm {
     SHA1,
 }
 
-/// The default checksum algorithm to use to verifying cached mods.
-const CACHE_ZIP_CHECKSUM_ALGO: ChecksumAlgorithm = ChecksumAlgorithm::BLAKE2b;
+/// The default checksum algorithm to use to verifying stored mods.
+const STORE_ZIP_CHECKSUM_ALGO: ChecksumAlgorithm = ChecksumAlgorithm::BLAKE2b;
 /// The algorithm used to verify downloaded mods from the mod portal. This is dictated by what the
 /// mod portal returns as a checksum.
 const DOWNLOADED_ZIP_CHECKSUM_ALGO: ChecksumAlgorithm = ChecksumAlgorithm::SHA1;
@@ -106,7 +106,7 @@ where
 /// containing a variant of `ModError` that describes which part of the check failed.
 ///
 /// The validity check will:
-/// * Ensure the zip archive's checksum matches what is cached
+/// * Ensure the zip archive's checksum matches what is stored
 async fn verify_zip<P>(game_mod: &models::GameMod, mods_root_path: P) -> anyhow::Result<()>
 where
     P: AsRef<Path>,
@@ -121,7 +121,7 @@ where
         zip_path.display(),
         game_mod.zip_checksum
     );
-    let existing_zip_checksum = calculate_zip_checksum(CACHE_ZIP_CHECKSUM_ALGO, &zip_path).await?;
+    let existing_zip_checksum = calculate_zip_checksum(STORE_ZIP_CHECKSUM_ALGO, &zip_path).await?;
 
     if existing_zip_checksum != game_mod.zip_checksum {
         return Err(ModError::ZipChecksumMismatch {
@@ -134,8 +134,8 @@ where
 }
 
 impl Mod {
-    /// Builds a new mod from a given cached `GameMod` and mod root directory.
-    pub async fn from_cache<P>(
+    /// Builds a new mod from a given stored `GameMod` and mod root directory.
+    pub async fn from_store<P>(
         game_mod: &models::GameMod,
         mods_root_path: P,
         config: Arc<Config>,
@@ -145,16 +145,15 @@ impl Mod {
     where
         P: AsRef<Path>,
     {
-        debug!("Creating mod from cached: {:?}", game_mod);
+        debug!("Creating mod from stored: {:?}", game_mod);
         let factorio_mod = store
-            .cache
             .get_factorio_mod(game_mod.factorio_mod.clone())
             .await?
-            .ok_or(ModError::ModNotInCache)?;
-        let info = Mutex::new(Info::from_cache(factorio_mod, game_mod.mod_version, store.as_ref()).await?);
+            .ok_or(ModError::ModNotInStore)?;
+        let info = Mutex::new(Info::from_store(factorio_mod, game_mod.mod_version, store.as_ref()).await?);
 
         debug!(
-            "Verifying mod '{}' zip ({}) against cache...",
+            "Verifying mod '{}' zip ({}) against store...",
             game_mod.factorio_mod, game_mod.mod_zip
         );
 
@@ -183,7 +182,7 @@ impl Mod {
     {
         debug!("Creating mod from zip: '{}'", path.as_ref().display());
         let info = Mutex::new(Info::from_zip(path.as_ref().to_owned()).await?);
-        let zip_checksum = calculate_zip_checksum(CACHE_ZIP_CHECKSUM_ALGO, &path).await?;
+        let zip_checksum = calculate_zip_checksum(STORE_ZIP_CHECKSUM_ALGO, &path).await?;
 
         Ok(Self {
             info,
@@ -217,13 +216,13 @@ impl Mod {
 }
 
 impl Mod {
-    /// Updates the mod's cache
-    pub async fn update_cache(&self) -> anyhow::Result<()> {
-        trace!("Updating cache for '{}'", self.name().await);
+    /// Updates the mod's store
+    pub async fn update_store(&self) -> anyhow::Result<()> {
+        trace!("Updating store for '{}'", self.name().await);
 
         if !self.is_portal_populated().await {
             debug!(
-                "Info not populated from portal before updating cache for '{}', populating...",
+                "Info not populated from portal before updating store for '{}', populating...",
                 self.name().await
             );
 
@@ -250,8 +249,8 @@ impl Mod {
             last_updated: Utc::now(),
         };
 
-        // trace!("'{}' cached mod: {:?}", self.name().await, new_factorio_mod);
-        self.store.cache.set_factorio_mod(new_factorio_mod).await?;
+        // trace!("'{}' stored mod: {:?}", self.name().await, new_factorio_mod);
+        self.store.set_factorio_mod(new_factorio_mod).await?;
 
         for release in self.releases().await? {
             let new_mod_release = models::ModRelease {
@@ -263,12 +262,12 @@ impl Mod {
                 factorio_version: release.factorio_version(),
             };
             // trace!(
-            //     "'{}'s cached release {}: {:?}",
+            //     "'{}'s stored release {}: {:?}",
             //     self.name().await,
             //     release.version(),
             //     new_mod_release
             // );
-            self.store.cache.set_mod_release(new_mod_release).await?;
+            self.store.set_mod_release(new_mod_release).await?;
 
             let mut new_release_dependencies = Vec::new();
             for dependency in release.dependencies() {
@@ -282,15 +281,12 @@ impl Mod {
             }
 
             // trace!(
-            //     "'{}'s release {}'s cached dependencies: {:?}",
+            //     "'{}'s release {}'s stored dependencies: {:?}",
             //     self.name().await,
             //     release.version(),
             //     new_release_dependencies
             // );
-            self.store
-                .cache
-                .set_release_dependencies(new_release_dependencies)
-                .await?;
+            self.store.set_release_dependencies(new_release_dependencies).await?;
         }
 
         Ok(())
@@ -305,41 +301,41 @@ impl Mod {
         info.populate_from_portal(self.portal.as_ref()).await
     }
 
-    /// Fetch the latest info from cache
+    /// Fetch the latest info from store
     #[allow(dead_code)]
-    pub async fn fetch_cache_info(&self) -> anyhow::Result<()> {
-        trace!("Fetcing cache info for '{}'", self.name().await);
+    pub async fn fetch_store_info(&self) -> anyhow::Result<()> {
+        trace!("Fetcing store info for '{}'", self.name().await);
 
         let mut info = self.info.lock().await;
-        info.populate_from_cache(self.store.as_ref()).await
+        info.populate_from_store(self.store.as_ref()).await
     }
 
-    /// Load the potentially missing portal info by first reading it from cache, and then fetching
-    /// from the mod portal if the cache has expired
+    /// Load the potentially missing portal info by first reading it from store, and then fetching
+    /// from the mod portal if the store has expired
     pub async fn ensure_portal_info(&self) -> anyhow::Result<()> {
         trace!("Ensuring info for '{}'", self.name().await);
 
-        if let Some(cache_mod) = self.store.cache.get_factorio_mod(self.name().await).await? {
-            let time_since_updated = Utc::now() - cache_mod.last_updated;
-            let expired = time_since_updated.to_std()? > Duration::from_secs(self.config.cache_expiry());
+        if let Some(store_mod) = self.store.get_factorio_mod(self.name().await).await? {
+            let time_since_updated = Utc::now() - store_mod.last_updated;
+            let expired = time_since_updated.to_std()? > Duration::from_secs(self.config.store_expiry());
 
             trace!(
-                "Ensuring mod '{}' has portal info. Got cached mod: {:?}. Expired: {} (configured expiry {} seconds)",
+                "Ensuring mod '{}' has portal info. Got stored mod: {:?}. Expired: {} (configured expiry {} seconds)",
                 self.name().await,
-                cache_mod,
+                store_mod,
                 expired,
-                self.config.cache_expiry(),
+                self.config.store_expiry(),
             );
 
             if !expired {
                 let mut info = self.info.lock().await;
-                info.populate_with_cache_object(self.store.as_ref(), cache_mod).await?;
+                info.populate_with_store_object(self.store.as_ref(), store_mod).await?;
 
                 return Ok(());
             }
         }
 
-        // TODO: update the cache here?
+        // TODO: update the store here?
         self.fetch_portal_info().await
     }
 
@@ -444,7 +440,7 @@ impl Mod {
             return Ok(checksum.to_owned());
         }
 
-        let checksum = calculate_zip_checksum(CACHE_ZIP_CHECKSUM_ALGO, self.zip_path().await?).await?;
+        let checksum = calculate_zip_checksum(STORE_ZIP_CHECKSUM_ALGO, self.zip_path().await?).await?;
         *self.zip_checksum.lock().await = Some(checksum.clone());
 
         trace!(

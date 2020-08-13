@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 pub struct OptsConfig {
     /// Corresponds to the `--log-level` option.
     log_level: Option<LogLevel>,
-    /// Corresponds to the `--cache-expiry` option.
-    cache_expiry: Option<u64>,
+    /// Corresponds to the `--store-expiry` option.
+    store_expiry: Option<u64>,
 }
 
 impl ConfigSource for OptsConfig {
@@ -20,7 +20,7 @@ impl ConfigSource for OptsConfig {
     fn apply_to_config(self, config: Config) -> Config {
         Config {
             log_level: self.log_level.unwrap_or(config.log_level),
-            cache_expiry: self.cache_expiry.unwrap_or(config.cache_expiry),
+            store_expiry: self.store_expiry.unwrap_or(config.store_expiry),
             ..config
         }
     }
@@ -31,7 +31,7 @@ impl OptsConfig {
     pub fn new(opts: &Opts) -> Self {
         Self {
             log_level: opts.log_level,
-            cache_expiry: opts.cache_expiry,
+            store_expiry: opts.store_expiry,
         }
     }
 }

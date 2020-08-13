@@ -21,8 +21,44 @@ CREATE TABLE IF NOT EXISTS "factorio_mod" (
 
 DROP TABLE IF EXISTS "game";
 CREATE TABLE IF NOT EXISTS "game" (
-	"id"	INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+	/* without AUTOINCREMENT, an integer primary key is aliased to SQLite's internal ROWID which functions better as a primary key and than autoincremented one */
+	"id" INTEGER PRIMARY KEY,
 	"path"	TEXT NOT NULL
+);
+
+DROP TABLE IF EXISTS "game_settings";
+CREATE TABLE IF NOT EXISTS "game_settings" (
+	"game" INTEGER PRIMARY KEY,
+	"name" TEXT NOT NULL,
+	"description" TEXT NOT NULL,
+	"max_players" INTEGER NOT NULL,
+	"public_visibility" INTEGER NOT NULL,
+	"lan_visibility" INTEGER NOT NULL,
+	"username" TEXT NOT NULL,
+	"password" TEXT NOT NULL,
+	"token" TEXT NOT NULL,
+	"game_password" TEXT NOT NULL,
+	"require_user_verification" INTEGER NOT NULL,
+	"max_upload_in_kilobytes_per_second" INTEGER NOT NULL,
+	"max_upload_slots" INTEGER NOT NULL,
+	"minimum_latency_in_ticks" INTEGER NOT NULL,
+	"ignore_player_limit_for_returning_players" INTEGER NOT NULL,
+	"allow_commands" TEXT NOT NULL,
+	"autosave_interval" INTEGER NOT NULL,
+	"autosave_slots" INTEGER NOT NULL,
+	"afk_autokick_interval" INTEGER NOT NULL,
+	"auto_pause" INTEGER NOT NULL,
+	"only_admins_can_pause_the_game" INTEGER NOT NULL,
+	"autosave_only_on_server" INTEGER NOT NULL,
+	"non_blocking_saving" INTEGER NOT NULL,
+	"minimum_segment_size" INTEGER NOT NULL,
+	"minimum_segment_size_peer_count" INTEGER NOT NULL,
+	"maximum_segment_size" INTEGER NOT NULL,
+	"maximimum_segment_size_peer_count" INTEGER NOT NULL,
+	"bind_address_ip_version" INTEGER NOT NULL,
+	"bind_address" BLOB NOT NULL,
+	"bind_port" INTEGER NOT NULL,
+	FOREIGN KEY("game") REFERENCES "game"("id")
 );
 
 DROP TABLE IF EXISTS "game_mod";

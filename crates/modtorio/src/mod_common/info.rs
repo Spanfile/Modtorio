@@ -5,7 +5,7 @@ use super::Dependency;
 use crate::{
     error::ModError,
     mod_portal::ModPortal,
-    store::{cache::models, Store},
+    store::{models, Store},
     util,
     util::{
         ext::{PathExt, ZipExt},
@@ -231,27 +231,23 @@ impl Info {
         Ok(Self::from_portal_info(portal_info)?)
     }
 
-    /// Builds an info object from the program cache based on a cached mod and its wanted version.
-    pub async fn from_cache(
+    /// Builds an info object from the program store based on a stored mod and its wanted version.
+    pub async fn from_store(
         factorio_mod: models::FactorioMod,
         version: HumanVersion,
         store: &Store,
     ) -> anyhow::Result<Self> {
-        trace!("Building info object from cached mod {:?}", factorio_mod);
+        trace!("Building info object from stored mod {:?}", factorio_mod);
 
         let name = factorio_mod.name;
         let mut releases = Vec::new();
         let mut this_release = None;
 
-        for release in store.cache.get_mod_releases(name.clone()).await? {
+        for release in store.get_mod_releases(name.clone()).await? {
             let mut dependencies = Vec::new();
 
-            for cache_dep in store
-                .cache
-                .get_release_dependencies(name.clone(), release.version)
-                .await?
-            {
-                dependencies.push(cache_dep.into());
+            for store_dep in store.get_release_dependencies(name.clone(), release.version).await? {
+                dependencies.push(store_dep.into());
             }
 
             releases.push(Release {
@@ -381,33 +377,32 @@ impl Info {
         Ok(())
     }
 
-    /// Populates an existing info object from the program cache based on a given cached mod.
-    pub async fn populate_with_cache_object(
+    /// Populates an existing info object from the program store based on a given stored mod.
+    pub async fn populate_with_store_object(
         &mut self,
         store: &'_ Store,
-        cache_mod: models::FactorioMod,
+        store_mod: models::FactorioMod,
     ) -> anyhow::Result<()> {
-        trace!("Mod '{}' got cached mod: {:?}", self.name, cache_mod);
+        trace!("Mod '{}' got stored mod: {:?}", self.name, store_mod);
 
-        self.author.name = cache_mod.author;
-        self.author.contact = cache_mod.contact;
-        self.author.homepage = cache_mod.homepage;
-        self.display.title = cache_mod.title;
-        self.display.summary = cache_mod.summary;
-        self.display.description = cache_mod.description;
-        self.display.changelog = cache_mod.changelog;
+        self.author.name = store_mod.author;
+        self.author.contact = store_mod.contact;
+        self.author.homepage = store_mod.homepage;
+        self.display.title = store_mod.title;
+        self.display.summary = store_mod.summary;
+        self.display.description = store_mod.description;
+        self.display.changelog = store_mod.changelog;
 
         let mut releases = Vec::new();
-        for release in store.cache.get_mod_releases(self.name.clone()).await? {
-            trace!("Mod '{}' got cached release: {:?}", self.name, release);
+        for release in store.get_mod_releases(self.name.clone()).await? {
+            trace!("Mod '{}' got stored release: {:?}", self.name, release);
             let mut dependencies = Vec::new();
 
-            for cache_dep in store
-                .cache
+            for store_dep in store
                 .get_release_dependencies(self.name.clone(), release.version)
                 .await?
             {
-                dependencies.push(cache_dep.into());
+                dependencies.push(store_dep.into());
             }
 
             releases.push(Release {
@@ -426,16 +421,16 @@ impl Info {
         Ok(())
     }
 
-    /// Populates an existing info object from the program cached based on the mod's named in the
+    /// Populates an existing info object from the program stored based on the mod's named in the
     /// info object.
     #[allow(dead_code)]
-    pub async fn populate_from_cache(&mut self, store: &'_ Store) -> anyhow::Result<()> {
-        if let Some(cache_mod) = store.cache.get_factorio_mod(self.name.clone()).await? {
-            self.populate_with_cache_object(store, cache_mod).await
+    pub async fn populate_from_store(&mut self, store: &'_ Store) -> anyhow::Result<()> {
+        if let Some(store_mod) = store.get_factorio_mod(self.name.clone()).await? {
+            self.populate_with_store_object(store, store_mod).await
         } else {
-            trace!("Mod '{}' not in cache while trying to load it from cache", self.name);
+            trace!("Mod '{}' not in store while trying to load it from store", self.name);
 
-            Err(ModError::ModNotInCache.into())
+            Err(ModError::ModNotInStore.into())
         }
     }
 }

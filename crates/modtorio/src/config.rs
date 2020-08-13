@@ -19,8 +19,8 @@ use util::LogLevel;
 pub const DEFAULT_CONFIG_FILE_LOCATION: &str = "modtorio.toml";
 /// The default program store location, relative to the working directory.
 pub const DEFAULT_STORE_FILE_LOCATION: &str = "modtorio.db";
-/// The default cache expiry time in seconds.
-pub const DEFAULT_CACHE_EXPIRY: u64 = 3600;
+/// The default store expiry time in seconds.
+pub const DEFAULT_STORE_EXPIRY: u64 = 3600;
 
 // when running tests with cargo, they all share the same set of environment variables (cargo's)
 // and cargo runs them all in parallel. this means the tests *will* interfere with each other's
@@ -54,8 +54,8 @@ pub struct Config {
     portal_username: String,
     /// The mod portal token.
     portal_token: String,
-    /// The program cache expiry in seconds.
-    cache_expiry: u64,
+    /// The program store expiry in seconds.
+    store_expiry: u64,
     /// The server listen addresses
     listen: Vec<NetAddress>,
 }
@@ -153,9 +153,9 @@ impl Config {
         &self.portal_token
     }
 
-    /// Retuns the program cache expiry config value.
-    pub fn cache_expiry(&self) -> u64 {
-        self.cache_expiry
+    /// Retuns the program store expiry config value.
+    pub fn store_expiry(&self) -> u64 {
+        self.store_expiry
     }
 
     /// Returns the network listen addresses
@@ -174,7 +174,7 @@ mod tests {
         let contents = String::from(
             r#"[debug]
 log_level = "trace"
-[cache]
+[store]
 expiry = 60
 [network]
 listen = ["0.0.0.0:1337", "unix:/temp/path"]"#,
@@ -183,7 +183,7 @@ listen = ["0.0.0.0:1337", "unix:/temp/path"]"#,
     }
 
     fn temp_opts() -> Opts {
-        Opts::custom_args(&["--log-level", "trace", "--cache-expiry", "60"])
+        Opts::custom_args(&["--log-level", "trace", "--store-expiry", "60"])
     }
 
     fn temp_env() {
@@ -235,7 +235,7 @@ listen = ["0.0.0.0:1337", "unix:/temp/path"]"#,
         println!("{:?}", config);
 
         assert_eq!(config.log_level, LogLevel::Trace);
-        assert_eq!(config.cache_expiry, 60);
+        assert_eq!(config.store_expiry, 60);
         assert_eq!(config.portal_username, "env_username");
         assert_eq!(config.portal_token, "env_token");
         assert_eq!(

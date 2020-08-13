@@ -77,13 +77,13 @@ pub enum ModError {
         /// The mod's existing name
         existing: String,
     },
-    /// Returned when verifying a cached-loaded mod whose corresponding zip archive doesn't exist
+    /// Returned when verifying a store-loaded mod whose corresponding zip archive doesn't exist
     /// in the filesystem.
     #[error("Mod zip does not exist in filesystem: {0}")]
     MissingZip(PathBuf),
     /// Returned when:
     ///  * a downloaded mod archive's SHA1 checksum doesn't match its expected checksum from the portal.
-    ///  * a mod archive's checksum doesn't match the mod's cached archive checksum.
+    ///  * a mod archive's checksum doesn't match the mod's stored archive checksum.
     #[error("Mod zip's checksum does not match expected: got {zip_checksum}, expected {expected}")]
     ZipChecksumMismatch {
         /// The zip archive's checksum.
@@ -91,9 +91,9 @@ pub enum ModError {
         /// The expected checksum.
         expected: String,
     },
-    /// Returned when trying to load an uncached mod from the cache.
-    #[error("Mod not in cache")]
-    ModNotInCache,
+    /// Returned when trying to load an unstored mod from the store.
+    #[error("Mod not in store")]
+    ModNotInStore,
     // TODO: separate this error into not-installed and not-fetched-from-portal
     /// A mod doesn't contain all info when expected, i.e. it hasn't been populated
     /// from the portal or the zip archive.

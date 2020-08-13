@@ -1,6 +1,6 @@
 //! Provides the `FileConfig` object, used to access config values from a config file.
 
-use super::{Config, ConfigSource, DEFAULT_CACHE_EXPIRY};
+use super::{Config, ConfigSource, DEFAULT_STORE_EXPIRY};
 use crate::util::LogLevel;
 use common::net::NetAddress;
 use serde::{Deserialize, Serialize};
@@ -12,9 +12,9 @@ pub struct FileConfig {
     /// Debug config options
     #[serde(default)] // TODO: test these defaults
     debug: DebugOptions,
-    /// Cache config options
+    /// Store config options
     #[serde(default)]
-    cache: CacheOptions,
+    store: StoreOptions,
     /// Network config options
     network: NetworkOptions,
 }
@@ -26,10 +26,10 @@ pub struct DebugOptions {
     log_level: LogLevel,
 }
 
-/// Contains the config values from the `[cache]` section of a config file.
+/// Contains the config values from the `[store]` section of a config file.
 #[derive(Debug, Deserialize, Serialize)]
-pub struct CacheOptions {
-    /// The program cache expiry in seconds.
+pub struct StoreOptions {
+    /// The program store expiry in seconds.
     expiry: u64,
 }
 
@@ -46,7 +46,7 @@ impl ConfigSource for FileConfig {
     fn apply_to_config(self, config: Config) -> Config {
         Config {
             log_level: self.debug.log_level,
-            cache_expiry: self.cache.expiry,
+            store_expiry: self.store.expiry,
             listen: self.network.listen,
             ..config
         }
@@ -77,10 +77,10 @@ impl FileConfig {
     }
 }
 
-impl Default for CacheOptions {
+impl Default for StoreOptions {
     fn default() -> Self {
         Self {
-            expiry: DEFAULT_CACHE_EXPIRY,
+            expiry: DEFAULT_STORE_EXPIRY,
         }
     }
 }
@@ -95,7 +95,7 @@ mod tests {
         let contents = String::from(
             r#"[debug]
 log_level = "trace"
-[cache]
+[store]
 expiry = 60
 [network]
 listen = ["0.0.0.0:1337", "unix:/temp/path"]"#,
@@ -104,7 +104,7 @@ listen = ["0.0.0.0:1337", "unix:/temp/path"]"#,
         let config = FileConfig::new(&mut contents).expect("failed to create FileConfig");
 
         assert_eq!(config.debug.log_level, LogLevel::Trace);
-        assert_eq!(config.cache.expiry, 60);
+        assert_eq!(config.store.expiry, 60);
         assert_eq!(
             config.network.listen,
             vec![
@@ -135,6 +135,6 @@ listen = ["0.0.0.0:1337"]"#,
         let config = FileConfig::new(&mut contents).expect("failed to create FileConfig");
 
         assert_eq!(config.debug.log_level, LogLevel::default());
-        assert_eq!(config.cache.expiry, DEFAULT_CACHE_EXPIRY);
+        assert_eq!(config.store.expiry, DEFAULT_STORE_EXPIRY);
     }
 }

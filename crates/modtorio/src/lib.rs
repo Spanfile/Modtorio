@@ -32,7 +32,7 @@ use rpc::{
     mod_rpc_server::{ModRpc, ModRpcServer},
     server_status::{game::GameStatus, Game, InstanceStatus},
     Empty, EnsureModDependenciesRequest, GetServerSettingsRequest, ImportRequest, InstallModRequest, Progress,
-    ServerSettings, ServerStatus, SetServerSettingsRequest, UpdateCacheRequest, UpdateModsRequest, VersionInformation,
+    ServerSettings, ServerStatus, SetServerSettingsRequest, UpdateModsRequest, UpdateStoreRequest, VersionInformation,
 };
 use std::{path::Path, sync::Arc};
 use store::Store;
@@ -97,40 +97,40 @@ impl Modtorio {
         let i = instance.clone();
         task::spawn(async move {
             info!("Loading previous games...");
-            let cached_games = match i.store.cache.get_games().await {
+            let stored_games = match i.store.get_games().await {
                 Ok(games) => games,
                 Err(e) => {
-                    error!("Failed to get cached games: {}", e);
+                    error!("Failed to get stored games: {}", e);
                     return;
                 }
             };
             let mut games = Vec::new();
-            debug!("Got cached games: {:?}", cached_games);
+            debug!("Got stored games: {:?}", stored_games);
 
-            for cached_game in &cached_games {
+            for stored_game in &stored_games {
                 info!(
-                    "Importing cached game ID {} from path {}...",
-                    cached_game.id, cached_game.path
+                    "Importing stored game ID {} from path {}...",
+                    stored_game.id, stored_game.path
                 );
 
-                let game = match factorio::Importer::from_cache(cached_game)
+                let game = match factorio::Importer::from_store(stored_game)
                     .import(Arc::clone(&i.config), Arc::clone(&i.portal), Arc::clone(&i.store))
                     .await
                 {
                     Ok(game) => game,
                     Err(e) => {
-                        error!("Failed to import cached game: {}", e.to_string());
+                        error!("Failed to import stored game: {}", e.to_string());
                         return;
                     }
                 };
 
                 info!(
-                    "Cached game ID {} imported from {}. {} mods",
-                    cached_game.id,
-                    cached_game.path,
+                    "Stored game ID {} imported from {}. {} mods",
+                    stored_game.id,
+                    stored_game.path,
                     game.mods().count()
                 );
-                debug!("Cached game: {:?}", cached_game);
+                debug!("Stored game: {:?}", stored_game);
                 games.push(game);
             }
 
@@ -291,8 +291,8 @@ impl Modtorio {
                 }
             };
 
-            if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
-                error!("Failed to update game cache: {}", e);
+            if let Err(e) = game.update_store(Some(prog_tx.clone())).await {
+                error!("Failed to update game store: {}", e);
                 send_status(&prog_tx, Err(RpcError::from(e).into())).await;
                 return;
             }
@@ -302,8 +302,8 @@ impl Modtorio {
         });
     }
 
-    /// Updates a given game instance's cache.
-    async fn update_cache(self, game_index: usize, prog_tx: status::AsyncProgressChannel) {
+    /// Updates a given game instance's store.
+    async fn update_store(self, game_index: usize, prog_tx: status::AsyncProgressChannel) {
         if let Err(e) = self.assert_instance_status(InstanceStatus::Running).await {
             if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
                 send_status(&prog_tx, Err(rpc_error.into())).await;
@@ -317,8 +317,8 @@ impl Modtorio {
             let games = self.games.lock().await;
             let game = games.get(game_index);
             if let Some(game) = game {
-                if let Err(e) = game.update_cache(Some(prog_tx.clone())).await {
-                    error!("Failed to update game cache: {}", e);
+                if let Err(e) = game.update_store(Some(prog_tx.clone())).await {
+                    error!("Failed to update game store: {}", e);
                     send_status(&prog_tx, Err(RpcError::from(e).into())).await;
                     return;
                 }
@@ -473,7 +473,7 @@ impl Modtorio {
 #[tonic::async_trait]
 impl ModRpc for Modtorio {
     type ImportGameStream = mpsc::Receiver<Result<Progress, Status>>;
-    type UpdateCacheStream = mpsc::Receiver<Result<Progress, Status>>;
+    type UpdateStoreStream = mpsc::Receiver<Result<Progress, Status>>;
     type InstallModStream = mpsc::Receiver<Result<Progress, Status>>;
     type UpdateModsStream = mpsc::Receiver<Result<Progress, Status>>;
     type EnsureModDependenciesStream = mpsc::Receiver<Result<Progress, Status>>;
@@ -526,15 +526,15 @@ impl ModRpc for Modtorio {
         Ok(resp)
     }
 
-    async fn update_cache(
+    async fn update_store(
         &self,
-        req: Request<UpdateCacheRequest>,
-    ) -> Result<Response<Self::UpdateCacheStream>, Status> {
+        req: Request<UpdateStoreRequest>,
+    ) -> Result<Response<Self::UpdateStoreStream>, Status> {
         log_rpc_request(&req);
         let (tx, rx) = channel();
 
         let msg = req.into_inner();
-        self.clone().update_cache(msg.game_index as usize, tx).await;
+        self.clone().update_store(msg.game_index as usize, tx).await;
         let resp = Response::new(rx);
         log_rpc_response(&resp);
 

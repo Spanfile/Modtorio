@@ -3,11 +3,11 @@
 
 mod mods_builder;
 
-use super::GameCacheId;
+use super::GameStoreId;
 use crate::{
     error::ModError,
     mod_common::{DownloadResult, Mod, Requirement},
-    store::{cache::models, Store},
+    store::{models, Store},
     util::{ext::PathExt, status, HumanVersion},
     Config, ModPortal,
 };
@@ -45,15 +45,15 @@ impl Mods {
         self.mods.len()
     }
 
-    /// Updates the cache for all current mods. This includes updating both the mod information and
+    /// Updates the store for all current mods. This includes updating both the mod information and
     /// the game-to-mod mapping.
     #[allow(dead_code)]
-    pub async fn update_cache(
+    pub async fn update_store(
         &self,
-        game_id: GameCacheId,
+        game_id: GameStoreId,
         prog_tx: Option<status::AsyncProgressChannel>,
     ) -> anyhow::Result<()> {
-        debug!("Updating cached mods for game {}", game_id);
+        debug!("Updating stored mods for game {}", game_id);
         let new_game_mods = Mutex::new(Vec::new());
         let max_mods = self.mods.len() as u32;
 
@@ -63,28 +63,28 @@ impl Mods {
 
             prog_tx
                 .send_status(status::definite(
-                    &format!("Updating mod cache for {}...", mod_display),
+                    &format!("Updating mod store for {}...", mod_display),
                     index as u32,
                     max_mods,
                 ))
                 .await?;
 
-            match fact_mod.update_cache().await {
-                Ok(()) => debug!("Updated Factorio mod cache for {}", mod_name),
+            match fact_mod.update_store().await {
+                Ok(()) => debug!("Updated Factorio mod store for {}", mod_name),
                 Err(e) => {
-                    error!("Cache update for {} failed: {}", mod_display, e);
+                    error!("Store update for {} failed: {}", mod_display, e);
                     continue;
                 }
             }
 
-            debug!("Updating game '{}' cached mod '{}'...", game_id, mod_name);
+            debug!("Updating game '{}' stored mod '{}'...", game_id, mod_name);
 
             let factorio_mod = mod_name.clone();
             let mod_version = fact_mod.own_version().await?;
             let mod_zip = fact_mod.zip_path().await?.get_file_name()?;
             let zip_checksum = fact_mod.get_zip_checksum().await?;
 
-            let cache_game_mod = models::GameMod {
+            let store_game_mod = models::GameMod {
                 game: game_id,
                 factorio_mod,
                 mod_version,
@@ -92,18 +92,18 @@ impl Mods {
                 zip_checksum,
             };
             // trace!(
-            //     "{}'s cached mod {}: {:?}",
+            //     "{}'s stored mod {}: {:?}",
             //     game_id,
             //     mod_name,
-            //     cache_game_mod
+            //     store_game_mod
             // );
 
-            new_game_mods.lock().await.push(cache_game_mod);
-            info!("Updated cache for {}", mod_display);
+            new_game_mods.lock().await.push(store_game_mod);
+            info!("Updated store for {}", mod_display);
         }
 
-        self.store.cache.set_mods_of_game(new_game_mods.into_inner()).await?;
-        info!("Updated game ID {}'s cached mods", game_id);
+        self.store.set_mods_of_game(new_game_mods.into_inner()).await?;
+        info!("Updated game ID {}'s stored mods", game_id);
 
         Ok(())
     }

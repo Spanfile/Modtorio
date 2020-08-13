@@ -19,8 +19,8 @@ pub struct Opts {
     pub no_conf: bool,
     /// The log level to use.
     pub log_level: Option<LogLevel>,
-    /// The program cache expiry in seconds.
-    pub cache_expiry: Option<u64>,
+    /// The program store expiry in seconds.
+    pub store_expiry: Option<u64>,
 }
 
 impl Opts {
@@ -69,11 +69,11 @@ impl Opts {
                     .help("Specify the log level to use."),
             )
             .arg(
-                Arg::with_name("cache-expiry")
-                    .long("cache-expiry")
+                Arg::with_name("store-expiry")
+                    .long("store-expiry")
                     .value_name("SECONDS")
                     .takes_value(true)
-                    .help("Specify the cache expiry time."),
+                    .help("Specify the store expiry time."),
             )
     }
 
@@ -90,8 +90,8 @@ impl Opts {
             log_level: matches
                 .value_of("log-level")
                 .map(|s| s.parse().expect("failed to parse value as log level")),
-            cache_expiry: matches
-                .value_of("cache-expiry")
+            store_expiry: matches
+                .value_of("store-expiry")
                 .map(|s| s.parse().expect("failed to parse value as u64")),
         }
     }

@@ -1,17 +1,19 @@
 //! The program store, used to store persistent data about the program in an SQLite database.
 
-pub mod cache;
+pub mod game_settings;
+pub mod models;
 pub mod option;
 
-use crate::{error::StoreError, util, util::ext::PathExt};
-pub use cache::Cache;
+use crate::{error::StoreError, factorio::GameStoreId, util, util::ext::PathExt};
 use log::*;
-use rusqlite::{Connection, OptionalExtension};
+use models::{FactorioMod, Game, GameMod, GameSettings, ModRelease, ReleaseDependency};
+use rusqlite::{Connection, OptionalExtension, NO_PARAMS};
 use std::{
     path::Path,
     sync::{Arc, Mutex},
 };
 use tokio::task;
+use util::HumanVersion;
 
 include!(concat!(env!("OUT_DIR"), "/store_consts.rs"));
 
@@ -20,13 +22,11 @@ pub(crate) const MEMORY_STORE: &str = "_memory";
 /// The maximum permissions the store database file can have (600: `r--------`)
 const MAX_STORE_FILE_PERMISSIONS: u32 = 0o600;
 
-/// Provides access to the program store and cache. New instances are created with a
+/// Provides access to the program store and store. New instances are created with a
 /// [`Builder`](Builder).
 pub struct Store {
     /// The connection to the SQLite database file.
     conn: Arc<Mutex<Connection>>,
-    /// The program cache.
-    pub cache: Cache,
 }
 
 /// Builds new [`Store`](Store) instances.
@@ -95,7 +95,7 @@ where
             trace!("Missing schema checksum, calculating");
             util::checksum::blake2b_string(&self.schema)
         };
-        trace!("Cache database schema checksum: {}", schema_checksum);
+        trace!("Store database schema checksum: {}", schema_checksum);
 
         let (store_file_exists, conn) = match self.store_location {
             StoreLocation::Memory => {
@@ -107,16 +107,14 @@ where
         };
         let conn = Arc::new(Mutex::new(conn));
 
-        let cache = Cache {
-            conn: Arc::clone(&conn),
-        };
-        let store = Store { conn, cache };
-        debug!("Cache database exists: {}", store_file_exists);
+        let store = Store { conn };
+        debug!("Store database exists: {}", store_file_exists);
 
         let checksums_match = store_file_exists && checksum_matches_meta(&store, &schema_checksum).await?;
         debug!("Schema checksums match: {}", checksums_match);
 
         if !checksums_match {
+            warn!("Store database schema checksum mismatch - applying new schema");
             apply_store_schema(&store, &self.schema).await?;
 
             if !self.skip_storing_checksum {
@@ -246,13 +244,13 @@ impl Store {
 
     /// Begins a new transaction in the database with `BEGIN TRANSACTION;`.
     pub fn begin_transaction(&self) -> anyhow::Result<()> {
-        trace!("Beginning new cache transaction");
+        trace!("Beginning new store transaction");
         Ok(self.conn.lock().unwrap().execute_batch("BEGIN TRANSACTION")?)
     }
 
     /// Commits an ongoing transaction in the database with `COMMIT`;
     pub fn commit_transaction(&self) -> anyhow::Result<()> {
-        trace!("Committing cache transaction");
+        trace!("Committing store transaction");
         Ok(self.conn.lock().unwrap().execute_batch("COMMIT")?)
     }
 
@@ -275,6 +273,189 @@ impl Store {
         let conn = &self.conn;
         sql!(conn => {
             conn.execute_named(option::Value::replace_into(), &value.all_params())?;
+            Ok(())
+        })
+    }
+
+    /// Retrieves an option value from the option table with a given option field.
+    pub async fn get_settings(&self, game: GameStoreId) -> anyhow::Result<GameSettings> {
+        let conn = &self.conn;
+        sql!(conn => {
+            let mut stmt = conn.prepare(GameSettings::select())?;
+
+            Ok(stmt
+                .query_row_named(&GameSettings::select_params(&game), |row| {
+                    Ok(row.into())
+                })?)
+        })
+    }
+
+    /// Stores an option value to the options table.
+    pub async fn set_settings(&self, settings: GameSettings) -> anyhow::Result<()> {
+        let conn = &self.conn;
+        sql!(conn => {
+            conn.execute_named(GameSettings::replace_into(), &settings.all_params())?;
+            Ok(())
+        })
+    }
+
+    /// Retrieves all stored `Game`s.
+    pub async fn get_games(&self) -> anyhow::Result<Vec<Game>> {
+        let conn = &self.conn;
+        sql!(conn => {
+            let mut stmt = conn.prepare(Game::select_all())?;
+            let mut games = Vec::new();
+
+            for game in stmt.query_map(NO_PARAMS, |row| {
+                Ok(row.into())
+            })? {
+                games.push(game?);
+            }
+
+            Ok(games)
+        })
+    }
+
+    /// Retrieves all mods of a given `Game`, identified by its store ID.
+    pub async fn get_mods_of_game(&self, game_store_id: GameStoreId) -> anyhow::Result<Vec<GameMod>> {
+        let conn = &self.conn;
+        sql!(conn => {
+            let mut stmt = conn.prepare(GameMod::select())?;
+            let mut mods = Vec::new();
+
+            for row in stmt.query_map_named(&GameMod::select_params(&game_store_id), |row| {
+                Ok(row.into())
+            })? {
+                mods.push(row?);
+            }
+
+            Ok(mods)
+        })
+    }
+
+    /// Stores all the mods of a `Game`. Will replace existing stored mods in the database.
+    pub async fn set_mods_of_game(&self, mods: Vec<GameMod>) -> anyhow::Result<()> {
+        let conn = &self.conn;
+        sql!(conn => {
+            let mut stmt = conn.prepare(GameMod::replace_into())?;
+
+            for m in &mods {
+                stmt.execute_named(&m.all_params())?;
+            }
+
+            Ok(())
+        })
+    }
+
+    /// Stores a new `Game`.
+    pub async fn insert_game(&self, new_game: Game) -> anyhow::Result<i64> {
+        let conn = &self.conn;
+        sql!(conn => {
+            conn.execute_named(Game::insert_into(), &new_game.all_params())?;
+            let id = conn.last_insert_rowid();
+
+            Ok(id)
+        })
+    }
+
+    /// Updates an existing stored `Game`.
+    pub async fn update_game(&self, game: Game) -> anyhow::Result<()> {
+        let conn = &self.conn;
+        sql!(conn => {
+            conn.execute_named(
+                Game::update(),
+                &game.all_params(),
+            )?;
+
+            Ok(())
+        })
+    }
+
+    /// Retrieves an optional `FactorioMod`.
+    pub async fn get_factorio_mod(&self, factorio_mod: String) -> anyhow::Result<Option<FactorioMod>> {
+        let conn = &self.conn;
+        sql!(conn => {
+            let mut stmt = conn.prepare(FactorioMod::select())?;
+
+            Ok(stmt
+                .query_row_named(&FactorioMod::select_params(&factorio_mod), |row| {
+                    Ok(row.into())
+                })
+                .optional()?)
+        })
+    }
+
+    /// Stores a single `FactorioMod`.
+    pub async fn set_factorio_mod(&self, factorio_mod: models::FactorioMod) -> anyhow::Result<()> {
+        let conn = &self.conn;
+        sql!(conn => {
+            conn.execute_named(FactorioMod::replace_into(), &factorio_mod.all_params())?;
+            Ok(())
+        })
+    }
+
+    /// Retrieves all releases of a `FactorioMod`.
+    pub async fn get_mod_releases(&self, factorio_mod: String) -> anyhow::Result<Vec<ModRelease>> {
+        let conn = &self.conn;
+        sql!(conn => {
+            let mut stmt = conn.prepare(ModRelease::select())?;
+            let mut mods = Vec::new();
+
+            for m in
+                stmt.query_map_named(&ModRelease::select_params(&factorio_mod), |row| {
+                    Ok(row.into())
+                })?
+            {
+                mods.push(m?);
+            }
+
+            Ok(mods)
+        })
+    }
+
+    /// Stores a single `ModRelease`.
+    pub async fn set_mod_release(&self, release: ModRelease) -> anyhow::Result<()> {
+        let conn = &self.conn;
+        sql!(conn => {
+            conn.execute_named(ModRelease::replace_into(), &release.all_params())?;
+            Ok(())
+        })
+    }
+
+    /// Retrieves all `ReleaseDependencies` of a given `ModRelease` based on its mod's name and its
+    /// version.
+    pub async fn get_release_dependencies(
+        &self,
+        release_mod_name: String,
+        release_version: HumanVersion,
+    ) -> anyhow::Result<Vec<ReleaseDependency>> {
+        let conn = &self.conn;
+        sql!(conn => {
+            let mut stmt = conn.prepare(ReleaseDependency::select())?;
+            let mut dependencies = Vec::new();
+
+            for dep in
+                stmt.query_map_named(&ReleaseDependency::select_params(&release_mod_name, &release_version), |row| {
+                    Ok(row.into())
+                })?
+            {
+                dependencies.push(dep?);
+            }
+
+            Ok(dependencies)
+        })
+    }
+
+    /// Stores all given `ReleaseDependencies`.
+    pub async fn set_release_dependencies(&self, dependencies: Vec<ReleaseDependency>) -> anyhow::Result<()> {
+        let conn = &self.conn;
+        sql!(conn => {
+            let mut stmt = conn.prepare(ReleaseDependency::replace_into())?;
+
+            for rel in dependencies {
+                stmt.execute_named(&rel.all_params())?;
+            }
+
             Ok(())
         })
     }
