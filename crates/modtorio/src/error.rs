@@ -216,3 +216,36 @@ impl From<&RpcError> for tonic::Status {
         }
     }
 }
+
+/// Represents all types of errors that can occur when interacting with the Factorio server's executable.
+#[derive(Debug, Error)]
+pub enum ExecutableError {
+    /// Returned when verifying a given executable isn't a valid Factorio server executable.
+    #[error("The executable in '{path}' is not a valid Factorio executable: {source}")]
+    InvalidExecutable {
+        /// The path to the executable.
+        path: PathBuf,
+        /// The source for this error.
+        #[source]
+        source: anyhow::Error,
+    },
+    /// Returned when an executable terminated unsuccesfully (terminated by signal or returned a non-zero exit code).
+    #[error("The executable terminated unsuccesfully: {exit_code:?}\nstdout: {stdout}\nstderr: {stderr}")]
+    Unsuccesfull {
+        /// The executable's exit code, if any.
+        exit_code: Option<i32>,
+        /// The executable's full standard output.
+        stdout: String,
+        /// The executable's full standard error.
+        stderr: String,
+    },
+    /// Returned when trying to parse a version information string fails.
+    #[error("Version information string failed to parse ({ver_str}): {source}")]
+    InvalidVersionInformation {
+        /// The invalid version information string.
+        ver_str: String,
+        /// The source for this error.
+        #[source]
+        source: anyhow::Error,
+    },
+}

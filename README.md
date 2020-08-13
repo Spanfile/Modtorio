@@ -20,3 +20,5 @@ expiry = 60
 [network]
 listen = ["[::1]:1337"]
 ```
+
+To use the `./sample` directory for development, copy a valid Factorio Linux headless server into it (or at the very least, the server executable into `sample/bin/x64`).

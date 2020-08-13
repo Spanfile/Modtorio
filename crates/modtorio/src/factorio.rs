@@ -1,6 +1,7 @@
 //! The whole point. Provides the [`Factorio`](Factorio) struct used to interact with a single
 //! instance of a Factorio server.
 
+pub mod executable;
 pub mod mods;
 pub mod settings;
 
@@ -9,6 +10,7 @@ use crate::{
     util::{ext::PathExt, status, status::AsyncProgressChannelExt},
     Config, ModPortal,
 };
+use executable::Executable;
 use log::*;
 use mods::{Mods, ModsBuilder};
 use settings::ServerSettings;
@@ -35,6 +37,8 @@ pub struct Factorio {
     settings: ServerSettings,
     /// The server's mods.
     mods: Mods,
+    /// The server's executable.
+    executable: Executable,
     /// The server's root directory.
     root: PathBuf,
     /// The program's cache ID.
@@ -50,6 +54,8 @@ pub struct Importer {
     root: PathBuf,
     /// The server's `server-settings.json` file's location.
     settings: PathBuf,
+    /// The server executable's location.
+    executable: PathBuf,
     /// The program's cache ID.
     game_cache_id: Option<GameCacheId>,
     /// A status update channel.
@@ -127,34 +133,44 @@ impl Factorio {
     pub fn settings_mut(&mut self) -> &mut ServerSettings {
         &mut self.settings
     }
+
+    /// Immutably borrows the server's executable.
+    pub fn executable(&self) -> &Executable {
+        &self.executable
+    }
 }
 
 impl Importer {
     /// Returns a new `Importer` using a certain path as the new Factorio server instance's root
     /// directory.
-    pub fn from_root<P>(root: P) -> Self
+    pub fn from_root<P>(root: P) -> anyhow::Result<Self>
     where
         P: AsRef<Path>,
     {
-        Self {
-            root: root.as_ref().to_path_buf(),
+        Ok(Self {
+            root: root.as_ref().canonicalize()?,
             settings: PathBuf::from(SERVER_SETTINGS_FILENAME),
+            executable: root.as_ref().join(executable::DEFAULT_PATH),
             game_cache_id: None,
             prog_tx: None,
-        }
+        })
     }
 
     /// Returns a new `Importer` with information from a cached `Game`.
     pub fn from_cache(cached_game: &models::Game) -> Self {
+        let root = PathBuf::from(&cached_game.path);
+        let executable = root.join(executable::DEFAULT_PATH);
+
         Self {
-            root: PathBuf::from(&cached_game.path),
+            root,
             settings: PathBuf::from(SERVER_SETTINGS_FILENAME),
+            executable,
             game_cache_id: Some(cached_game.id),
             prog_tx: None,
         }
     }
 
-    /// Specify a custom file to read the server's settings from.
+    /// Specify a custom file to read the server's settings from. The path is relative to the server's root path.
     #[allow(dead_code)]
     pub fn with_server_settings<P>(self, settings: P) -> Self
     where
@@ -162,6 +178,18 @@ impl Importer {
     {
         Self {
             settings: settings.as_ref().to_path_buf(),
+            ..self
+        }
+    }
+
+    /// Specify a custom server executable path. The path is relative to the server's root path.
+    #[allow(dead_code)]
+    pub fn with_executable_path<P>(self, executable: P) -> Self
+    where
+        P: AsRef<Path>,
+    {
+        Self {
+            executable: executable.as_ref().to_path_buf(),
             ..self
         }
     }
@@ -202,12 +230,18 @@ impl Importer {
             .await?;
         let settings = ServerSettings::from_game_json(&fs::read_to_string(settings_path)?)?;
 
+        self.prog_tx
+            .send_status(status::indefinite("Verifying executable..."))
+            .await?;
+        let executable = Executable::new(self.executable).await?;
+
         self.prog_tx.send_status(status::indefinite("Loading mods...")).await?;
         let mods = mods_builder.build(config, portal, Arc::clone(&store)).await?;
 
         Ok(Factorio {
             settings,
             mods,
+            executable,
             root: self.root,
             cache_id: Mutex::new(self.game_cache_id),
             store,

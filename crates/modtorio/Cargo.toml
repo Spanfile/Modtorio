@@ -46,7 +46,7 @@ features = ["json"]
 version = "0.10.7"
 
 [dependencies.tokio]
-features = ["rt-threaded", "sync", "macros", "fs", "blocking"]
+features = ["rt-threaded", "sync", "macros", "fs", "blocking", "process"]
 version = "0.2.22"
 
 [dependencies.chrono]

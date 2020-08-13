@@ -83,6 +83,11 @@ pub struct HumanVersionReq {
 }
 
 impl HumanVersion {
+    /// Returns a new `HumanVersion` from the given major, minor and patch components.
+    pub fn new(major: u64, minor: u64, patch: u64) -> HumanVersion {
+        Self { major, minor, patch }
+    }
+
     /// Checks whether this version meets a `HumanVersionReq` requirement.
     pub fn meets(self, requirement: HumanVersionReq) -> bool {
         match requirement.comparator {

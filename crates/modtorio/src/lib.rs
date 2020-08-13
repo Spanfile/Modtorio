@@ -119,7 +119,7 @@ impl Modtorio {
                 {
                     Ok(game) => game,
                     Err(e) => {
-                        error!("Failed to import cached game: {}", e);
+                        error!("Failed to import cached game: {}", e.to_string());
                         return;
                     }
                 };
@@ -259,7 +259,16 @@ impl Modtorio {
 
         let path = path.as_ref().to_path_buf();
         task::spawn(async move {
-            let game = match factorio::Importer::from_root(&path)
+            let importer = match factorio::Importer::from_root(&path) {
+                Ok(i) => i,
+                Err(e) => {
+                    error!("Failed to create new Factorio importer: {}", e);
+                    send_status(&prog_tx, Err(RpcError::from(e).into())).await;
+                    return;
+                }
+            };
+
+            let game = match importer
                 .with_status_updates(prog_tx.clone())
                 .import(
                     Arc::clone(&self.config),
