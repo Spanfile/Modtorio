@@ -55,6 +55,7 @@ message ServerStatus {
       SHUTTING_DOWN = 3;
     };
     GameStatus status = 2;
+    int64 game_id = 3;
   };
   repeated Game games = 2;
 
@@ -66,17 +67,17 @@ message ServerStatus {
 }
 
 message ImportRequest { string path = 1; }
-message UpdateStoreRequest { uint32 game_index = 1; }
+message UpdateStoreRequest { int64 game_id = 1; }
 message InstallModRequest {
-  uint32 game_index = 1;
+  int64 game_id = 1;
   string mod_name = 2;
   Version mod_version = 3;
 }
-message UpdateModsRequest { uint32 game_index = 1; }
-message EnsureModDependenciesRequest { uint32 game_index = 1; }
-message GetServerSettingsRequest { uint32 game_index = 1; }
+message UpdateModsRequest { int64 game_id = 1; }
+message EnsureModDependenciesRequest { int64 game_id = 1; }
+message GetServerSettingsRequest { int64 game_id = 1; }
 message SetServerSettingsRequest {
-  uint32 game_index = 1;
+  int64 game_id = 1;
   ServerSettings settings = 2;
 }
 

@@ -139,7 +139,7 @@ pub struct ReleaseDependency {
 pub struct GameSettings {
     /// The game's ID these settings are for.
     #[index]
-    pub game: i64,
+    pub game: GameStoreId,
     /// The `name` setting in `server-settings.json`.
     pub name: String,
     /// The `description` setting in `server-settings.json`.

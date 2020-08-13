@@ -43,7 +43,7 @@ pub struct Factorio {
     /// The server's root directory.
     root: PathBuf,
     /// The program's store ID.
-    store_id: Mutex<Option<GameStoreId>>,
+    store_id: Arc<Mutex<Option<GameStoreId>>>,
     /// Reference to the program store.
     store: Arc<Store>,
 }
@@ -66,10 +66,9 @@ pub struct Importer {
 impl Factorio {
     /// Updates all information about the instance in the program store.
     pub async fn update_store(&self, prog_tx: Option<status::AsyncProgressChannel>) -> anyhow::Result<()> {
-        let mut store_id = self.store_id.lock().await;
-
         self.store.begin_transaction()?;
 
+        let mut store_id = self.store_id.lock().await;
         let id = if let Some(c) = *store_id {
             info!("Updating existing game ID {} store", c);
             prog_tx
@@ -105,7 +104,9 @@ impl Factorio {
         };
 
         let mut new_settings = GameSettings::default();
+        new_settings.game = id;
         self.settings.to_store_format(&mut new_settings)?;
+
         debug!("Created new settings to store: {:?}", new_settings);
         self.store.set_settings(new_settings).await?;
 
@@ -144,6 +145,12 @@ impl Factorio {
     /// Immutably borrows the server's executable.
     pub fn executable(&self) -> &Executable {
         &self.executable
+    }
+
+    /// Returns the server's store ID. The value is `None` if the server has been newly created and hasn't yet been
+    /// added to the program store.
+    pub async fn store_id(&self) -> Option<GameStoreId> {
+        *self.store_id.lock().await
     }
 }
 
@@ -257,7 +264,7 @@ impl Importer {
             mods,
             executable,
             root: self.root,
-            store_id: Mutex::new(self.game_store_id),
+            store_id: Arc::new(Mutex::new(self.game_store_id)),
             store,
         })
     }

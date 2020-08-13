@@ -347,13 +347,13 @@ impl Store {
     }
 
     /// Stores a new `Game`.
-    pub async fn insert_game(&self, new_game: Game) -> anyhow::Result<i64> {
+    pub async fn insert_game(&self, new_game: Game) -> anyhow::Result<GameStoreId> {
         let conn = &self.conn;
         sql!(conn => {
             conn.execute_named(Game::insert_into(), &new_game.all_params())?;
             let id = conn.last_insert_rowid();
 
-            Ok(id)
+            Ok(id as GameStoreId)
         })
     }
 

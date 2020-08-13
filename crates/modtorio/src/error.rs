@@ -1,6 +1,6 @@
 //! Provides all error types the program uses.
 
-use crate::{mod_common::Dependency, util::HumanVersion};
+use crate::{factorio::GameStoreId, mod_common::Dependency, util::HumanVersion};
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -178,9 +178,9 @@ pub enum ConfigError {
 /// Represents all types of errors that can occur in RPC calls.
 #[derive(Debug, Error)]
 pub enum RpcError {
-    /// Returned when trying to interact with a non-existent game index.
-    #[error("No such game index: {0}")]
-    NoSuchGame(usize),
+    /// Returned when trying to interact with a non-existent game.
+    #[error("No such game ID: {0}")]
+    NoSuchGame(GameStoreId),
     /// Returned when trying to import a Factorio server instance which is already managed by the Modtorio instance.
     #[error("A game in the root directory '{0}' is already managed by this Modtorio instance")]
     GameAlreadyExists(PathBuf),

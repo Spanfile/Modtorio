@@ -25,7 +25,7 @@ use chrono::{DateTime, Utc};
 use common::net::NetAddress;
 use config::Config;
 use error::{ModPortalError, RpcError};
-use factorio::{settings::RpcFormatConversion, Factorio};
+use factorio::{settings::RpcFormatConversion, Factorio, GameStoreId};
 use lazy_static::lazy_static;
 use mod_portal::ModPortal;
 use rpc::{
@@ -215,14 +215,17 @@ impl Modtorio {
 
     /// Returns this instance's managed games in RPC format.
     async fn get_rpc_games(&self) -> Vec<Game> {
-        let games = self.games.lock().await;
-        games
-            .iter()
-            .map(|game| Game {
+        let mut rpc_games = Vec::new();
+
+        for game in self.games.lock().await.iter() {
+            rpc_games.push(Game {
                 path: format!("{}", game.root().display()),
                 status: GameStatus::Shutdown.into(),
-            })
-            .collect()
+                game_id: game.store_id().await.unwrap_or(0),
+            });
+        }
+
+        rpc_games
     }
 
     /// Returns this instance's status.
@@ -303,7 +306,7 @@ impl Modtorio {
     }
 
     /// Updates a given game instance's store.
-    async fn update_store(self, game_index: usize, prog_tx: status::AsyncProgressChannel) {
+    async fn update_store(self, game_id: GameStoreId, prog_tx: status::AsyncProgressChannel) {
         if let Err(e) = self.assert_instance_status(InstanceStatus::Running).await {
             if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
                 send_status(&prog_tx, Err(rpc_error.into())).await;
@@ -315,7 +318,15 @@ impl Modtorio {
 
         task::spawn(async move {
             let games = self.games.lock().await;
-            let game = games.get(game_index);
+            let mut game = None;
+            for g in games.iter() {
+                if let Some(id) = g.store_id().await {
+                    if id == game_id {
+                        game = Some(g);
+                    }
+                }
+            }
+
             if let Some(game) = game {
                 if let Err(e) = game.update_store(Some(prog_tx.clone())).await {
                     error!("Failed to update game store: {}", e);
@@ -325,7 +336,7 @@ impl Modtorio {
 
                 send_status(&prog_tx, status::done()).await;
             } else {
-                send_status(&prog_tx, Err(RpcError::NoSuchGame(game_index).into())).await;
+                send_status(&prog_tx, Err(RpcError::NoSuchGame(game_id).into())).await;
             }
         });
     }
@@ -333,7 +344,7 @@ impl Modtorio {
     /// Installs a mod to a given game instance.
     async fn install_mod(
         self,
-        game_index: usize,
+        game_id: GameStoreId,
         mod_name: String,
         version: Option<HumanVersion>,
         prog_tx: status::AsyncProgressChannel,
@@ -349,7 +360,15 @@ impl Modtorio {
 
         task::spawn(async move {
             let mut games = self.games.lock().await;
-            let game = games.get_mut(game_index);
+            let mut game = None;
+            for g in games.iter_mut() {
+                if let Some(id) = g.store_id().await {
+                    if id == game_id {
+                        game = Some(g);
+                    }
+                }
+            }
+
             if let Some(game) = game {
                 if let Err(e) = game
                     .mods_mut()
@@ -368,13 +387,14 @@ impl Modtorio {
 
                 send_status(&prog_tx, status::done()).await;
             } else {
-                send_status(&prog_tx, Err(RpcError::NoSuchGame(game_index).into())).await;
+                send_status(&prog_tx, Err(RpcError::NoSuchGame(game_id).into())).await;
             }
         });
     }
 
     /// Updates the installed mods of a given game instance.
-    async fn update_mods(self, game_index: usize, prog_tx: status::AsyncProgressChannel) {
+    async fn update_mods(self, game_id: GameStoreId, prog_tx: status::AsyncProgressChannel) {
+        // TODO: allow forcing an update to the portal info
         if let Err(e) = self.assert_instance_status(InstanceStatus::Running).await {
             if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
                 send_status(&prog_tx, Err(rpc_error.into())).await;
@@ -386,7 +406,15 @@ impl Modtorio {
 
         task::spawn(async move {
             let mut games = self.games.lock().await;
-            let game = games.get_mut(game_index);
+            let mut game = None;
+            for g in games.iter_mut() {
+                if let Some(id) = g.store_id().await {
+                    if id == game_id {
+                        game = Some(g);
+                    }
+                }
+            }
+
             if let Some(game) = game {
                 if let Err(e) = game.mods_mut().update(Some(prog_tx.clone())).await {
                     error!("Failed to update mods: {}", e);
@@ -396,13 +424,13 @@ impl Modtorio {
 
                 send_status(&prog_tx, status::done()).await;
             } else {
-                send_status(&prog_tx, Err(RpcError::NoSuchGame(game_index).into())).await;
+                send_status(&prog_tx, Err(RpcError::NoSuchGame(game_id).into())).await;
             }
         });
     }
 
     /// Updates the installed mods of a given game instance.
-    async fn ensure_mod_dependencies(self, game_index: usize, prog_tx: status::AsyncProgressChannel) {
+    async fn ensure_mod_dependencies(self, game_id: GameStoreId, prog_tx: status::AsyncProgressChannel) {
         if let Err(e) = self.assert_instance_status(InstanceStatus::Running).await {
             if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
                 send_status(&prog_tx, Err(rpc_error.into())).await;
@@ -414,7 +442,15 @@ impl Modtorio {
 
         task::spawn(async move {
             let mut games = self.games.lock().await;
-            let game = games.get_mut(game_index);
+            let mut game = None;
+            for g in games.iter_mut() {
+                if let Some(id) = g.store_id().await {
+                    if id == game_id {
+                        game = Some(g);
+                    }
+                }
+            }
+
             if let Some(game) = game {
                 if let Err(e) = game.mods_mut().ensure_dependencies(Some(prog_tx.clone())).await {
                     error!("Failed to ensure mod dependencies: {}", e);
@@ -424,39 +460,55 @@ impl Modtorio {
 
                 send_status(&prog_tx, status::done()).await;
             } else {
-                send_status(&prog_tx, Err(RpcError::NoSuchGame(game_index).into())).await;
+                send_status(&prog_tx, Err(RpcError::NoSuchGame(game_id).into())).await;
             }
         });
     }
 
     /// Retrieves a given game instance's server settings.
-    async fn get_server_settings(&self, game_index: usize) -> anyhow::Result<ServerSettings> {
+    async fn get_server_settings(&self, game_id: GameStoreId) -> anyhow::Result<ServerSettings> {
         self.assert_instance_status(InstanceStatus::Running).await?;
 
         let mut games = self.games.lock().await;
-        let game = games.get_mut(game_index);
+        let mut game = None;
+        for g in games.iter_mut() {
+            if let Some(id) = g.store_id().await {
+                if id == game_id {
+                    game = Some(g);
+                }
+            }
+        }
+
         if let Some(game) = game {
             let mut rpc_server_settings = ServerSettings::default();
             game.settings().to_rpc_format(&mut rpc_server_settings)?;
 
             Ok(rpc_server_settings)
         } else {
-            Err(RpcError::NoSuchGame(game_index).into())
+            Err(RpcError::NoSuchGame(game_id).into())
         }
     }
 
     /// Sets a given game instance's server settings.
-    async fn set_server_settings(&self, game_index: usize, settings: Option<ServerSettings>) -> anyhow::Result<()> {
+    async fn set_server_settings(&self, game_id: GameStoreId, settings: Option<ServerSettings>) -> anyhow::Result<()> {
         self.assert_instance_status(InstanceStatus::Running).await?;
 
         let mut games = self.games.lock().await;
-        let game = games.get_mut(game_index);
+        let mut game = None;
+        for g in games.iter_mut() {
+            if let Some(id) = g.store_id().await {
+                if id == game_id {
+                    game = Some(g);
+                }
+            }
+        }
+
         if let Some(game) = game {
             let server_settings = if let Some(settings) = settings {
-                info!("Updating server {}'s settings", game_index);
+                info!("Updating server ID {}'s settings", game_id);
                 factorio::settings::ServerSettings::from_rpc_format(&settings)?
             } else {
-                info!("Resetting server {}'s settings to default", game_index);
+                info!("Resetting server ID {}'s settings to default", game_id);
                 factorio::settings::ServerSettings::default()
             };
 
@@ -465,7 +517,7 @@ impl Modtorio {
 
             Ok(())
         } else {
-            Err(RpcError::NoSuchGame(game_index).into())
+            Err(RpcError::NoSuchGame(game_id).into())
         }
     }
 }
@@ -534,7 +586,7 @@ impl ModRpc for Modtorio {
         let (tx, rx) = channel();
 
         let msg = req.into_inner();
-        self.clone().update_store(msg.game_index as usize, tx).await;
+        self.clone().update_store(msg.game_id, tx).await;
         let resp = Response::new(rx);
         log_rpc_response(&resp);
 
@@ -547,9 +599,7 @@ impl ModRpc for Modtorio {
 
         let msg = req.into_inner();
         let version = msg.mod_version.map(HumanVersion::from);
-        self.clone()
-            .install_mod(msg.game_index as usize, msg.mod_name, version, tx)
-            .await;
+        self.clone().install_mod(msg.game_id, msg.mod_name, version, tx).await;
         let resp = Response::new(rx);
         log_rpc_response(&resp);
 
@@ -561,7 +611,7 @@ impl ModRpc for Modtorio {
         let (tx, rx) = channel();
 
         let msg = req.into_inner();
-        self.clone().update_mods(msg.game_index as usize, tx).await;
+        self.clone().update_mods(msg.game_id, tx).await;
         let resp = Response::new(rx);
         log_rpc_response(&resp);
 
@@ -576,7 +626,7 @@ impl ModRpc for Modtorio {
         let (tx, rx) = channel();
 
         let msg = req.into_inner();
-        self.clone().ensure_mod_dependencies(msg.game_index as usize, tx).await;
+        self.clone().ensure_mod_dependencies(msg.game_id, tx).await;
         let resp = Response::new(rx);
         log_rpc_response(&resp);
 
@@ -590,7 +640,7 @@ impl ModRpc for Modtorio {
         log_rpc_request(&req);
 
         let msg = req.into_inner();
-        match self.get_server_settings(msg.game_index as usize).await {
+        match self.get_server_settings(msg.game_id).await {
             Ok(s) => {
                 let resp = Response::new(s);
                 log_rpc_response(&resp);
@@ -611,7 +661,7 @@ impl ModRpc for Modtorio {
         log_rpc_request(&req);
 
         let msg = req.into_inner();
-        match self.set_server_settings(msg.game_index as usize, msg.settings).await {
+        match self.set_server_settings(msg.game_id, msg.settings).await {
             Ok(_) => {
                 let resp = Response::new(Empty {});
                 log_rpc_response(&resp);
