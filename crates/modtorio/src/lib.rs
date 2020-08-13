@@ -29,10 +29,10 @@ use factorio::{settings::RpcFormatConversion, Factorio, GameStoreId};
 use lazy_static::lazy_static;
 use mod_portal::ModPortal;
 use rpc::{
+    instance_status::{self, game::GameStatus, Game},
     mod_rpc_server::{ModRpc, ModRpcServer},
-    server_status::{game::GameStatus, Game, InstanceStatus},
-    Empty, EnsureModDependenciesRequest, GetServerSettingsRequest, ImportRequest, InstallModRequest, Progress,
-    ServerSettings, ServerStatus, SetServerSettingsRequest, UpdateModsRequest, UpdateStoreRequest, VersionInformation,
+    Empty, EnsureModDependenciesRequest, GetServerSettingsRequest, ImportRequest, InstallModRequest, InstanceStatus,
+    Progress, ServerSettings, SetServerSettingsRequest, UpdateModsRequest, UpdateStoreRequest, VersionInformation,
 };
 use std::{path::Path, sync::Arc};
 use store::Store;
@@ -74,7 +74,7 @@ pub struct Modtorio {
     /// Timestamp when this Modtorio instance was started.
     started_at: Arc<DateTime<Utc>>,
     /// The instance's status.
-    status: Arc<Mutex<InstanceStatus>>,
+    status: Arc<Mutex<instance_status::Status>>,
 }
 
 impl Modtorio {
@@ -91,7 +91,7 @@ impl Modtorio {
             store,
             games: Arc::new(Mutex::new(Vec::new())),
             started_at: Arc::new(Utc::now()),
-            status: Arc::new(Mutex::new(InstanceStatus::Starting)),
+            status: Arc::new(Mutex::new(instance_status::Status::Starting)),
         };
 
         let i = instance.clone();
@@ -136,7 +136,7 @@ impl Modtorio {
 
             info!("{} previous games loaded.", games.len());
             i.games.lock().await.extend(games);
-            *i.status.lock().await = InstanceStatus::Running;
+            *i.status.lock().await = instance_status::Status::Running;
         });
 
         Ok(instance)
@@ -183,9 +183,9 @@ impl Modtorio {
     }
 
     /// Asserts that the instance's current status is `wanted`.
-    async fn assert_instance_status(&self, wanted: InstanceStatus) -> anyhow::Result<()> {
+    async fn assert_instance_status(&self, wanted: instance_status::Status) -> anyhow::Result<()> {
         let status = self.get_instance_status().await;
-        if status == InstanceStatus::Starting {
+        if status == instance_status::Status::Starting {
             error!(
                 "RPC instance status assertion failed: wanted {:?}, actual {:?}",
                 wanted, status
@@ -229,7 +229,7 @@ impl Modtorio {
     }
 
     /// Returns this instance's status.
-    async fn get_instance_status(&self) -> InstanceStatus {
+    async fn get_instance_status(&self) -> instance_status::Status {
         *self.status.lock().await
     }
 
@@ -238,7 +238,7 @@ impl Modtorio {
     where
         P: AsRef<Path>,
     {
-        if let Err(e) = self.assert_instance_status(InstanceStatus::Running).await {
+        if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
             if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
                 send_status(&prog_tx, Err(rpc_error.into())).await;
             } else {
@@ -307,7 +307,7 @@ impl Modtorio {
 
     /// Updates a given game instance's store.
     async fn update_store(self, game_id: GameStoreId, prog_tx: status::AsyncProgressChannel) {
-        if let Err(e) = self.assert_instance_status(InstanceStatus::Running).await {
+        if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
             if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
                 send_status(&prog_tx, Err(rpc_error.into())).await;
             } else {
@@ -349,7 +349,7 @@ impl Modtorio {
         version: Option<HumanVersion>,
         prog_tx: status::AsyncProgressChannel,
     ) {
-        if let Err(e) = self.assert_instance_status(InstanceStatus::Running).await {
+        if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
             if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
                 send_status(&prog_tx, Err(rpc_error.into())).await;
             } else {
@@ -395,7 +395,7 @@ impl Modtorio {
     /// Updates the installed mods of a given game instance.
     async fn update_mods(self, game_id: GameStoreId, prog_tx: status::AsyncProgressChannel) {
         // TODO: allow forcing an update to the portal info
-        if let Err(e) = self.assert_instance_status(InstanceStatus::Running).await {
+        if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
             if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
                 send_status(&prog_tx, Err(rpc_error.into())).await;
             } else {
@@ -431,7 +431,7 @@ impl Modtorio {
 
     /// Updates the installed mods of a given game instance.
     async fn ensure_mod_dependencies(self, game_id: GameStoreId, prog_tx: status::AsyncProgressChannel) {
-        if let Err(e) = self.assert_instance_status(InstanceStatus::Running).await {
+        if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
             if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
                 send_status(&prog_tx, Err(rpc_error.into())).await;
             } else {
@@ -467,7 +467,7 @@ impl Modtorio {
 
     /// Retrieves a given game instance's server settings.
     async fn get_server_settings(&self, game_id: GameStoreId) -> anyhow::Result<ServerSettings> {
-        self.assert_instance_status(InstanceStatus::Running).await?;
+        self.assert_instance_status(instance_status::Status::Running).await?;
 
         let mut games = self.games.lock().await;
         let mut game = None;
@@ -491,7 +491,7 @@ impl Modtorio {
 
     /// Sets a given game instance's server settings.
     async fn set_server_settings(&self, game_id: GameStoreId, settings: Option<ServerSettings>) -> anyhow::Result<()> {
-        self.assert_instance_status(InstanceStatus::Running).await?;
+        self.assert_instance_status(instance_status::Status::Running).await?;
 
         let mut games = self.games.lock().await;
         let mut game = None;
@@ -547,14 +547,14 @@ impl ModRpc for Modtorio {
         Ok(resp)
     }
 
-    async fn get_server_status(&self, req: Request<Empty>) -> Result<Response<ServerStatus>, Status> {
+    async fn get_instance_status(&self, req: Request<Empty>) -> Result<Response<InstanceStatus>, Status> {
         log_rpc_request(&req);
 
         let uptime = self.get_uptime().await;
         let games = self.get_rpc_games().await;
         let instance_status = self.get_instance_status().await;
 
-        let resp = Response::new(ServerStatus {
+        let resp = Response::new(InstanceStatus {
             uptime: uptime.num_seconds(),
             games,
             instance_status: instance_status.into(),

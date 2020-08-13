@@ -3,7 +3,7 @@ package mod_rpc;
 
 service ModRpc {
   rpc GetVersionInformation(Empty) returns (VersionInformation);
-  rpc GetServerStatus(Empty) returns (ServerStatus);
+  rpc GetInstanceStatus(Empty) returns (InstanceStatus);
 
   rpc ImportGame(ImportRequest) returns (stream Progress);
   rpc UpdateStore(UpdateStoreRequest) returns (stream Progress);
@@ -42,7 +42,7 @@ message VersionInformation {
   Version protocol_version = 2;
 }
 
-message ServerStatus {
+message InstanceStatus {
   int64 uptime = 1;
 
   message Game {
@@ -59,11 +59,11 @@ message ServerStatus {
   };
   repeated Game games = 2;
 
-  enum InstanceStatus {
+  enum Status {
     STARTING = 0;
     RUNNING = 1;
   };
-  InstanceStatus instance_status = 3;
+  Status instance_status = 3;
 }
 
 message ImportRequest { string path = 1; }

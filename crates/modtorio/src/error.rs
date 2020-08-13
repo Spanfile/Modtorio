@@ -191,9 +191,9 @@ pub enum RpcError {
     #[error("Instance status assertion failed: wanted {wanted:?}, actual {actual:?}")]
     InvalidInstanceStatus {
         /// The wanted instance status.
-        wanted: rpc::server_status::InstanceStatus,
+        wanted: rpc::instance_status::Status,
         /// The actual instance status.
-        actual: rpc::server_status::InstanceStatus,
+        actual: rpc::instance_status::Status,
     },
     /// Returned when an unknown or internal error occurred.
     #[error("An internal error occurred: {0}")]
