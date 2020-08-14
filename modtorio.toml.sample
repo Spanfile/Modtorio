@@ -1,0 +1,8 @@
+[network]
+listen = ["[::1]:1337"]
+
+[debug]
+log_level = "info"
+
+[cache]
+expiry = 3600
