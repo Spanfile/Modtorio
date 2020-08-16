@@ -85,6 +85,7 @@ impl Default for PublicVisibility {
 }
 
 impl Publicity {
+    /// Returns a new `Publicity` from a given `ServerSettingsGameFormat`.
     pub fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
         Ok(Self {
             public: if game_format.visibility.public {
@@ -110,6 +111,7 @@ impl Publicity {
         })
     }
 
+    /// Modifies a given `ServerSettingsGameFormat` with this object's settings.
     pub fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
         game_format.visibility.public = self.public.is_some();
         game_format.visibility.lan = self.lan;
@@ -131,6 +133,7 @@ impl Publicity {
         Ok(())
     }
 
+    /// Returns a new `Publicity` from a given `GameSettings`.
     pub fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
         Ok(Self {
             public: if store_format.public_visibility == 0 {
@@ -156,6 +159,7 @@ impl Publicity {
         })
     }
 
+    /// Modifies a given `GameSettings` with this object's settings.
     pub fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
         store_format.public_visibility = self.public.is_some() as i64;
         store_format.lan_visibility = self.lan as i64;
@@ -177,6 +181,7 @@ impl Publicity {
         Ok(())
     }
 
+    /// Returns a new `Publicity` from a given `ServerSettings`.
     pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
         let default_vis = rpc::server_settings::Visibility::default();
         let visibility = rpc_format.visibility.as_ref().unwrap_or(&default_vis);
@@ -205,6 +210,7 @@ impl Publicity {
         })
     }
 
+    /// Modifies a given `ServerSettings` with this object's settings.
     pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
         rpc_format.visibility = Some(rpc::server_settings::Visibility {
             public: self.public.is_some(),

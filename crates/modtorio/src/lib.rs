@@ -565,7 +565,7 @@ impl ModRpc for Modtorio {
     }
 
     // I tried to macro these repetitive functions into DRYness but the tonic::async_trait macro messes with them in
-    // some funky way that a macro_rules! didn't work
+    // some funky way that a macro_rules! didn't work as I'd hoped and I just couldn't bother to figure it out
     async fn import_game(&self, req: Request<ImportRequest>) -> Result<Response<Self::ImportGameStream>, Status> {
         log_rpc_request(&req);
         let (tx, rx) = channel();

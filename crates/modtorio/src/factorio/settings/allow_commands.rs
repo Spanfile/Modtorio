@@ -33,15 +33,18 @@ impl Default for AllowCommands {
 }
 
 impl AllowCommands {
+    /// Returns a new `AllowCommands` from a given `ServerSettingsGameFormat`.
     pub fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
         Ok(match game_format.allow_commands.as_str() {
             YES_GAME_VALUE => AllowCommands::Yes,
             NO_GAME_VALUE => AllowCommands::No,
             ADMINS_ONLY_GAME_VALUE => AllowCommands::AdminsOnly,
+            // TODO: ugly panic, return an error
             v => panic!("invalid allow_commands value in game format: {}", v),
         })
     }
 
+    /// Modifies a given `ServerSettingsGameFormat` with this object's settings.
     pub fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
         game_format.allow_commands = match self {
             Self::Yes => String::from(YES_GAME_VALUE),
@@ -51,6 +54,7 @@ impl AllowCommands {
         Ok(())
     }
 
+    /// Returns a new `AllowCommands` from a given `GameSettings`.
     pub fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
         Ok(match store_format.allow_commands.as_str() {
             YES_GAME_VALUE => AllowCommands::Yes,
@@ -60,6 +64,7 @@ impl AllowCommands {
         })
     }
 
+    /// Modifies a given `GameSettings` with this object's settings.
     pub fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
         store_format.allow_commands = match self {
             Self::Yes => String::from(YES_GAME_VALUE),
@@ -69,6 +74,7 @@ impl AllowCommands {
         Ok(())
     }
 
+    /// Returns a new `AllowCommands` from a given `ServerSettings`.
     pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
         // TODO: ugly integer match
         Ok(match rpc_format.allow_commands {
@@ -79,6 +85,7 @@ impl AllowCommands {
         })
     }
 
+    /// Modifies a given `ServerSettings` with this object's settings.
     pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
         rpc_format.allow_commands = match self {
             Self::Yes => server_settings::AllowCommands::Yes.into(),
