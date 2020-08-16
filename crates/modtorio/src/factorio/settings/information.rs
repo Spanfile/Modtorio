@@ -1,7 +1,7 @@
 //! Provides the [Information](Information) struct which contains a server's settings related to its
 //! public display.
 
-use super::{GameFormatConversion, RpcFormatConversion, ServerSettingsGameFormat, StoreFormatConversion};
+use super::ServerSettingsGameFormat;
 use crate::store::models::GameSettings;
 use serde::{Deserialize, Serialize};
 
@@ -29,8 +29,8 @@ impl Default for Information {
     }
 }
 
-impl GameFormatConversion for Information {
-    fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
+impl Information {
+    pub fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
         Ok(Self {
             name: game_format.name.clone(),
             description: game_format.description.clone(),
@@ -38,17 +38,15 @@ impl GameFormatConversion for Information {
         })
     }
 
-    fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
+    pub fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
         game_format.name = self.name.clone();
         game_format.description = self.description.clone();
         game_format.tags = self.tags.clone();
 
         Ok(())
     }
-}
 
-impl StoreFormatConversion for Information {
-    fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
+    pub fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
         Ok(Self {
             name: store_format.name.clone(),
             description: store_format.description.clone(),
@@ -56,17 +54,15 @@ impl StoreFormatConversion for Information {
         })
     }
 
-    fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
+    pub fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
         store_format.name = self.name.clone();
         store_format.description = self.description.clone();
         store_format.tags = self.tags.clone().join(TAGS_SPLITTER);
 
         Ok(())
     }
-}
 
-impl RpcFormatConversion for Information {
-    fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
+    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
         Ok(Self {
             name: rpc_format.name.clone(),
             description: rpc_format.description.clone(),
@@ -74,7 +70,7 @@ impl RpcFormatConversion for Information {
         })
     }
 
-    fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
+    pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
         rpc_format.name = self.name.clone();
         rpc_format.description = self.description.clone();
         rpc_format.tags = self.tags.clone();

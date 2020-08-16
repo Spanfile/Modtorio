@@ -1,7 +1,7 @@
 //! Provides the [Traffic](Traffic) object which corresponds to a server's settings about its
 //! network traffic.
 
-use super::{rpc_format::RpcFormatConversion, GameFormatConversion, ServerSettingsGameFormat, StoreFormatConversion};
+use super::ServerSettingsGameFormat;
 use crate::{
     store::models::GameSettings,
     util::{Limit, Range},
@@ -77,8 +77,8 @@ impl Default for Network {
     }
 }
 
-impl GameFormatConversion for Network {
-    fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
+impl Network {
+    pub fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
         Ok(Self {
             upload: Upload {
                 max: Limit::from(game_format.max_upload_in_kilobytes_per_second),
@@ -100,7 +100,7 @@ impl GameFormatConversion for Network {
         })
     }
 
-    fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
+    pub fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
         game_format.max_upload_in_kilobytes_per_second = self.upload.max.into();
         game_format.max_upload_slots = self.upload.slots.into();
         game_format.minimum_latency_in_ticks = self.minimum_latency;
@@ -111,10 +111,8 @@ impl GameFormatConversion for Network {
 
         Ok(())
     }
-}
 
-impl StoreFormatConversion for Network {
-    fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
+    pub fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
         Ok(Self {
             upload: Upload {
                 max: Limit::from(store_format.max_upload_in_kilobytes_per_second as u64),
@@ -136,7 +134,7 @@ impl StoreFormatConversion for Network {
         })
     }
 
-    fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
+    pub fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
         store_format.max_upload_in_kilobytes_per_second = u64::from(self.upload.max) as i64;
         store_format.max_upload_slots = u64::from(self.upload.slots) as i64;
         store_format.minimum_latency_in_ticks = self.minimum_latency as i64;
@@ -147,10 +145,8 @@ impl StoreFormatConversion for Network {
 
         Ok(())
     }
-}
 
-impl RpcFormatConversion for Network {
-    fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
+    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
         let bind_address = if let Some(bind_addr) = &rpc_format.bind {
             let port = bind_addr.port as u16;
             if let Some(addr) = &bind_addr.addr {
@@ -194,7 +190,7 @@ impl RpcFormatConversion for Network {
         })
     }
 
-    fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
+    pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
         rpc_format.max_upload_in_kilobytes_per_second = self.upload.max.into();
         rpc_format.max_upload_slots = self.upload.slots.into();
         rpc_format.minimum_latency_in_ticks = self.minimum_latency;

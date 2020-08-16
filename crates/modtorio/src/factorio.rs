@@ -14,7 +14,7 @@ use executable::Executable;
 use log::*;
 use models::GameSettings;
 use mods::{Mods, ModsBuilder};
-use settings::{ServerSettings, StoreFormatConversion};
+use settings::ServerSettings;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -223,13 +223,7 @@ impl Importer {
         portal: Arc<ModPortal>,
         store: Arc<Store>,
     ) -> anyhow::Result<Factorio> {
-        let mut settings_path = self.root.clone();
-        settings_path.push(self.settings);
-
-        let mut mods_path = self.root.clone();
-        mods_path.push(MODS_PATH);
-
-        let mut mods_builder = ModsBuilder::root(mods_path);
+        let mut mods_builder = ModsBuilder::root(self.root.join(MODS_PATH));
 
         self.prog_tx
             .send_status(status::indefinite("Reading server settings..."))
@@ -242,7 +236,7 @@ impl Importer {
             debug!("Read settings from store: {:?}", settings);
             settings
         } else {
-            let settings = ServerSettings::from_game_json(&fs::read_to_string(settings_path)?)?;
+            let settings = ServerSettings::from_game_json(&fs::read_to_string(self.root.join(self.settings))?)?;
             debug!("Read settings from file: {:?}", settings);
             settings
         };

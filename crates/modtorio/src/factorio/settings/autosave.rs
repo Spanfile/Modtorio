@@ -1,6 +1,6 @@
 //! Provides the [Autosave](Autosave) struct which contains a server's autosave settings.
 
-use super::{rpc_format::RpcFormatConversion, GameFormatConversion, ServerSettingsGameFormat, StoreFormatConversion};
+use super::ServerSettingsGameFormat;
 use crate::store::models::GameSettings;
 use serde::{Deserialize, Serialize};
 
@@ -28,8 +28,8 @@ impl Default for Autosave {
     }
 }
 
-impl GameFormatConversion for Autosave {
-    fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
+impl Autosave {
+    pub fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
         Ok(Self {
             interval: game_format.autosave_interval,
             slots: game_format.autosave_slots,
@@ -38,7 +38,7 @@ impl GameFormatConversion for Autosave {
         })
     }
 
-    fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
+    pub fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
         game_format.autosave_interval = self.interval;
         game_format.autosave_slots = self.slots;
         game_format.autosave_only_on_server = self.only_on_server;
@@ -46,10 +46,8 @@ impl GameFormatConversion for Autosave {
 
         Ok(())
     }
-}
 
-impl StoreFormatConversion for Autosave {
-    fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
+    pub fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
         Ok(Self {
             interval: store_format.autosave_interval as u64,
             slots: store_format.autosave_slots as u64,
@@ -58,7 +56,7 @@ impl StoreFormatConversion for Autosave {
         })
     }
 
-    fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
+    pub fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
         store_format.autosave_interval = self.interval as i64;
         store_format.autosave_slots = self.slots as i64;
         store_format.autosave_only_on_server = self.only_on_server as i64;
@@ -66,10 +64,8 @@ impl StoreFormatConversion for Autosave {
 
         Ok(())
     }
-}
 
-impl RpcFormatConversion for Autosave {
-    fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
+    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
         Ok(Self {
             interval: rpc_format.autosave_interval,
             slots: rpc_format.autosave_slots,
@@ -78,7 +74,7 @@ impl RpcFormatConversion for Autosave {
         })
     }
 
-    fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
+    pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
         rpc_format.autosave_interval = self.interval;
         rpc_format.autosave_slots = self.slots;
         rpc_format.autosave_only_on_server = self.only_on_server;

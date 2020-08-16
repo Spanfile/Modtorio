@@ -1,7 +1,7 @@
 //! Provides the [`AllowCommands`](AllowCommands) enum which corresponds to the `allow_commands`
 //! field.
 
-use super::{GameFormatConversion, RpcFormatConversion, ServerSettingsGameFormat, StoreFormatConversion};
+use super::ServerSettingsGameFormat;
 use crate::store::models::GameSettings;
 use rpc::server_settings;
 use serde::{Deserialize, Serialize};
@@ -32,8 +32,8 @@ impl Default for AllowCommands {
     }
 }
 
-impl GameFormatConversion for AllowCommands {
-    fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
+impl AllowCommands {
+    pub fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
         Ok(match game_format.allow_commands.as_str() {
             YES_GAME_VALUE => AllowCommands::Yes,
             NO_GAME_VALUE => AllowCommands::No,
@@ -42,7 +42,7 @@ impl GameFormatConversion for AllowCommands {
         })
     }
 
-    fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
+    pub fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
         game_format.allow_commands = match self {
             Self::Yes => String::from(YES_GAME_VALUE),
             Self::No => String::from(NO_GAME_VALUE),
@@ -50,10 +50,8 @@ impl GameFormatConversion for AllowCommands {
         };
         Ok(())
     }
-}
 
-impl StoreFormatConversion for AllowCommands {
-    fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
+    pub fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
         Ok(match store_format.allow_commands.as_str() {
             YES_GAME_VALUE => AllowCommands::Yes,
             NO_GAME_VALUE => AllowCommands::No,
@@ -62,7 +60,7 @@ impl StoreFormatConversion for AllowCommands {
         })
     }
 
-    fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
+    pub fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
         store_format.allow_commands = match self {
             Self::Yes => String::from(YES_GAME_VALUE),
             Self::No => String::from(NO_GAME_VALUE),
@@ -70,10 +68,8 @@ impl StoreFormatConversion for AllowCommands {
         };
         Ok(())
     }
-}
 
-impl RpcFormatConversion for AllowCommands {
-    fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
+    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
         // TODO: ugly integer match
         Ok(match rpc_format.allow_commands {
             0 => AllowCommands::Yes,
@@ -83,7 +79,7 @@ impl RpcFormatConversion for AllowCommands {
         })
     }
 
-    fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
+    pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
         rpc_format.allow_commands = match self {
             Self::Yes => server_settings::AllowCommands::Yes.into(),
             Self::No => server_settings::AllowCommands::No.into(),

@@ -1,6 +1,6 @@
 //! Provides the object which corresponds to a Factorio server's settings about publicity.
 
-use super::{rpc_format::RpcFormatConversion, GameFormatConversion, ServerSettingsGameFormat, StoreFormatConversion};
+use super::ServerSettingsGameFormat;
 use crate::{store::models::GameSettings, util::Limit};
 use serde::{Deserialize, Serialize};
 
@@ -84,8 +84,8 @@ impl Default for PublicVisibility {
     }
 }
 
-impl GameFormatConversion for Publicity {
-    fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
+impl Publicity {
+    pub fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
         Ok(Self {
             public: if game_format.visibility.public {
                 Some(PublicVisibility {
@@ -110,7 +110,7 @@ impl GameFormatConversion for Publicity {
         })
     }
 
-    fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
+    pub fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
         game_format.visibility.public = self.public.is_some();
         game_format.visibility.lan = self.lan;
 
@@ -130,10 +130,8 @@ impl GameFormatConversion for Publicity {
 
         Ok(())
     }
-}
 
-impl StoreFormatConversion for Publicity {
-    fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
+    pub fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
         Ok(Self {
             public: if store_format.public_visibility == 0 {
                 None
@@ -158,7 +156,7 @@ impl StoreFormatConversion for Publicity {
         })
     }
 
-    fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
+    pub fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
         store_format.public_visibility = self.public.is_some() as i64;
         store_format.lan_visibility = self.lan as i64;
 
@@ -178,10 +176,8 @@ impl StoreFormatConversion for Publicity {
 
         Ok(())
     }
-}
 
-impl RpcFormatConversion for Publicity {
-    fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
+    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
         let default_vis = rpc::server_settings::Visibility::default();
         let visibility = rpc_format.visibility.as_ref().unwrap_or(&default_vis);
 
@@ -209,7 +205,7 @@ impl RpcFormatConversion for Publicity {
         })
     }
 
-    fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
+    pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
         rpc_format.visibility = Some(rpc::server_settings::Visibility {
             public: self.public.is_some(),
             lan: self.lan,

@@ -25,7 +25,7 @@ use chrono::{DateTime, Utc};
 use common::net::NetAddress;
 use config::Config;
 use error::{ModPortalError, RpcError};
-use factorio::{settings::RpcFormatConversion, Factorio, GameStoreId};
+use factorio::{Factorio, GameStoreId};
 use lazy_static::lazy_static;
 use mod_portal::ModPortal;
 use rpc::{
