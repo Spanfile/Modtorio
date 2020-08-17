@@ -18,6 +18,7 @@ pub mod mod_common;
 pub mod mod_portal;
 pub mod opts;
 pub mod store;
+mod unix;
 pub mod util;
 
 use ::log::*;
@@ -26,7 +27,7 @@ use common::net::NetAddress;
 use config::Config;
 use error::{ModPortalError, RpcError};
 use factorio::{Factorio, GameStoreId};
-use futures::future::join_all;
+use futures::{future::join_all, TryStreamExt};
 use lazy_static::lazy_static;
 use mod_portal::ModPortal;
 use rpc::{
@@ -38,6 +39,7 @@ use rpc::{
 use std::{path::Path, sync::Arc};
 use store::Store;
 use tokio::{
+    net::UnixListener,
     sync::{mpsc, Mutex},
     task,
 };
@@ -163,18 +165,34 @@ impl Modtorio {
             return Err(error::ConfigError::NoListenAddresses.into());
         }
 
-        let rpc_listeners = listen_addresses.iter().map(|listen| {
-            let addr = match listen {
-                NetAddress::TCP(addr) => *addr,
-                NetAddress::Unix(_) => unimplemented!(),
-            };
+        let mut rpc_listeners = Vec::new();
 
+        for listen in listen_addresses {
             // TODO: add shutdown signal
             // TODO: TLS
-            debug!("Starting RPC server on {}", addr);
-            let this = self.clone();
-            task::spawn(Server::builder().add_service(ModRpcServer::new(this)).serve(addr))
-        });
+            let server = Server::builder().add_service(ModRpcServer::new(self.clone()));
+            rpc_listeners.push(match listen {
+                NetAddress::TCP(addr) => {
+                    debug!("Starting RPC server on TCP {}", addr);
+                    let addr = *addr;
+                    task::spawn(async move {
+                        server.serve(addr).await.expect("RPC serve failed");
+                    })
+                }
+                NetAddress::Unix(path) => {
+                    debug!("Starting RPC server on Unix {}", path.display());
+
+                    let path = path.to_owned();
+                    task::spawn(async move {
+                        let mut unix = UnixListener::bind(path).expect("failed to bind to unix socket");
+                        server
+                            .serve_with_incoming(unix.incoming().map_ok(unix::UnixStream))
+                            .await
+                            .expect("RPC serve failed")
+                    })
+                }
+            });
+        }
 
         join_all(rpc_listeners).await;
         Ok(())
