@@ -26,6 +26,7 @@ use common::net::NetAddress;
 use config::Config;
 use error::{ModPortalError, RpcError};
 use factorio::{Factorio, GameStoreId};
+use futures::future::join_all;
 use lazy_static::lazy_static;
 use mod_portal::ModPortal;
 use rpc::{
@@ -161,24 +162,21 @@ impl Modtorio {
         if listen_addresses.is_empty() {
             return Err(error::ConfigError::NoListenAddresses.into());
         }
-        if listen_addresses.len() > 1 {
-            // TODO
-            unimplemented!("listening to multiple addresses not yet supported");
-        }
 
-        let listen = listen_addresses.first().unwrap().clone();
-        let addr = match listen {
-            NetAddress::TCP(addr) => addr,
-            NetAddress::Unix(_) => unimplemented!(),
-        };
+        let rpc_listeners = listen_addresses.iter().map(|listen| {
+            let addr = match listen {
+                NetAddress::TCP(addr) => *addr,
+                NetAddress::Unix(_) => unimplemented!(),
+            };
 
-        // TODO: add shutdown signal
-        // TODO: TLS
-        debug!("Starting RPC server. Listening on {}", addr);
-        Server::builder()
-            .add_service(ModRpcServer::new(self))
-            .serve(addr)
-            .await?;
+            // TODO: add shutdown signal
+            // TODO: TLS
+            debug!("Starting RPC server on {}", addr);
+            let this = self.clone();
+            task::spawn(Server::builder().add_service(ModRpcServer::new(this)).serve(addr))
+        });
+
+        join_all(rpc_listeners).await;
         Ok(())
     }
 
