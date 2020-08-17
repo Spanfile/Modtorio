@@ -262,3 +262,11 @@ pub enum ExecutableError {
         source: anyhow::Error,
     },
 }
+
+/// Represents all types of errors that can occur when loading or saving the server's settings.
+#[derive(Debug, Error)]
+pub enum SettingsError {
+    /// A field has an unexpected value.
+    #[error("Unexpected value in settings: {0}")]
+    UnexpectedValue(String),
+}

@@ -10,7 +10,7 @@ use std::io::{Read, Write};
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct FileConfig {
     /// Debug config options
-    #[serde(default)] // TODO: test these defaults
+    #[serde(default)]
     debug: DebugOptions,
     /// Store config options
     #[serde(default)]

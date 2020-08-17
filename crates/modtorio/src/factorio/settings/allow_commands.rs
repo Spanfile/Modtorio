@@ -2,7 +2,7 @@
 //! field.
 
 use super::ServerSettingsGameFormat;
-use crate::store::models::GameSettings;
+use crate::{error::SettingsError, store::models::GameSettings};
 use rpc::server_settings;
 use serde::{Deserialize, Serialize};
 
@@ -35,13 +35,12 @@ impl Default for AllowCommands {
 impl AllowCommands {
     /// Returns a new `AllowCommands` from a given `ServerSettingsGameFormat`.
     pub fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
-        Ok(match game_format.allow_commands.as_str() {
-            YES_GAME_VALUE => AllowCommands::Yes,
-            NO_GAME_VALUE => AllowCommands::No,
-            ADMINS_ONLY_GAME_VALUE => AllowCommands::AdminsOnly,
-            // TODO: ugly panic, return an error
-            v => panic!("invalid allow_commands value in game format: {}", v),
-        })
+        match game_format.allow_commands.as_str() {
+            YES_GAME_VALUE => Ok(AllowCommands::Yes),
+            NO_GAME_VALUE => Ok(AllowCommands::No),
+            ADMINS_ONLY_GAME_VALUE => Ok(AllowCommands::AdminsOnly),
+            v => Err(SettingsError::UnexpectedValue(v.to_owned()).into()),
+        }
     }
 
     /// Modifies a given `ServerSettingsGameFormat` with this object's settings.
@@ -56,12 +55,12 @@ impl AllowCommands {
 
     /// Returns a new `AllowCommands` from a given `GameSettings`.
     pub fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
-        Ok(match store_format.allow_commands.as_str() {
-            YES_GAME_VALUE => AllowCommands::Yes,
-            NO_GAME_VALUE => AllowCommands::No,
-            ADMINS_ONLY_GAME_VALUE => AllowCommands::AdminsOnly,
-            v => panic!("invalid allow_commands value in store format: {}", v),
-        })
+        match store_format.allow_commands.as_str() {
+            YES_GAME_VALUE => Ok(AllowCommands::Yes),
+            NO_GAME_VALUE => Ok(AllowCommands::No),
+            ADMINS_ONLY_GAME_VALUE => Ok(AllowCommands::AdminsOnly),
+            v => Err(SettingsError::UnexpectedValue(v.to_owned()).into()),
+        }
     }
 
     /// Modifies a given `GameSettings` with this object's settings.
