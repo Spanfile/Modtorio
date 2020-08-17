@@ -27,7 +27,7 @@ use common::net::NetAddress;
 use config::Config;
 use error::{ModPortalError, RpcError};
 use factorio::{Factorio, GameStoreId};
-use futures::{future::join_all, TryStreamExt};
+use futures::{future::try_join_all, TryStreamExt};
 use lazy_static::lazy_static;
 use mod_portal::ModPortal;
 use rpc::{
@@ -39,6 +39,7 @@ use rpc::{
 use std::{path::Path, sync::Arc};
 use store::Store;
 use tokio::{
+    fs,
     net::UnixListener,
     sync::{mpsc, Mutex},
     task,
@@ -174,9 +175,14 @@ impl Modtorio {
             rpc_listeners.push(match listen {
                 NetAddress::TCP(addr) => {
                     debug!("Starting RPC server on TCP {}", addr);
+
                     let addr = *addr;
                     task::spawn(async move {
-                        server.serve(addr).await.expect("RPC serve failed");
+                        server
+                            .serve_with_shutdown(addr, term_signal())
+                            .await
+                            .expect("RPC TCP listener failed");
+                        debug!("RPC TCP listener on {} shut down", addr);
                     })
                 }
                 NetAddress::Unix(path) => {
@@ -184,17 +190,22 @@ impl Modtorio {
 
                     let path = path.to_owned();
                     task::spawn(async move {
-                        let mut unix = UnixListener::bind(path).expect("failed to bind to unix socket");
+                        let mut unix = UnixListener::bind(&path).expect("failed to bind to unix socket");
                         server
-                            .serve_with_incoming(unix.incoming().map_ok(unix::UnixStream))
+                            .serve_with_incoming_shutdown(unix.incoming().map_ok(unix::UnixStream), term_signal())
                             .await
-                            .expect("RPC serve failed")
+                            .expect("RPC Unix listener failed");
+
+                        // TODO: is this really the right way? surely dropping the socket would get rid of the socket
+                        // file but no?
+                        debug!("RPC Unix listener on {} shut down, removing socket", path.display());
+                        fs::remove_file(&path).await.expect("failed to remove socket");
                     })
                 }
             });
         }
 
-        join_all(rpc_listeners).await;
+        try_join_all(rpc_listeners).await?;
         Ok(())
     }
 
@@ -704,11 +715,14 @@ fn channel<T>() -> (Arc<Mutex<mpsc::Sender<T>>>, mpsc::Receiver<T>) {
 
 /// Logs a given RPC request.
 fn log_rpc_request<T: std::fmt::Debug>(request: &Request<T>) {
-    info!(
-        "RPC request from '{}': {:?}",
+    debug!(
+        "RPC request from {}: {:?}",
         request
             .remote_addr()
-            .map_or_else(|| String::from("unknown"), |addr| addr.to_string()),
+            // TODO: this is a bit of stupid hack but; when using an Unix socket, the RPC server takes in a stream of
+            // incoming connections which *don't* include the peer's socket address. in which case the socket address
+            // here is None, so just call it "Unix"
+            .map_or_else(|| String::from("Unix"), |addr| addr.to_string()),
         request.get_ref()
     );
     debug!("{:?}", request);
@@ -727,4 +741,9 @@ async fn send_status(prog_tx: &AsyncProgressChannel, status: AsyncProgressResult
     } else {
         true
     }
+}
+
+/// Returns a future that returns the unit type after the current process receives a SIGINT signal (Ctrl-C).
+async fn term_signal() {
+    tokio::signal::ctrl_c().await.expect("failed to listen for SIGINT");
 }

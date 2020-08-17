@@ -1,11 +1,14 @@
+// this module has been copied from Tonic's examples (https://github.com/hyperium/tonic/blob/3be8bc16682fb08d4f78cc754b131fb45ff51bde/examples/src/uds/server.rs#L56), licensed under the MIT license
+
+//! Provides the `UnixStream` object which wraps Tokio's `UnixStream` and adds Tonic's `Connected` impl.
 use std::{
     pin::Pin,
     task::{Context, Poll},
 };
-
 use tokio::io::{AsyncRead, AsyncWrite};
 use tonic::transport::server::Connected;
 
+/// Wraps Tokio's `UnixStream` to add Tonic's `Connected` impl.
 #[derive(Debug)]
 pub struct UnixStream(pub tokio::net::UnixStream);
 
