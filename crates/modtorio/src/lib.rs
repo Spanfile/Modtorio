@@ -169,7 +169,6 @@ impl Modtorio {
         let mut rpc_listeners = Vec::new();
 
         for listen in listen_addresses {
-            // TODO: add shutdown signal
             // TODO: TLS
             let server = Server::builder().add_service(ModRpcServer::new(self.clone()));
             rpc_listeners.push(match listen {
@@ -421,7 +420,6 @@ impl Modtorio {
 
     /// Updates the installed mods of a given game instance.
     async fn update_mods(self, game_id: GameStoreId, prog_tx: status::AsyncProgressChannel) {
-        // TODO: allow forcing an update to the portal info
         if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
             if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
                 send_status(&prog_tx, Err(rpc_error.into())).await;
@@ -743,7 +741,7 @@ async fn send_status(prog_tx: &AsyncProgressChannel, status: AsyncProgressResult
     }
 }
 
-/// Returns a future that returns the unit type after the current process receives a SIGINT signal (Ctrl-C).
+/// Asynchronously returns the unit type after the current process receives a SIGINT signal (Ctrl-C).
 async fn term_signal() {
     tokio::signal::ctrl_c().await.expect("failed to listen for SIGINT");
 }

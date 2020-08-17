@@ -29,7 +29,6 @@ const ZIP_GLOB: &str = "*.zip";
 /// corresponding mod zip archives. If a stored mod isn't found in the mod directory, it will be
 /// ignored. Any mods in the mod directory that weren't stored (i.e. mods added externally) will be
 /// loaded afterwards.
-// TODO: doctests
 pub struct ModsBuilder {
     /// The mods' root directory.
     directory: PathBuf,

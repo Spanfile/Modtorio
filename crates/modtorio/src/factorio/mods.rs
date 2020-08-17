@@ -151,7 +151,7 @@ impl Mods {
                 ))
                 .await?;
 
-            m.ensure_portal_info().await?;
+            m.fetch_portal_info().await?;
             let release = m.latest_release().await?;
 
             if m.own_version().await? < release.version() {
