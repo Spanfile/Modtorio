@@ -1,6 +1,7 @@
 //! Provides all error types the program uses.
 
 use crate::{factorio::GameStoreId, mod_common::Dependency, util::HumanVersion};
+use chrono::{DateTime, Utc};
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -69,6 +70,9 @@ pub enum ModError {
     /// A game's mod doesn't have its archive zip path set (it likely isn't installed).
     #[error("No zip path set (is the mod installed?)")]
     MissingZipPath,
+    /// A game's mod doesn't have its archive zip last mtime set (it likely isn't installed).
+    #[error("No zip last mtime set (is the mod installed?)")]
+    MissingZipLastMtime,
     /// A portal-added mod doesn't have the mod same name as its corresponding mod archive.
     #[error("Mod name from zip does not match existing name: {zip} vs {existing}")]
     ZipNameMismatch {
@@ -90,6 +94,15 @@ pub enum ModError {
         zip_checksum: String,
         /// The expected checksum.
         expected: String,
+    },
+    /// Returned when verifying a mod zip and its last modified time is later than expected (it was changed on the
+    /// filesystem).
+    #[error("Mod zip's last mtime later than expected: got {last_mtime}, expected {expected}")]
+    ZipLastMtimeMismatch {
+        /// The zip archive's last modified time.
+        last_mtime: DateTime<Utc>,
+        /// The expected last modified time.
+        expected: DateTime<Utc>,
     },
     /// Returned when trying to load an unstored mod from the store.
     #[error("Mod not in store")]

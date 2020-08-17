@@ -108,13 +108,13 @@ impl<'a> ModsBuilder {
                 }
             };
 
-            info!("Loaded mod {} from store", created_mod.display().await);
-
             let mod_zip = created_mod.zip_path().await?.get_str()?.to_string();
+            trace!("{} zip: {}", created_mod.name().await, mod_zip);
             if !mod_zips.insert(mod_zip.clone()) {
                 return Err(ModError::DuplicateMod(mod_zip).into());
             }
 
+            info!("Loaded mod {} from store", created_mod.display().await);
             created_mods.push(created_mod);
         }
 

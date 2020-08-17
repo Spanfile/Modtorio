@@ -1,5 +1,7 @@
 //! Provides several utilities related filesystem files.
 
+use super::ext::SystemTimeExt;
+use chrono::{DateTime, Utc};
 use std::{
     fs,
     os::unix::fs::{MetadataExt, PermissionsExt},
@@ -12,6 +14,18 @@ const W_RWX: u32 = 0o7;
 const G_RWX: u32 = 0o70;
 /// The user rwx permission bits (007: `rwx------`).
 const U_RWX: u32 = 0o700;
+
+/// Returns a given path's last modified time as a `chrono::DateTime<Utc>`.
+pub fn get_last_mtime<P>(path: P) -> anyhow::Result<DateTime<Utc>>
+where
+    P: AsRef<Path>,
+{
+    let meta = fs::metadata(path)?;
+    Ok(meta
+        .modified()
+        .expect("last mtime not supported on this platform")
+        .to_chrono())
+}
 
 /// Returns whether two given paths point to the same file or directory.
 pub fn are_same<P1, P2>(first: P1, second: P2) -> anyhow::Result<bool>

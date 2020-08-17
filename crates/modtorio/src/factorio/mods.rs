@@ -81,15 +81,15 @@ impl Mods {
 
             let factorio_mod = mod_name.clone();
             let mod_version = fact_mod.own_version().await?;
-            let mod_zip = fact_mod.zip_path().await?.get_file_name()?;
-            let zip_checksum = fact_mod.get_zip_checksum().await?;
+            let mod_zip = fact_mod.zip_path().await?.get_str()?.to_owned();
+            let zip_last_mtime = fact_mod.get_zip_last_mtime().await?;
 
             let store_game_mod = models::GameMod {
                 game: game_id,
                 factorio_mod,
                 mod_version,
                 mod_zip,
-                zip_checksum,
+                zip_last_mtime,
             };
             // trace!(
             //     "{}'s stored mod {}: {:?}",
@@ -281,7 +281,8 @@ impl Mods {
                         debug!("Removing old mod archive {}", old_archive.display());
                         fs::remove_file(old_archive).await?;
 
-                        info!("{} replaced from ver. {}", existing_mod_display, old_version);
+                        // do .display() again since it has changed
+                        info!("{} replaced from ver. {}", existing_mod.display().await, old_version);
                     }
                 }
 

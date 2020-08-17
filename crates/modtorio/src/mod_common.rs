@@ -6,11 +6,11 @@ mod info;
 use crate::{
     error::ModError,
     store::{models, Store},
-    util::{self, HumanVersion},
+    util::{self, file, HumanVersion},
     Config, ModPortal,
 };
 use bytesize::ByteSize;
-use chrono::Utc;
+use chrono::{DateTime, Utc};
 use info::Info;
 use log::*;
 use std::{
@@ -19,6 +19,7 @@ use std::{
     time::Duration,
 };
 use tokio::{sync::Mutex, task};
+use util::ext::PathExt;
 
 pub use dependency::{Dependency, Requirement};
 pub use info::Release;
@@ -39,8 +40,9 @@ pub struct Mod {
     store: Arc<Store>,
     /// Path to the installed zip archive.
     zip_path: Arc<Mutex<Option<PathBuf>>>,
-    /// The installed zip archive's checksum.
-    zip_checksum: Arc<Mutex<Option<String>>>,
+    // TODO: use an RwLock?
+    /// The installed zip archive's last modified time.
+    zip_last_mtime: Arc<Mutex<Option<DateTime<Utc>>>>,
 }
 
 /// The result of a mod zip archive download.
@@ -117,16 +119,16 @@ where
     }
 
     trace!(
-        "Verifying mod zip ({}) checksum (expecting {})...",
+        "Verifying mod zip ({}) last mtime (expecting {})...",
         zip_path.display(),
-        game_mod.zip_checksum
+        game_mod.zip_last_mtime
     );
-    let existing_zip_checksum = calculate_zip_checksum(STORE_ZIP_CHECKSUM_ALGO, &zip_path).await?;
+    let existing_zip_last_mtime = file::get_last_mtime(&zip_path)?;
 
-    if existing_zip_checksum != game_mod.zip_checksum {
-        return Err(ModError::ZipChecksumMismatch {
-            zip_checksum: game_mod.zip_checksum.clone(),
-            expected: existing_zip_checksum,
+    if existing_zip_last_mtime > game_mod.zip_last_mtime {
+        return Err(ModError::ZipLastMtimeMismatch {
+            last_mtime: existing_zip_last_mtime,
+            expected: game_mod.zip_last_mtime,
         }
         .into());
     }
@@ -157,17 +159,28 @@ impl Mod {
             game_mod.factorio_mod, game_mod.mod_zip
         );
 
-        verify_zip(&game_mod, &mods_root_path).await?;
         let zip_path = PathBuf::from(&game_mod.mod_zip);
-
-        Ok(Self {
-            info,
-            config,
-            portal,
-            store,
-            zip_path: Arc::new(Mutex::new(Some(zip_path))),
-            zip_checksum: Arc::new(Mutex::new(Some(game_mod.zip_checksum.clone()))),
-        })
+        if let Err(e) = verify_zip(&game_mod, &mods_root_path).await {
+            if let Some(ModError::ZipLastMtimeMismatch { last_mtime, expected }) = e.downcast_ref() {
+                warn!(
+                    "Stored mod '{}' failed to load: zip archive changed on filesystem after storing (last mtime: {}, \
+                     stored mtime: {}). Ignoring store and loading mod from zip.",
+                    game_mod.factorio_mod, last_mtime, expected
+                );
+                Ok(Self::from_zip(mods_root_path.as_ref().join(&zip_path), config, portal, store).await?)
+            } else {
+                Err(e)
+            }
+        } else {
+            Ok(Self {
+                info,
+                config,
+                portal,
+                store,
+                zip_path: Arc::new(Mutex::new(Some(zip_path))),
+                zip_last_mtime: Arc::new(Mutex::new(Some(game_mod.zip_last_mtime))),
+            })
+        }
     }
 
     /// Builds a new mod from a given path to a mod zip archive.
@@ -182,15 +195,16 @@ impl Mod {
     {
         debug!("Creating mod from zip: '{}'", path.as_ref().display());
         let info = Mutex::new(Info::from_zip(path.as_ref().to_owned()).await?);
-        let zip_checksum = calculate_zip_checksum(STORE_ZIP_CHECKSUM_ALGO, &path).await?;
+        let zip_path = PathBuf::from(path.as_ref().get_file_name()?);
+        let zip_last_mtime = file::get_last_mtime(&path)?;
 
         Ok(Self {
             info,
             config,
             portal,
             store,
-            zip_path: Arc::new(Mutex::new(Some(path.as_ref().to_owned()))),
-            zip_checksum: Arc::new(Mutex::new(Some(zip_checksum))),
+            zip_path: Arc::new(Mutex::new(Some(zip_path))),
+            zip_last_mtime: Arc::new(Mutex::new(Some(zip_last_mtime))),
         })
     }
 
@@ -210,7 +224,7 @@ impl Mod {
             portal,
             store,
             zip_path: Arc::new(Mutex::new(None)),
-            zip_checksum: Arc::new(Mutex::new(None)),
+            zip_last_mtime: Arc::new(Mutex::new(None)),
         })
     }
 }
@@ -427,8 +441,8 @@ impl Mod {
         self.info.lock().await.display()
     }
 
-    /// Returns the path of the mod's zip archive. Returns `ModError::MissingZipPath` if the path
-    /// isn't set.
+    /// Returns the path of the mod's zip archive relative to the server's mods directory. Returns
+    /// `ModError::MissingZipPath` if the path isn't set.
     pub async fn zip_path(&self) -> anyhow::Result<PathBuf> {
         Ok(self.zip_path.lock().await.clone().ok_or(ModError::MissingZipPath)?)
     }
@@ -436,12 +450,7 @@ impl Mod {
     /// Returns the mod zip archive's checksum if set. If not set, will calculate the checksum, set
     /// it and return it. Returns `ModError::MissingZipPath` if the path isn't set.
     pub async fn get_zip_checksum(&self) -> anyhow::Result<String> {
-        if let Some(checksum) = self.zip_checksum.lock().await.as_ref() {
-            return Ok(checksum.to_owned());
-        }
-
         let checksum = calculate_zip_checksum(STORE_ZIP_CHECKSUM_ALGO, self.zip_path().await?).await?;
-        *self.zip_checksum.lock().await = Some(checksum.clone());
 
         trace!(
             "Calculated zip checksum for mod '{}' ({}): {}",
@@ -450,6 +459,16 @@ impl Mod {
             checksum
         );
         Ok(checksum)
+    }
+
+    /// Returns the mod zip archive's last mtime. Returns `ModError::MissingZipLastMtime` if the last mtime isn't set
+    /// (the mod isn't installed).
+    pub async fn get_zip_last_mtime(&self) -> anyhow::Result<DateTime<Utc>> {
+        if let Some(last_mtime) = self.zip_last_mtime.lock().await.as_ref() {
+            Ok(*last_mtime)
+        } else {
+            Err(ModError::MissingZipLastMtime.into())
+        }
     }
 
     /// Returns the mod's name.

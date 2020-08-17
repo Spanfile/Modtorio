@@ -78,8 +78,8 @@ pub struct GameMod {
     pub mod_version: HumanVersion,
     /// The filesystem path of the mod's zip archive.
     pub mod_zip: String,
-    /// The checksum of the mod's zip archive.
-    pub zip_checksum: String,
+    /// The the mod's zip archive last modified time.
+    pub zip_last_mtime: DateTime<Utc>,
 }
 
 /// An instance of a [`FactorioMod`'s](super::FactorioMod) release.
