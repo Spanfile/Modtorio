@@ -18,7 +18,7 @@ use std::{
     sync::Arc,
     time::Duration,
 };
-use tokio::{sync::Mutex, task};
+use tokio::{sync::RwLock, task};
 use util::ext::PathExt;
 
 pub use dependency::{Dependency, Requirement};
@@ -31,7 +31,7 @@ pub use info::Release;
 /// zip archives and the [mod portal](crate::mod_portal).
 pub struct Mod {
     /// The mod's info.
-    info: Mutex<Info>,
+    info: RwLock<Info>,
     /// Reference to the program config.
     config: Arc<Config>,
     /// Reference to the mod portal.
@@ -39,10 +39,9 @@ pub struct Mod {
     /// Reference to the program store.
     store: Arc<Store>,
     /// Path to the installed zip archive.
-    zip_path: Arc<Mutex<Option<PathBuf>>>,
-    // TODO: use an RwLock?
+    zip_path: Arc<RwLock<Option<PathBuf>>>,
     /// The installed zip archive's last modified time.
-    zip_last_mtime: Arc<Mutex<Option<DateTime<Utc>>>>,
+    zip_last_mtime: Arc<RwLock<Option<DateTime<Utc>>>>,
 }
 
 /// The result of a mod zip archive download.
@@ -152,7 +151,7 @@ impl Mod {
             .get_factorio_mod(game_mod.factorio_mod.clone())
             .await?
             .ok_or(ModError::ModNotInStore)?;
-        let info = Mutex::new(Info::from_store(factorio_mod, game_mod.mod_version, store.as_ref()).await?);
+        let info = RwLock::new(Info::from_store(factorio_mod, game_mod.mod_version, store.as_ref()).await?);
 
         debug!(
             "Verifying mod '{}' zip ({}) against store...",
@@ -177,8 +176,8 @@ impl Mod {
                 config,
                 portal,
                 store,
-                zip_path: Arc::new(Mutex::new(Some(zip_path))),
-                zip_last_mtime: Arc::new(Mutex::new(Some(game_mod.zip_last_mtime))),
+                zip_path: Arc::new(RwLock::new(Some(zip_path))),
+                zip_last_mtime: Arc::new(RwLock::new(Some(game_mod.zip_last_mtime))),
             })
         }
     }
@@ -194,7 +193,7 @@ impl Mod {
         P: AsRef<Path>,
     {
         debug!("Creating mod from zip: '{}'", path.as_ref().display());
-        let info = Mutex::new(Info::from_zip(path.as_ref().to_owned()).await?);
+        let info = RwLock::new(Info::from_zip(path.as_ref().to_owned()).await?);
         let zip_path = PathBuf::from(path.as_ref().get_file_name()?);
         let zip_last_mtime = file::get_last_mtime(&path)?;
 
@@ -203,8 +202,8 @@ impl Mod {
             config,
             portal,
             store,
-            zip_path: Arc::new(Mutex::new(Some(zip_path))),
-            zip_last_mtime: Arc::new(Mutex::new(Some(zip_last_mtime))),
+            zip_path: Arc::new(RwLock::new(Some(zip_path))),
+            zip_last_mtime: Arc::new(RwLock::new(Some(zip_last_mtime))),
         })
     }
 
@@ -216,15 +215,15 @@ impl Mod {
         store: Arc<Store>,
     ) -> anyhow::Result<Mod> {
         debug!("Creating mod from portal: '{}'", name);
-        let info = Mutex::new(Info::from_portal(name, portal.as_ref()).await?);
+        let info = RwLock::new(Info::from_portal(name, portal.as_ref()).await?);
 
         Ok(Self {
             info,
             config,
             portal,
             store,
-            zip_path: Arc::new(Mutex::new(None)),
-            zip_last_mtime: Arc::new(Mutex::new(None)),
+            zip_path: Arc::new(RwLock::new(None)),
+            zip_last_mtime: Arc::new(RwLock::new(None)),
         })
     }
 }
@@ -311,7 +310,7 @@ impl Mod {
     pub async fn fetch_portal_info(&self) -> anyhow::Result<()> {
         trace!("Fetcing portal info for '{}'", self.name().await);
 
-        let mut info = self.info.lock().await;
+        let mut info = self.info.write().await;
         info.populate_from_portal(self.portal.as_ref()).await
     }
 
@@ -320,7 +319,7 @@ impl Mod {
     pub async fn fetch_store_info(&self) -> anyhow::Result<()> {
         trace!("Fetcing store info for '{}'", self.name().await);
 
-        let mut info = self.info.lock().await;
+        let mut info = self.info.write().await;
         info.populate_from_store(self.store.as_ref()).await
     }
 
@@ -342,7 +341,7 @@ impl Mod {
             );
 
             if !expired {
-                let mut info = self.info.lock().await;
+                let mut info = self.info.write().await;
                 info.populate_with_store_object(self.store.as_ref(), store_mod).await?;
 
                 return Ok(());
@@ -426,25 +425,25 @@ impl Mod {
 impl Mod {
     /// Populates the mod's info from a given mod zip archive.
     async fn populate_info_from_zip(&self, path: PathBuf) -> anyhow::Result<()> {
-        *self.zip_path.lock().await = Some(path.clone());
-        self.info.lock().await.populate_from_zip(path).await?;
+        *self.zip_path.write().await = Some(path.clone());
+        self.info.write().await.populate_from_zip(path).await?;
         Ok(())
     }
 
     /// Returns whether the mod has its portal info populated or not.
     async fn is_portal_populated(&self) -> bool {
-        self.info.lock().await.is_portal_populated()
+        self.info.read().await.is_portal_populated()
     }
 
     /// Returns a user-friendly display of the mod.
     pub async fn display(&self) -> String {
-        self.info.lock().await.display()
+        self.info.read().await.display()
     }
 
     /// Returns the path of the mod's zip archive relative to the server's mods directory. Returns
     /// `ModError::MissingZipPath` if the path isn't set.
     pub async fn zip_path(&self) -> anyhow::Result<PathBuf> {
-        Ok(self.zip_path.lock().await.clone().ok_or(ModError::MissingZipPath)?)
+        Ok(self.zip_path.read().await.clone().ok_or(ModError::MissingZipPath)?)
     }
 
     /// Returns the mod zip archive's checksum if set. If not set, will calculate the checksum, set
@@ -464,8 +463,8 @@ impl Mod {
     /// Returns the mod zip archive's last mtime. Returns `ModError::MissingZipLastMtime` if the last mtime isn't set
     /// (the mod isn't installed).
     pub async fn get_zip_last_mtime(&self) -> anyhow::Result<DateTime<Utc>> {
-        if let Some(last_mtime) = self.zip_last_mtime.lock().await.as_ref() {
-            Ok(*last_mtime)
+        if let Some(last_mtime) = *self.zip_last_mtime.read().await {
+            Ok(last_mtime)
         } else {
             Err(ModError::MissingZipLastMtime.into())
         }
@@ -473,85 +472,85 @@ impl Mod {
 
     /// Returns the mod's name.
     pub async fn name(&self) -> String {
-        let info = self.info.lock().await;
+        let info = self.info.read().await;
         info.name().to_string()
     }
 
     /// Returns the mod's author.
     pub async fn author(&self) -> String {
-        let info = self.info.lock().await;
+        let info = self.info.read().await;
         info.author().to_string()
     }
 
     /// Returns the mod author's contact.
     pub async fn contact(&self) -> Option<String> {
-        let info = self.info.lock().await;
+        let info = self.info.read().await;
         info.contact().map(std::string::ToString::to_string)
     }
 
     /// Returns the mod's author's homepage.
     pub async fn homepage(&self) -> Option<String> {
-        let info = self.info.lock().await;
+        let info = self.info.read().await;
         info.homepage().map(std::string::ToString::to_string)
     }
 
     /// Returns the mod's title.
     pub async fn title(&self) -> String {
-        let info = self.info.lock().await;
+        let info = self.info.read().await;
         info.title().to_string()
     }
 
     /// Returns the mod's summary, if any.
     pub async fn summary(&self) -> Option<String> {
-        let info = self.info.lock().await;
+        let info = self.info.read().await;
         info.summary().map(std::string::ToString::to_string)
     }
 
     /// Returns the mod's description.
     pub async fn description(&self) -> String {
-        let info = self.info.lock().await;
+        let info = self.info.read().await;
         info.description().to_string()
     }
 
     /// Returns the mod's changelog, if any.
     pub async fn changelog(&self) -> Option<String> {
-        let info = self.info.lock().await;
+        let info = self.info.read().await;
         info.changelog().map(std::string::ToString::to_string)
     }
 
     /// Returns the mod's version.
     pub async fn own_version(&self) -> anyhow::Result<HumanVersion> {
-        let info = self.info.lock().await;
+        let info = self.info.read().await;
         info.own_version()
     }
 
     /// Returns the version of Factorio the mod is for.
     pub async fn factorio_version(&self) -> anyhow::Result<HumanVersion> {
-        let info = self.info.lock().await;
+        let info = self.info.read().await;
         info.factorio_version()
     }
 
     /// Returns the mod's releases.
     pub async fn releases(&self) -> anyhow::Result<Vec<Release>> {
-        let info = self.info.lock().await;
+        let info = self.info.read().await;
         info.releases()
     }
 
     /// Returns a release with a given version.
     pub async fn get_release(&self, version: HumanVersion) -> anyhow::Result<Release> {
-        let info = self.info.lock().await;
+        let info = self.info.read().await;
         info.get_release(Some(version))
     }
 
     /// Returns the mod's latest release.
     pub async fn latest_release(&self) -> anyhow::Result<Release> {
-        let info = self.info.lock().await;
+        let info = self.info.read().await;
         info.get_release(None)
     }
 
     /// Returns the mod's dependencies on other mods.
     pub async fn dependencies(&self) -> anyhow::Result<Vec<Dependency>> {
-        let info = self.info.lock().await;
+        let info = self.info.read().await;
         info.dependencies()
     }
 }
