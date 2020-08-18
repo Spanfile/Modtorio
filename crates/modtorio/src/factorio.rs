@@ -6,6 +6,7 @@ pub mod mods;
 pub mod settings;
 
 use crate::{
+    error::ServerError,
     store::{models, Store},
     util::{ext::PathExt, status, status::AsyncProgressChannelExt},
     Config, ModPortal,
@@ -14,13 +15,18 @@ use executable::Executable;
 use log::*;
 use models::GameSettings;
 use mods::{Mods, ModsBuilder};
+use rpc::instance_status::game::GameStatus;
 use settings::ServerSettings;
 use std::{
     fs,
     path::{Path, PathBuf},
     sync::Arc,
 };
-use tokio::sync::Mutex;
+use tokio::{
+    io::AsyncBufReadExt,
+    sync::{Mutex, RwLock},
+    task,
+};
 
 /// The file name of the JSON file used to store a Factorio server's settings.
 const SERVER_SETTINGS_FILENAME: &str = "server-settings.json";
@@ -46,6 +52,8 @@ pub struct Factorio {
     store_id: Arc<Mutex<Option<GameStoreId>>>,
     /// Reference to the program store.
     store: Arc<Store>,
+    /// The server's status.
+    status: RwLock<GameStatus>,
 }
 
 /// Builds a new instance of a [`Factorio`](Factorio) server by importing its information from the
@@ -117,6 +125,23 @@ impl Factorio {
         Ok(())
     }
 
+    /// Runs the server.
+    pub async fn run(&self) -> anyhow::Result<()> {
+        self.assert_status(GameStatus::Shutdown).await?;
+
+        let reader = self.executable.run().await?;
+        self.set_status(GameStatus::Starting).await;
+
+        task::spawn(async move {
+            let mut reader = reader.lines();
+            while let Some(line) = reader.next_line().await.expect("failed to read child stdout line") {
+                debug!("Game stdout: {}", line);
+            }
+        });
+
+        Ok(())
+    }
+
     /// Returns the instance's root directory.
     pub fn root(&self) -> &Path {
         &self.root
@@ -151,6 +176,26 @@ impl Factorio {
     /// added to the program store.
     pub async fn store_id(&self) -> Option<GameStoreId> {
         *self.store_id.lock().await
+    }
+
+    /// Returns the server's status.
+    pub async fn status(&self) -> GameStatus {
+        *self.status.read().await
+    }
+
+    /// Sets the server's status.
+    async fn set_status(&self, status: GameStatus) {
+        *self.status.write().await = status;
+    }
+
+    /// Asserts that the server's status is `expected`, otherwise returns `ServerError::InvalidStatus`.
+    async fn assert_status(&self, expected: GameStatus) -> anyhow::Result<()> {
+        let status = self.status().await;
+        if status == expected {
+            Ok(())
+        } else {
+            Err(ServerError::InvalidStatus(status).into())
+        }
     }
 }
 
@@ -260,6 +305,7 @@ impl Importer {
             root: self.root,
             store_id: Arc::new(Mutex::new(self.game_store_id)),
             store,
+            status: RwLock::new(GameStatus::Shutdown),
         })
     }
 }

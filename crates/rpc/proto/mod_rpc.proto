@@ -15,6 +15,8 @@ service ModRpc {
 
   rpc GetServerSettings(GetServerSettingsRequest) returns (ServerSettings);
   rpc SetServerSettings(SetServerSettingsRequest) returns (Empty);
+
+  rpc RunServer(RunServerRequest) returns (Empty);
 }
 
 message Empty {}
@@ -80,6 +82,7 @@ message SetServerSettingsRequest {
   int64 game_id = 1;
   ServerSettings settings = 2;
 }
+message RunServerRequest { int64 game_id = 1; }
 
 message ServerSettings {
   string name = 1;

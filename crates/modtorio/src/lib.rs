@@ -34,7 +34,8 @@ use rpc::{
     instance_status::{self, game::GameStatus, Game},
     mod_rpc_server::{ModRpc, ModRpcServer},
     Empty, EnsureModDependenciesRequest, GetServerSettingsRequest, ImportRequest, InstallModRequest, InstanceStatus,
-    Progress, ServerSettings, SetServerSettingsRequest, UpdateModsRequest, UpdateStoreRequest, VersionInformation,
+    Progress, RunServerRequest, ServerSettings, SetServerSettingsRequest, UpdateModsRequest, UpdateStoreRequest,
+    VersionInformation,
 };
 use std::{path::Path, sync::Arc};
 use store::Store;
@@ -546,6 +547,28 @@ impl Modtorio {
             Err(RpcError::NoSuchGame(game_id).into())
         }
     }
+
+    async fn run_server(&self, game_id: GameStoreId) -> anyhow::Result<()> {
+        self.assert_instance_status(instance_status::Status::Running).await?;
+
+        let mut games = self.games.lock().await;
+        let mut game = None;
+        for g in games.iter_mut() {
+            if let Some(id) = g.store_id().await {
+                if id == game_id {
+                    game = Some(g);
+                }
+            }
+        }
+
+        if let Some(game) = game {
+            game.run().await?;
+
+            Ok(())
+        } else {
+            Err(RpcError::NoSuchGame(game_id).into())
+        }
+    }
 }
 
 #[tonic::async_trait]
@@ -695,6 +718,27 @@ impl ModRpc for Modtorio {
             }
             Err(e) => {
                 error!("RPC set server settings failed: {}", e);
+                if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
+                    Err(rpc_error.into())
+                } else {
+                    Err(RpcError::Internal(e).into())
+                }
+            }
+        }
+    }
+
+    async fn run_server(&self, req: Request<RunServerRequest>) -> Result<Response<Empty>, Status> {
+        log_rpc_request(&req);
+
+        let msg = req.into_inner();
+        match self.run_server(msg.game_id).await {
+            Ok(_) => {
+                let resp = Response::new(Empty {});
+                log_rpc_response(&resp);
+                Ok(resp)
+            }
+            Err(e) => {
+                error!("RPC run server failed: {}", e);
                 if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
                     Err(rpc_error.into())
                 } else {

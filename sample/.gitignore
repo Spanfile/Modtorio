@@ -1,1 +1,10 @@
 mods/*
+data
+config-path.cfg
+config
+saves
+.lock
+achievements-modded.dat
+factorio*log
+player-data.json
+temp

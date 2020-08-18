@@ -4,8 +4,15 @@ mod version_information;
 
 use crate::error::ExecutableError;
 use log::*;
-use std::path::{Path, PathBuf};
-use tokio::process::Command;
+use std::{
+    path::{Path, PathBuf},
+    process::Stdio,
+};
+use tokio::{
+    io::BufReader,
+    process::{ChildStdout, Command},
+    task,
+};
 use version_information::VersionInformation;
 
 /// The server executable's default path relative to the server installation's root directory.
@@ -44,6 +51,11 @@ impl Executable {
         Ok(exec)
     }
 
+    /// Runs this executable.
+    pub async fn run(&self) -> anyhow::Result<BufReader<ChildStdout>> {
+        follow_executable(&self.path, &["--start-server-load-latest"])
+    }
+
     /// Returns the server's version information by running the executable with the `--version` parameter.
     pub async fn detect_version(&self) -> anyhow::Result<VersionInformation> {
         let stdout = run_executable(&self.path, &["--version"]).await?;
@@ -80,4 +92,25 @@ where
     }
 
     Ok(stdout)
+}
+
+#[allow(clippy::missing_docs_in_private_items)]
+fn follow_executable<P>(path: P, args: &[&str]) -> anyhow::Result<BufReader<ChildStdout>>
+where
+    P: AsRef<Path>,
+{
+    let mut child = Command::new(path.as_ref())
+        .args(args)
+        .stdout(Stdio::piped())
+        .kill_on_drop(true)
+        .spawn()?;
+    let child_stdout = child.stdout.take().ok_or_else(|| ExecutableError::NoStdoutHandle)?;
+
+    let child_path = path.as_ref().to_owned();
+    task::spawn(async move {
+        let status = child.await.expect("child encountered an error");
+        debug!("{} returned status {}", child_path.display(), status);
+    });
+
+    Ok(BufReader::new(child_stdout))
 }

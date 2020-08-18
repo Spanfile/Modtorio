@@ -2,6 +2,7 @@
 
 use crate::{factorio::GameStoreId, mod_common::Dependency, util::HumanVersion};
 use chrono::{DateTime, Utc};
+use rpc::instance_status::game::GameStatus;
 use std::path::PathBuf;
 use thiserror::Error;
 
@@ -269,6 +270,9 @@ pub enum ExecutableError {
         #[source]
         source: anyhow::Error,
     },
+    /// Returned when spawning a child process and trying to acquire its non-existent stdout.
+    #[error("Child process did not have a stdout handle")]
+    NoStdoutHandle,
 }
 
 /// Represents all types of errors that can occur when loading or saving the server's settings.
@@ -285,4 +289,12 @@ pub enum UpdateBatcherError {
     /// The mod portal returned a mod with a name that wasn't originally requested for.
     #[error("Mod portal returned an unknown mod name: {0}")]
     UnknownModName(String),
+}
+
+/// Represents all types of errors that can occur with a Factorio server.
+#[derive(Debug, Error)]
+pub enum ServerError {
+    /// Returned when trying to change the server's state and its current status is invalid given the change.
+    #[error("Invalid game status: {0:?}")]
+    InvalidStatus(GameStatus),
 }
