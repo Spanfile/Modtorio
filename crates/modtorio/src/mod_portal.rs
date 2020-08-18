@@ -128,7 +128,7 @@ impl ModPortal {
         Ok(self.get_json(url).await?)
     }
 
-    #[allow(clippy::missing_docs_in_private_items)]
+    /// Fetches information for multiple mods based on their names.
     pub async fn fetch_multiple_mods(&self, names: &[&str]) -> anyhow::Result<Vec<PortalResult>> {
         let mut mods = Vec::new();
         let mut current_page = 1;

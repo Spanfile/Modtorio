@@ -195,8 +195,9 @@ impl Modtorio {
                             .await
                             .expect("RPC Unix listener failed");
 
-                        // TODO: is this really the right way? surely dropping the socket would get rid of the socket
-                        // file but no?
+                        // since the socket we had was created with bind(), we have to remove it with unlink after
+                        // we're done with it. right now Rust's remove_file corresponds to unlink, but it might not in
+                        // the future
                         debug!("RPC Unix listener on {} shut down, removing socket", path.display());
                         fs::remove_file(&path).await.expect("failed to remove socket");
                     })

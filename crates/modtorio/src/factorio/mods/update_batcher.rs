@@ -1,4 +1,4 @@
-#![allow(clippy::missing_docs_in_private_items)]
+//! Provides the `UpdateBatcher` which is used to update the portal info for multiple mods with a single request.
 
 use crate::{
     error::UpdateBatcherError,
@@ -8,12 +8,16 @@ use crate::{
 use log::*;
 use std::{collections::HashMap, sync::Arc};
 
+/// Used to update the portal info for multiple mods with a single request.
 pub struct UpdateBatcher<'a> {
+    /// The mod portal instance to use.
     portal: &'a ModPortal,
+    /// The mods this batcher keeps track of.
     mods: HashMap<String, Arc<Mod>>,
 }
 
 impl<'a> UpdateBatcher<'a> {
+    /// Returns a new `UpdateBatcher` which uses a given `ModPortal` instance.
     pub fn new(portal: &'a ModPortal) -> Self {
         Self {
             portal,
@@ -21,10 +25,12 @@ impl<'a> UpdateBatcher<'a> {
         }
     }
 
+    /// Adds a mod to this batcher's tracked mods.
     pub async fn add_mod(&mut self, fact_mod: Arc<Mod>) {
         self.mods.insert(fact_mod.name().await, fact_mod);
     }
 
+    /// Fetches and applies the portal info for all tracked mods.
     pub async fn apply(&mut self) -> anyhow::Result<()> {
         let mut names = Vec::new();
 
@@ -47,6 +53,7 @@ impl<'a> UpdateBatcher<'a> {
         Ok(())
     }
 
+    /// Consumes the batcher and returns all mods that can be updated.
     pub async fn get_updates(self) -> anyhow::Result<Vec<String>> {
         let mut updated_mods = Vec::new();
 

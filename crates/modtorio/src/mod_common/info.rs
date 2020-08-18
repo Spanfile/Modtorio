@@ -505,6 +505,7 @@ impl Release {
         self.download_url.get_str()
     }
 
+    /// Mutably borrows this release's URL. Primarily used when "compressing" the URL.
     pub fn url_mut(&mut self) -> &mut PathBuf {
         &mut self.download_url
     }
