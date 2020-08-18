@@ -5,6 +5,7 @@ mod info;
 
 use crate::{
     error::ModError,
+    mod_portal::PortalResult,
     store::{models, Store},
     util::{self, file, HumanVersion},
     Config, ModPortal,
@@ -306,7 +307,6 @@ impl Mod {
     }
 
     /// Fetch the latest info from portal
-    #[allow(dead_code)]
     pub async fn fetch_portal_info(&self) -> anyhow::Result<()> {
         trace!("Fetcing portal info for '{}'", self.name().await);
 
@@ -315,12 +315,25 @@ impl Mod {
     }
 
     /// Fetch the latest info from store
-    #[allow(dead_code)]
     pub async fn fetch_store_info(&self) -> anyhow::Result<()> {
         trace!("Fetcing store info for '{}'", self.name().await);
 
         let mut info = self.info.write().await;
         info.populate_from_store(self.store.as_ref()).await
+    }
+
+    /// Applies a given prefetched portal info object.
+    pub async fn apply_portal_info(&self, portal_info: PortalResult) -> anyhow::Result<()> {
+        if self.name().await != portal_info.name()? {
+            return Err(ModError::NameMismatch {
+                own: self.name().await,
+                given: portal_info.name()?.to_owned(),
+            }
+            .into());
+        }
+
+        let mut info = self.info.write().await;
+        info.populate_with_portal_object(portal_info)
     }
 
     /// Load the potentially missing portal info by first reading it from store, and then fetching

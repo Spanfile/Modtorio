@@ -119,11 +119,19 @@ pub enum ModError {
     #[error("No releases")]
     NoReleases,
     /// The mod portal's mod info response doesn't contain a critical field.
-    #[error("Missing critical field: {0}")]
+    #[error("Missing critical field in mod portal response: {0}")]
     MissingField(&'static str),
+    /// A given info object's mod name doesn't match the mod where its being applied to.
+    #[error("Mod name mismatch when applying info object. Own: {own}, given: {given}")]
+    NameMismatch {
+        /// The mod's name.
+        own: String,
+        /// The name in the info object.
+        given: String,
+    },
 }
 
-/// Represents all types of errors that can occur when parsing dependency strings
+/// Represents all types of errors that can occur when parsing dependency strings.
 #[derive(Debug, Error)]
 pub enum DependencyParsingError {
     /// The dependency parser regex didn't capture anything from a given string.
@@ -269,4 +277,12 @@ pub enum SettingsError {
     /// A field has an unexpected value.
     #[error("Unexpected value in settings: {0}")]
     UnexpectedValue(String),
+}
+
+/// Represents all types of errors that can occur when using the update batcher.
+#[derive(Debug, Error)]
+pub enum UpdateBatcherError {
+    /// The mod portal returned a mod with a name that wasn't originally requested for.
+    #[error("Mod portal returned an unknown mod name: {0}")]
+    UnknownModName(String),
 }

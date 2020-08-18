@@ -26,6 +26,7 @@ pub struct DebugOptions {
     log_level: LogLevel,
 }
 
+// TODO: does this have to be its own thing or just stick it in debug options?
 /// Contains the config values from the `[store]` section of a config file.
 #[derive(Debug, Deserialize, Serialize)]
 pub struct StoreOptions {

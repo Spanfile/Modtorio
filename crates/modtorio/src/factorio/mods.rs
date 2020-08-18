@@ -2,6 +2,7 @@
 //! server.
 
 mod mods_builder;
+mod update_batcher;
 
 use super::GameStoreId;
 use crate::{
@@ -21,6 +22,7 @@ use std::{
     sync::Arc,
 };
 use tokio::{fs, sync::Mutex};
+use update_batcher::UpdateBatcher;
 
 // TODO: function to scan and remove duplicate mods
 
@@ -136,40 +138,25 @@ impl Mods {
     #[allow(dead_code)]
     pub async fn update(&mut self, prog_tx: Option<status::AsyncProgressChannel>) -> anyhow::Result<()> {
         info!("Checking for mod updates...");
+        prog_tx
+            .send_status(status::indefinite("Checking for mod updates..."))
+            .await?;
 
-        let mut updates = Vec::new();
-        let max_mods = self.mods.len() as u32;
+        let mut update_batcher = UpdateBatcher::new(self.portal.as_ref());
 
-        for (index, m) in self.mods.values_mut().enumerate() {
-            let mod_display = m.display().await;
-            info!("Checking for updates to {}...", mod_display);
-            prog_tx
-                .send_status(status::definite(
-                    &format!("Checking for updates to {}...", mod_display),
-                    index as u32,
-                    max_mods,
-                ))
-                .await?;
-
-            m.fetch_portal_info().await?;
-            let release = m.latest_release().await?;
-
-            if m.own_version().await? < release.version() {
-                info!(
-                    "Found newer version of '{}': {} (over {}) released on {}",
-                    m.title().await,
-                    release.version(),
-                    m.own_version().await?,
-                    release.released_on()
-                );
-
-                updates.push(m.name().await.to_owned());
-            } else {
-                info!("{} is up to date", mod_display);
-            }
+        for m in self.mods.values() {
+            update_batcher.add_mod(Arc::clone(m)).await;
         }
 
+        debug!("Update batcher built, applying...");
+        update_batcher.apply().await?;
+
+        let updates = update_batcher.get_updates().await?;
         info!("Found {} updates", updates.len());
+        prog_tx
+            .send_status(status::indefinite(&format!("Found {} updates", updates.len())))
+            .await?;
+
         if !updates.is_empty() {
             debug!("{:?}", updates)
         };

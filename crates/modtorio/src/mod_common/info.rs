@@ -4,9 +4,8 @@
 use super::Dependency;
 use crate::{
     error::ModError,
-    mod_portal::ModPortal,
+    mod_portal::{ModPortal, PortalResult},
     store::{models, Store},
-    util,
     util::{
         ext::{PathExt, ZipExt},
         HumanVersion,
@@ -130,29 +129,6 @@ struct ZipInfo {
     dependencies: Vec<Dependency>,
 }
 
-/// A model of what the mod portal returns as a mod's information.
-#[derive(Debug, Deserialize)]
-struct PortalInfo {
-    /// The mod's name.
-    name: Option<String>,
-    /// The mod's author.
-    ///
-    /// This field is equal to the `author` field in other mod information structs.
-    owner: Option<String>,
-    /// The mod's releases.
-    releases: Option<Vec<Release>>,
-    /// The mod's summary.
-    summary: Option<String>,
-    /// The mod's title.
-    title: Option<String>,
-    /// The mod's changelog.
-    changelog: Option<String>,
-    /// The mod's description.
-    description: Option<String>,
-    /// The mod author's homepage.
-    homepage: Option<String>,
-}
-
 // #[derive(Debug)]
 // pub struct Tag {
 //     id: u8,
@@ -185,33 +161,6 @@ where
     .await?
 }
 
-/// Removes redundant information from an info object returned by the mod portal.
-///
-/// The function will:
-/// * Remove all but the last path segment from each release's download URL. The other components are always the same
-///   and thus, can be derived when required.
-fn compress_portal_info(info: PortalInfo) -> PortalInfo {
-    if let Some(releases) = info.releases {
-        let new_releases = releases
-            .into_iter()
-            .map(|release| Release {
-                download_url: util::get_last_path_segment(release.download_url),
-                ..release
-            })
-            .collect();
-
-        PortalInfo {
-            releases: Some(new_releases),
-            ..info
-        }
-    } else {
-        warn!("Missing releases in portal info when compressing");
-        debug!("{:?}", info);
-
-        info
-    }
-}
-
 impl Info {
     /// Builds an info object from a given mod zip archive.
     pub async fn from_zip<P>(path: P) -> anyhow::Result<Self>
@@ -225,10 +174,10 @@ impl Info {
 
     /// Fetches and builds an info object from the mod portal based on a given mod's name.
     pub async fn from_portal(name: &str, portal: &ModPortal) -> anyhow::Result<Self> {
-        let portal_info: PortalInfo = portal.fetch_mod(name).await?;
-        let portal_info = compress_portal_info(portal_info);
+        let mut portal_info: PortalResult = portal.fetch_mod(name).await?;
+        portal_info.compress()?;
 
-        Ok(Self::from_portal_info(portal_info)?)
+        Ok(Self::from_portal_info(&portal_info)?)
     }
 
     /// Builds an info object from the program store based on a stored mod and its wanted version.
@@ -320,23 +269,23 @@ impl Info {
     /// Converts the information from the mod portal info an info object.
     ///
     /// Returns an error if some of the required fields are missing.
-    fn from_portal_info(info: PortalInfo) -> anyhow::Result<Self> {
+    fn from_portal_info(info: &PortalResult) -> anyhow::Result<Self> {
         Ok(Self {
-            name: info.name.ok_or(ModError::MissingField("name"))?,
+            name: info.name()?.to_owned(),
             versions: None,
             author: Author {
-                name: info.owner.unwrap_or_default(), // TODO: warn when default returned
+                name: info.owner().to_owned(),
                 contact: None,
-                homepage: info.homepage,
+                homepage: info.homepage().map(str::to_owned),
             },
             display: Display {
-                title: info.title.ok_or(ModError::MissingField("name"))?,
-                summary: info.summary,
-                description: info.description.unwrap_or_default(),
-                changelog: info.changelog,
+                title: info.title()?.to_owned(),
+                summary: info.summary().map(str::to_owned),
+                description: info.description().to_owned(),
+                changelog: info.changelog().map(str::to_owned),
             },
             dependencies: None,
-            releases: info.releases,
+            releases: Some(info.releases()?.to_owned()),
         })
     }
 
@@ -367,12 +316,17 @@ impl Info {
     /// Populates an existing info object by fetching the mod's information from the mod portal.
     pub async fn populate_from_portal(&mut self, portal: &ModPortal) -> anyhow::Result<()> {
         trace!("Populating '{}' from portal", self.name);
-        let info: PortalInfo = portal.fetch_mod(&self.name).await?;
-        let info = compress_portal_info(info);
+        let info: PortalResult = portal.fetch_mod(&self.name).await?;
+        self.populate_with_portal_object(info)
+    }
 
-        // trace!("'{}' got PortalInfo: {:?}", self.name, info);
-        self.display.summary = Some(info.summary.unwrap_or_default());
-        self.releases = Some(info.releases.unwrap_or_default());
+    /// Populates an existing info object with a given `PortalInfo` object.
+    pub fn populate_with_portal_object(&mut self, mut info: PortalResult) -> anyhow::Result<()> {
+        trace!("Populating '{}' with portal object", self.name);
+        info.compress()?;
+
+        self.display.summary = info.summary().map(str::to_owned);
+        self.releases = Some(info.into_releases()?);
 
         Ok(())
     }
@@ -549,6 +503,10 @@ impl Release {
     /// Returns the release's download URL, or an error if the URL contains invalid Unicode.
     pub fn url(&self) -> anyhow::Result<&str> {
         self.download_url.get_str()
+    }
+
+    pub fn url_mut(&mut self) -> &mut PathBuf {
+        &mut self.download_url
     }
 
     /// Returns the release's version.
