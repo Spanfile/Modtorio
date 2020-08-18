@@ -1,7 +1,7 @@
 //! Provides the `FileConfig` object, used to access config values from a config file.
 
 use super::{Config, ConfigSource, DEFAULT_STORE_EXPIRY};
-use crate::util::LogLevel;
+use crate::util::{Limit, LogLevel};
 use common::net::NetAddress;
 use serde::{Deserialize, Serialize};
 use std::io::{Read, Write};
@@ -23,7 +23,12 @@ pub struct FileConfig {
 #[derive(Debug, Deserialize, Serialize, Default)]
 pub struct DebugOptions {
     /// The log level to use.
+    #[serde(default)]
     log_level: LogLevel,
+    /// The page size to use when requesting batched mods from the mod portal. `Limit::Unlimited` corresponds to
+    /// `"max"`.
+    #[serde(default)]
+    portal_page_size: Limit,
 }
 
 // TODO: does this have to be its own thing or just stick it in debug options?
@@ -31,6 +36,7 @@ pub struct DebugOptions {
 #[derive(Debug, Deserialize, Serialize)]
 pub struct StoreOptions {
     /// The program store expiry in seconds.
+    #[serde(default)]
     expiry: u64,
 }
 
@@ -49,6 +55,7 @@ impl ConfigSource for FileConfig {
             log_level: self.debug.log_level,
             store_expiry: self.store.expiry,
             listen: self.network.listen,
+            portal_page_size: self.debug.portal_page_size,
             ..config
         }
     }
@@ -96,6 +103,7 @@ mod tests {
         let contents = String::from(
             r#"[debug]
 log_level = "trace"
+portal_page_size = 5
 [store]
 expiry = 60
 [network]
@@ -115,7 +123,8 @@ listen = ["0.0.0.0:1337", "unix:/temp/path"]"#,
                 )),
                 NetAddress::Unix(PathBuf::from("/temp/path")),
             ]
-        )
+        );
+        assert_eq!(config.debug.portal_page_size, Limit::Limited(5));
     }
 
     #[test]

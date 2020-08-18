@@ -13,7 +13,7 @@ use opts_config::OptsConfig;
 use serde::Deserialize;
 use std::io::{Read, Write};
 use store_config::StoreConfig;
-use util::LogLevel;
+use util::{Limit, LogLevel};
 
 /// The default configuration file location, relative to the working directory.
 pub const DEFAULT_CONFIG_FILE_LOCATION: &str = "modtorio.toml";
@@ -50,6 +50,9 @@ where
 pub struct Config {
     /// The log level to use.
     log_level: LogLevel,
+    /// The page size to use when requesting batched mods from the mod portal. `Limit::Unlimited` corresponds to
+    /// `"max"`.
+    portal_page_size: Limit,
     /// The mod portal username.
     portal_username: String,
     /// The mod portal token.
@@ -153,6 +156,11 @@ impl Config {
         &self.portal_token
     }
 
+    /// Retuns the mod portal page size config value.
+    pub fn portal_page_size(&self) -> Limit {
+        self.portal_page_size
+    }
+
     /// Retuns the program store expiry config value.
     pub fn store_expiry(&self) -> u64 {
         self.store_expiry
@@ -174,6 +182,7 @@ mod tests {
         let contents = String::from(
             r#"[debug]
 log_level = "trace"
+portal_page_size = 5
 [store]
 expiry = 60
 [network]
@@ -247,6 +256,7 @@ listen = ["0.0.0.0:1337", "unix:/temp/path"]"#,
                 )),
                 NetAddress::Unix(PathBuf::from("/temp/path")),
             ]
-        )
+        );
+        assert_eq!(config.portal_page_size, Limit::Limited(5));
     }
 }

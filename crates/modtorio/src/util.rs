@@ -5,11 +5,13 @@ pub mod env;
 pub mod ext;
 pub mod file;
 mod human_version;
+mod limit;
 mod log_level;
 pub mod status;
 
 use ext::PathExt;
 pub use human_version::{Comparator, HumanVersion, HumanVersionReq};
+pub use limit::Limit;
 pub use log_level::LogLevel;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -51,36 +53,4 @@ pub struct Range {
     pub min: u64,
     /// The range's upper bound.
     pub max: u64,
-}
-
-/// Represents a limit that is either unbounded ([Unlimited](#variant.Unlimited)) or bounded by a
-/// 64-bit unsigned integer ([Limited](#variant.Limited)).
-///
-/// Conversion to and from `u64` is provided, where 0 is seen as [Unlimited](#variant.Unlimited)
-/// and every other value as [Limited](#variant.Limited).
-#[derive(Deserialize, Serialize, Debug, PartialEq, Clone, Copy)]
-pub enum Limit {
-    /// An unlimited limit
-    Unlimited,
-    /// A limited limit
-    Limited(u64),
-}
-
-impl From<u64> for Limit {
-    fn from(val: u64) -> Self {
-        if val == 0 {
-            Self::Unlimited
-        } else {
-            Self::Limited(val)
-        }
-    }
-}
-
-impl From<Limit> for u64 {
-    fn from(val: Limit) -> Self {
-        match val {
-            Limit::Unlimited => 0,
-            Limit::Limited(v) => v,
-        }
-    }
 }

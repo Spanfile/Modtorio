@@ -9,7 +9,10 @@ use crate::{
 use log::*;
 use reqwest::Client;
 use serde::Deserialize;
-use std::path::{Path, PathBuf};
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use tempfile::tempfile;
 use tokio::{fs, io};
 use url::Url;
@@ -37,10 +40,10 @@ struct Credentials {
 /// The mod portal interface object.
 #[derive(Debug)]
 pub struct ModPortal {
-    /// The authentication credentials.
-    credentials: Credentials,
     /// The HTTP client.
     client: Client,
+    /// The program config.
+    config: Arc<Config>,
 }
 
 /// Represents a single mods full information from the mod portal.
@@ -105,16 +108,10 @@ struct Links {
 
 impl ModPortal {
     /// Returns a new `ModPortal` object with credentials from the given `Config` object.
-    pub fn new(config: &Config) -> anyhow::Result<Self> {
+    pub fn new(config: Arc<Config>) -> anyhow::Result<Self> {
         let client = Client::builder().user_agent(USER_AGENT).build()?;
 
-        Ok(Self {
-            credentials: Credentials {
-                username: config.portal_username().to_owned(),
-                token: config.portal_token().to_owned(),
-            },
-            client,
-        })
+        Ok(Self { client, config })
     }
 
     /// Fetches information for a given mod based on its name.
@@ -132,12 +129,16 @@ impl ModPortal {
     pub async fn fetch_multiple_mods(&self, names: &[&str]) -> anyhow::Result<Vec<PortalResult>> {
         let mut mods = Vec::new();
         let mut current_page = 1;
+        let page_size = match self.config.portal_page_size() {
+            util::Limit::Unlimited => String::from("max"),
+            util::Limit::Limited(limit) => limit.to_string(),
+        };
 
         loop {
             let mut url = Url::parse(SITE_ROOT)?.join(API_ROOT)?;
             url.query_pairs_mut()
                 .append_pair("full", "True")
-                .append_pair("page_size", "max") // TODO: make this a config option
+                .append_pair("page_size", &page_size)
                 .append_pair("namelist", &names.join(","))
                 .append_pair("page", &current_page.to_string());
             debug!("Fetching mod list from {} for {} mods", url, names.len());
@@ -205,8 +206,8 @@ impl ModPortal {
             .client
             .get(url.as_str())
             .query(&[
-                ("username", self.credentials.username.as_str()),
-                ("token", self.credentials.token.as_str()),
+                ("username", self.config.portal_username()),
+                ("token", self.config.portal_token()),
             ])
             .send()
             .await?;

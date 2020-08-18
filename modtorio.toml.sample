@@ -1,8 +1,10 @@
 [network]
+# required
 listen = ["[::1]:1337"]
 
 [debug]
 log_level = "info"
+portal_page_size = 0
 
 [cache]
 expiry = 3600

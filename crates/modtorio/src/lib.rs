@@ -88,7 +88,7 @@ impl Modtorio {
         let config = Arc::new(config);
         let store = Arc::new(store);
 
-        let portal = Arc::new(ModPortal::new(&config)?);
+        let portal = Arc::new(ModPortal::new(Arc::clone(&config))?);
         let instance = Modtorio {
             config,
             portal,
