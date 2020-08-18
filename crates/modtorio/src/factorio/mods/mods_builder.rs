@@ -113,7 +113,7 @@ impl<'a> ModsBuilder {
                 return Err(ModError::DuplicateMod(mod_zip).into());
             }
 
-            info!("Loaded mod {} from store", created_mod.display().await);
+            debug!("Loaded {} from store", created_mod.name().await);
             created_mods.push(created_mod);
         }
 
@@ -161,9 +161,9 @@ impl<'a> ModsBuilder {
                         }
                     };
 
-                info!(
+                debug!(
                     "Loaded non-stored mod {} from zip ({})",
-                    created_mod.display().await,
+                    created_mod.name().await,
                     entry.display()
                 );
                 created_mods.push(created_mod);

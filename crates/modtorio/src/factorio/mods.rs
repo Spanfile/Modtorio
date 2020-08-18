@@ -101,7 +101,7 @@ impl Mods {
             // );
 
             new_game_mods.lock().await.push(store_game_mod);
-            info!("Updated store for {}", mod_display);
+            debug!("Updated store for {}", mod_name);
         }
 
         self.store.set_mods_of_game(new_game_mods.into_inner()).await?;
@@ -193,11 +193,10 @@ impl Mods {
         let mods = self.mods.values();
         let max_mods = mods.len() as u32;
         for (index, fact_mod) in mods.into_iter().enumerate() {
-            let title = fact_mod.title().await;
-            info!("Ensuring '{}'s dependencies are met...", title);
+            debug!("Ensuring '{}'s dependencies are met...", fact_mod.name().await);
             prog_tx
                 .send_status(status::definite(
-                    &format!("Ensuring '{}'s dependencies are met...", title),
+                    &format!("Ensuring '{}'s dependencies are met...", fact_mod.title().await),
                     index as u32,
                     max_mods,
                 ))
