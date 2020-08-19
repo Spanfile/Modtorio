@@ -150,6 +150,8 @@ impl Factorio {
         let mut state_rx = self.executable.run(stdout_tx, stdin_rx).await?;
 
         let status = Arc::clone(&self.status);
+        status.write().await.reset_started_at();
+
         task::spawn(async move {
             debug!(
                 "Game ID {} executable running, beginning listening for state changes",

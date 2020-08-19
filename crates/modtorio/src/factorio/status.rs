@@ -1,6 +1,7 @@
 //! Provides the `ServerStatus` struct, used to represent a server's status in terms of the server as a whole and the
 //! in-game status.
 
+use chrono::{DateTime, Duration, Utc};
 use strum_macros::EnumString; // TODO: don't use these RPC enums, instead make own and convert to/from
 
 /// Represent a server's status in terms of the server's execution and the in-game status.
@@ -10,6 +11,8 @@ pub struct ServerStatus {
     game_status: GameStatus,
     /// The in-game status.
     in_game_status: InGameStatus,
+    /// Timestamp when the server was started.
+    started_at: DateTime<Utc>,
 }
 
 /// Represents a server's execution status.
@@ -55,6 +58,7 @@ impl Default for ServerStatus {
         Self {
             game_status: GameStatus::Shutdown,
             in_game_status: InGameStatus::Initialising,
+            started_at: Utc::now(),
         }
     }
 }
@@ -79,12 +83,22 @@ impl ServerStatus {
     pub fn set_in_game_status(&mut self, status: InGameStatus) {
         self.in_game_status = status
     }
+
+    /// Returns the server's uptime, or the time since the server was last started.
+    pub fn get_uptime(&self) -> Duration {
+        Utc::now() - self.started_at
+    }
+
+    /// Sets the server's started timestamp to the current time.
+    pub fn reset_started_at(&mut self) {
+        self.started_at = Utc::now()
+    }
 }
 
 impl From<ServerStatus> for rpc::ServerStatus {
     fn from(status: ServerStatus) -> Self {
         Self {
-            uptime: 0,
+            uptime: status.get_uptime().num_seconds(),
             status: status.game_status as i32,
             in_game_status: status.in_game_status as i32,
         }
