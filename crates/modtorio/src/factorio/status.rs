@@ -8,7 +8,7 @@ use strum_macros::EnumString; // TODO: don't use these RPC enums, instead make o
 #[derive(Debug, Copy, Clone)]
 pub struct ServerStatus {
     /// The server executable's status.
-    game_status: GameStatus,
+    game_status: ExecutionStatus,
     /// The in-game status.
     in_game_status: InGameStatus,
     /// Timestamp when the server was started.
@@ -17,7 +17,7 @@ pub struct ServerStatus {
 
 /// Represents a server's execution status.
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum GameStatus {
+pub enum ExecutionStatus {
     /// The executable is shut down.
     Shutdown = 0,
     /// The server is starting.
@@ -56,7 +56,7 @@ pub enum InGameStatus {
 impl Default for ServerStatus {
     fn default() -> Self {
         Self {
-            game_status: GameStatus::Shutdown,
+            game_status: ExecutionStatus::Shutdown,
             in_game_status: InGameStatus::Initialising,
             started_at: Utc::now(),
         }
@@ -65,12 +65,12 @@ impl Default for ServerStatus {
 
 impl ServerStatus {
     /// Returns the server executable's status.
-    pub fn game_status(&self) -> GameStatus {
+    pub fn game_status(&self) -> ExecutionStatus {
         self.game_status
     }
 
     /// Sets the server executable's status.
-    pub fn set_game_status(&mut self, status: GameStatus) {
+    pub fn set_game_status(&mut self, status: ExecutionStatus) {
         self.game_status = status
     }
 

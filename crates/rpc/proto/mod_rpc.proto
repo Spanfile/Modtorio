@@ -46,7 +46,7 @@ message VersionInformation {
   Version protocol_version = 2;
 }
 
-enum GameStatus {
+enum ExecutionStatus {
   SHUTDOWN = 0;
   STARTING = 1;
   RUNNING = 2;
@@ -57,12 +57,12 @@ enum GameStatus {
 message InstanceStatus {
   int64 uptime = 1;
 
-  message Game {
-    int64 game_id = 1;
-    GameStatus status = 2;
+  message Server {
+    int64 server_id = 1;
+    ExecutionStatus status = 2;
     string path = 3;
   };
-  repeated Game games = 2;
+  repeated Server servers = 2;
 
   enum Status {
     STARTING = 0;
@@ -73,7 +73,7 @@ message InstanceStatus {
 
 message ServerStatus {
   int64 uptime = 1;
-  GameStatus status = 2;
+  ExecutionStatus status = 2;
 
   enum InGameStatus {
     INITIALISING = 0;
@@ -90,22 +90,22 @@ message ServerStatus {
 }
 
 message ImportRequest { string path = 1; }
-message UpdateStoreRequest { int64 game_id = 1; }
+message UpdateStoreRequest { int64 server_id = 1; }
 message InstallModRequest {
-  int64 game_id = 1;
+  int64 server_id = 1;
   string mod_name = 2;
   Version mod_version = 3;
 }
-message UpdateModsRequest { int64 game_id = 1; }
-message EnsureModDependenciesRequest { int64 game_id = 1; }
-message GetServerSettingsRequest { int64 game_id = 1; }
+message UpdateModsRequest { int64 server_id = 1; }
+message EnsureModDependenciesRequest { int64 server_id = 1; }
+message GetServerSettingsRequest { int64 server_id = 1; }
 message SetServerSettingsRequest {
-  int64 game_id = 1;
+  int64 server_id = 1;
   ServerSettings settings = 2;
 }
-message RunServerRequest { int64 game_id = 1; }
+message RunServerRequest { int64 server_id = 1; }
 message SendCommandRequest {
-  int64 game_id = 1;
+  int64 server_id = 1;
 
   enum Command {
     RAW = 0;
@@ -116,7 +116,7 @@ message SendCommandRequest {
   Command command = 2;
   repeated string arguments = 3;
 }
-message ServerStatusRequest { int64 game_id = 1; }
+message ServerStatusRequest { int64 server_id = 1; }
 
 message ServerSettings {
   string name = 1;
@@ -165,7 +165,6 @@ message ServerSettings {
     fixed32 port = 3;
   }
   SocketAddr bind = 27;
-
   string save_name = 28;
 
   enum StartBehaviour {

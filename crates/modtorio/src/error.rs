@@ -1,7 +1,7 @@
 //! Provides all error types the program uses.
 
 use crate::{
-    factorio::{GameStatus, GameStoreId},
+    factorio::{ExecutionStatus, GameStoreId},
     mod_common::Dependency,
     util::HumanVersion,
 };
@@ -304,7 +304,7 @@ pub enum UpdateBatcherError {
 pub enum ServerError {
     /// Returned when trying to change a server's state and its current status is invalid given the change.
     #[error("Invalid game status: {0:?}")]
-    InvalidGameStatus(GameStatus),
+    InvalidGameStatus(ExecutionStatus),
     /// Returned when trying to access a server's store ID when it hasn't been added to the store yet.
     #[error("The game hasn't been added to the program store yet")]
     GameNotInStore,

@@ -31,7 +31,7 @@ use tokio::{
     task,
 };
 
-pub use status::{GameStatus, InGameStatus, ServerStatus};
+pub use status::{ExecutionStatus, InGameStatus, ServerStatus};
 
 /// The file name of the JSON file used to store a Factorio server's settings.
 const SERVER_SETTINGS_FILENAME: &str = "server-settings.json";
@@ -138,7 +138,7 @@ impl Factorio {
 
     /// Runs the server.
     pub async fn run(&self) -> anyhow::Result<()> {
-        self.assert_status(GameStatus::Shutdown).await?;
+        self.assert_status(ExecutionStatus::Shutdown).await?;
         let store_id = self.store_id().await?;
         debug!("Running game ID {} executable", store_id);
 
@@ -158,7 +158,7 @@ impl Factorio {
         {
             let mut status_w = status.write().await;
             status_w.reset_started_at();
-            status_w.set_game_status(GameStatus::Starting);
+            status_w.set_game_status(ExecutionStatus::Starting);
         }
 
         task::spawn(async move {
@@ -192,7 +192,7 @@ impl Factorio {
 
     /// Sends a command to the running executable.
     pub async fn send_command(&self, command: Command, arguments: Vec<String>) -> anyhow::Result<()> {
-        self.assert_status(GameStatus::Running).await?;
+        self.assert_status(ExecutionStatus::Running).await?;
 
         debug!("Building command from {:?}, arguments: {:?}", command, arguments);
         let mut command_components = Vec::new();
@@ -271,7 +271,7 @@ impl Factorio {
     }
 
     /// Asserts that the server's status is `expected`, otherwise returns `ServerError::InvalidStatus`.
-    async fn assert_status(&self, expected: GameStatus) -> anyhow::Result<()> {
+    async fn assert_status(&self, expected: ExecutionStatus) -> anyhow::Result<()> {
         let status = self.status().await;
         if status.game_status() == expected {
             Ok(())
@@ -441,15 +441,15 @@ async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &Rw
 
             match to {
                 InGameStatus::InGame => {
-                    if status_w.game_status() == GameStatus::Starting {
+                    if status_w.game_status() == ExecutionStatus::Starting {
                         info!("Game ID {} started and is now running", store_id);
-                        status_w.set_game_status(GameStatus::Running);
+                        status_w.set_game_status(ExecutionStatus::Running);
                     }
                 }
                 InGameStatus::DisconnectingScheduled => {
-                    if status_w.game_status() == GameStatus::Running {
+                    if status_w.game_status() == ExecutionStatus::Running {
                         info!("Game ID {} shutting down", store_id);
-                        status_w.set_game_status(GameStatus::ShuttingDown);
+                        status_w.set_game_status(ExecutionStatus::ShuttingDown);
                     }
                 }
                 in_game_status => {
@@ -480,9 +480,9 @@ async fn process_exited_event(store_id: GameStoreId, exit_result: anyhow::Result
 
     if let Err(e) = exit_result {
         error!("Game ID {} executable exited with error: {:?}", store_id, e);
-        status.write().await.set_game_status(GameStatus::Crashed);
+        status.write().await.set_game_status(ExecutionStatus::Crashed);
     } else {
         info!("Game ID {} exited succesfully", store_id);
-        status.write().await.set_game_status(GameStatus::Shutdown);
+        status.write().await.set_game_status(ExecutionStatus::Shutdown);
     }
 }
