@@ -15,7 +15,7 @@ use crate::{
     },
     Config, ModPortal,
 };
-use executable::{Executable, ExecutableState, GameState};
+use executable::{Executable, ExecutableEvent, GameEvent, GameState};
 use log::*;
 use models::GameSettings;
 use mods::{Mods, ModsBuilder};
@@ -154,28 +154,44 @@ impl Factorio {
                 "Game ID {} executable running, beginning listening for state changes",
                 store_id
             );
-            while let Some(state) = state_rx.recv().await {
-                match state {
-                    ExecutableState::GameState(game_state) => {
-                        debug!("Game ID {} executable got new game state: {:?}", store_id, game_state);
 
-                        match game_state {
-                            GameState::InGame => {
-                                if status.read().await.game_status() == GameStatus::Starting {
-                                    info!("Game ID {} started and is now running", store_id);
-                                    status.write().await.set_game_status(GameStatus::Running);
+            while let Some(event) = state_rx.recv().await {
+                match event {
+                    ExecutableEvent::GameEvent(game_event) => {
+                        debug!("Game ID {} got new game event: {:?}", store_id, game_event);
+
+                        match game_event {
+                            GameEvent::GameStateChanged { from: _, to } => match to {
+                                GameState::InGame => {
+                                    if status.read().await.game_status() == GameStatus::Starting {
+                                        info!("Game ID {} started and is now running", store_id);
+                                        status.write().await.set_game_status(GameStatus::Running);
+                                    }
                                 }
+                                GameState::DisconnectingScheduled => {
+                                    if status.read().await.game_status() == GameStatus::Running {
+                                        info!("Game ID {} shutting down", store_id);
+                                        status.write().await.set_game_status(GameStatus::ShuttingDown);
+                                    }
+                                }
+                                _ => {}
+                            },
+                            GameEvent::RefusingConnection { peer, username, reason } => {
+                                info!(
+                                    "Game ID {} refusing connection for '{}' (addr {}): {}",
+                                    store_id, username, peer, reason
+                                );
                             }
-                            GameState::DisconnectingScheduled => {
-                                if status.read().await.game_status() == GameStatus::Running {
-                                    info!("Game ID {} shutting down", store_id);
-                                    status.write().await.set_game_status(GameStatus::ShuttingDown);
-                                }
+                            GameEvent::PeerJoined { username } => {
+                                info!("Game ID {}: {} joined the game", store_id, username);
+                            }
+                            GameEvent::PeerLeft { username } => {
+                                info!("Game ID {}: {} left the game", store_id, username);
                             }
                             _ => {}
                         }
                     }
-                    ExecutableState::Exited(exit_result) => {
+                    ExecutableEvent::Exited(exit_result) => {
                         debug!("Game ID {} executable exited with {:?}", store_id, exit_result);
                         if let Err(e) = exit_result {
                             error!("Game ID {} executable exited with error: {:?}", store_id, e);

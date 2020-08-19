@@ -5,8 +5,8 @@ mod game_event;
 mod version_information;
 
 use crate::error::ExecutableError;
-pub use executable_state::{ExecutableState, GameState};
-use game_event::GameEvent;
+pub use executable_state::{ExecutableEvent, GameState};
+pub use game_event::GameEvent;
 use log::*;
 use std::{
     path::{Path, PathBuf},
@@ -61,7 +61,7 @@ impl Executable {
         &self,
         stdout_tx: mpsc::Sender<String>,
         mut stdin_rx: mpsc::Receiver<String>,
-    ) -> anyhow::Result<mpsc::Receiver<ExecutableState>> {
+    ) -> anyhow::Result<mpsc::Receiver<ExecutableEvent>> {
         let mut child = Command::new(&self.path)
             .args(&["--start-server", "test.zip"])
             .stdin(Stdio::piped())
@@ -99,7 +99,7 @@ impl Executable {
                 tokio::select! {
                     child_result = wait_for_child(&mut child) => {
                         trace!("Child returned {:?}", child_result);
-                        if let Err(e) = state_tx.send(ExecutableState::Exited(child_result)).await {
+                        if let Err(e) = state_tx.send(ExecutableEvent::Exited(child_result)).await {
                             error!("Writing executable state to state tx failed: {}", e);
                         }
                         break;
@@ -125,14 +125,10 @@ impl Executable {
 
                     event = event_rx.recv() => {
                         if let Some(event) = event {
-                            debug!("Game event: {:?}", event);
+                            trace!("Game event from executable: {:?}", event);
 
-                            match event {
-                                GameEvent::GameStateChanged { from: _, to } => {
-                                    if let Err(e) = state_tx.send(ExecutableState::GameState(to)).await {
-                                        error!("Writing executable state to state tx failed: {}", e);
-                                    }
-                                }
+                            if let Err(e) = state_tx.send(ExecutableEvent::GameEvent(event)).await {
+                                error!("Writing executable state to state tx failed: {}", e);
                             }
                         }
                     }

@@ -1,12 +1,13 @@
 //! Provides objects that represent a Factorio server's state, both the executable's and the server's in-game state.
 
+use super::game_event::GameEvent;
 use strum_macros::EnumString;
 
-/// Represesnts the server executable's state.
+/// Represesnts an event that happened with the executable.
 #[derive(Debug)]
-pub enum ExecutableState {
-    /// Represents the in-game state.
-    GameState(GameState),
+pub enum ExecutableEvent {
+    /// Represents an event that happened in the server.
+    GameEvent(GameEvent),
     /// The executable exited with a given result.
     Exited(anyhow::Result<()>),
 }
