@@ -3,13 +3,12 @@
 use async_trait::async_trait;
 use log::*;
 use rpc::{progress::ProgressType, Progress};
-use std::sync::Arc;
-use tokio::sync::{mpsc, Mutex};
+use tokio::sync::mpsc;
 
 /// The Result type used to reprsent the status of an async task.
 pub type AsyncProgressResult = Result<Progress, tonic::Status>;
 /// The channel used to send async task results into.
-pub type AsyncProgressChannel = Arc<Mutex<mpsc::Sender<AsyncProgressResult>>>;
+pub type AsyncProgressChannel = mpsc::Sender<AsyncProgressResult>;
 
 /// Defines functions used with `AsyncProgressChannel`.
 #[async_trait]
@@ -34,9 +33,9 @@ impl AsyncProgressChannelExt for Option<AsyncProgressChannel> {
 
 /// Sends a given status update to an optional progress channel.
 pub async fn send_status(channel: Option<AsyncProgressChannel>, status: AsyncProgressResult) -> anyhow::Result<()> {
-    if let Some(channel) = channel {
+    if let Some(mut channel) = channel {
         trace!("Sending status update: {:?}", status);
-        if let Err(e) = channel.lock().await.try_send(status) {
+        if let Err(e) = channel.try_send(status) {
             error!("Caught error while sendig RPC status update: {}", e);
             return Err(anyhow::anyhow!(""));
         }

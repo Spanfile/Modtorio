@@ -17,6 +17,7 @@ service ModRpc {
   rpc SetServerSettings(SetServerSettingsRequest) returns (Empty);
 
   rpc RunServer(RunServerRequest) returns (Empty);
+  rpc SendServerCommand(SendCommandRequest) returns (Empty);
 }
 
 message Empty {}
@@ -83,6 +84,18 @@ message SetServerSettingsRequest {
   ServerSettings settings = 2;
 }
 message RunServerRequest { int64 game_id = 1; }
+message SendCommandRequest {
+  int64 game_id = 1;
+
+  enum Command {
+    RAW = 0;
+    SAVE = 1;
+    QUIT = 2;
+    SAY = 3;
+  }
+  Command command = 2;
+  repeated string arguments = 3;
+}
 
 message ServerSettings {
   string name = 1;

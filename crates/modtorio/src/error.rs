@@ -217,6 +217,9 @@ pub enum RpcError {
         /// The actual instance status.
         actual: rpc::instance_status::Status,
     },
+    /// Returned when trying to run an invalid command.
+    #[error("No such command identifier: {0}")]
+    NoSuchCommand(i32),
     /// Returned when an unknown or internal error occurred.
     #[error("An internal error occurred: {0}")]
     Internal(#[from] anyhow::Error),
@@ -232,7 +235,9 @@ impl From<&RpcError> for tonic::Status {
     fn from(e: &RpcError) -> Self {
         match e {
             RpcError::Internal(int) => tonic::Status::internal(int.to_string()),
-            RpcError::NoSuchMod(_) | RpcError::NoSuchGame(_) => tonic::Status::invalid_argument(e.to_string()),
+            RpcError::NoSuchMod(_) | RpcError::NoSuchGame(_) | RpcError::NoSuchCommand(_) => {
+                tonic::Status::invalid_argument(e.to_string())
+            }
             RpcError::GameAlreadyExists(_) => tonic::Status::already_exists(e.to_string()),
             RpcError::InvalidInstanceStatus { .. } => tonic::Status::failed_precondition(e.to_string()),
         }
@@ -252,14 +257,14 @@ pub enum ExecutableError {
         source: anyhow::Error,
     },
     /// Returned when an executable terminated unsuccesfully (terminated by signal or returned a non-zero exit code).
-    #[error("The executable terminated unsuccesfully: {exit_code:?}\nstdout: {stdout}\nstderr: {stderr}")]
+    #[error("The executable terminated unsuccesfully: {exit_code:?}\nstdout: {stdout:?}\nstderr: {stderr:?}")]
     Unsuccesfull {
         /// The executable's exit code, if any.
         exit_code: Option<i32>,
         /// The executable's full standard output.
-        stdout: String,
+        stdout: Option<String>,
         /// The executable's full standard error.
-        stderr: String,
+        stderr: Option<String>,
     },
     /// Returned when trying to parse a version information string fails.
     #[error("Version information string failed to parse ({ver_str}): {source}")]
@@ -270,9 +275,9 @@ pub enum ExecutableError {
         #[source]
         source: anyhow::Error,
     },
-    /// Returned when spawning a child process and trying to acquire its non-existent stdout.
-    #[error("Child process did not have a stdout handle")]
-    NoStdoutHandle,
+    /// Returned when spawning a child process and trying to acquire its non-existent stdio handle.
+    #[error("Child process did not have an stdio handle")]
+    NoStdioHandle,
 }
 
 /// Represents all types of errors that can occur when loading or saving the server's settings.

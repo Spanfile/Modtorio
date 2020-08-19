@@ -1,16 +1,19 @@
 //! Provides utilities to work with a Factorio server's executable.
 
+mod executable_state;
 mod version_information;
 
 use crate::error::ExecutableError;
+pub use executable_state::{ExecutableState, GameState};
 use log::*;
 use std::{
     path::{Path, PathBuf},
     process::Stdio,
 };
 use tokio::{
-    io::BufReader,
-    process::{ChildStdout, Command},
+    io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
+    process::{Child, Command},
+    sync::mpsc,
     task,
 };
 use version_information::VersionInformation;
@@ -52,8 +55,54 @@ impl Executable {
     }
 
     /// Runs this executable.
-    pub async fn run(&self) -> anyhow::Result<BufReader<ChildStdout>> {
-        follow_executable(&self.path, &["--start-server-load-latest"])
+    pub async fn run(
+        &self,
+        stdout_tx: mpsc::Sender<String>,
+        mut stdin_rx: mpsc::Receiver<String>,
+    ) -> anyhow::Result<mpsc::Receiver<ExecutableState>> {
+        let mut child = Command::new(&self.path)
+            .args(&["--start-server", "test.zip"])
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .kill_on_drop(true)
+            .spawn()?;
+
+        let stdout = child.stdout.take().ok_or_else(|| ExecutableError::NoStdioHandle)?;
+        let mut stdin = child.stdin.take().ok_or_else(|| ExecutableError::NoStdioHandle)?;
+        let mut stdout_reader = BufReader::new(stdout).lines();
+
+        let (mut state_tx, state_rx) = mpsc::channel(64);
+
+        task::spawn(async move {
+            loop {
+                tokio::select! {
+                    child_result = wait_for_child(&mut child) => {
+                        trace!("Child returned {:?}", child_result);
+                        if let Err(e) = state_tx.send(ExecutableState::Exited(child_result)).await {
+                            error!("Writing executable state to state tx failed: {}", e);
+                        }
+                        break;
+                    }
+                    stdout_line = stdout_reader.next_line() => {
+                        if let Some(stdout_line) = stdout_line.expect("failed to read child stdout line") {
+                            debug!("Child stdout: {}", stdout_line);
+                        }
+                    }
+                    msg = stdin_rx.recv() => {
+                        if let Some(msg) = msg {
+                            trace!("Got input from stdin channel: {}", msg);
+                            if let Err(e) = stdin.write_all(msg.as_bytes()).await {
+                                error!("Writing to child stdin failed: {}", e);
+                            }
+                        }
+                    }
+                };
+            }
+
+            trace!("Child monitor task returning");
+        });
+
+        Ok(state_rx)
     }
 
     /// Returns the server's version information by running the executable with the `--version` parameter.
@@ -85,8 +134,8 @@ where
     if !output.status.success() {
         return Err(ExecutableError::Unsuccesfull {
             exit_code: output.status.code(),
-            stdout,
-            stderr,
+            stdout: Some(stdout),
+            stderr: Some(stderr),
         }
         .into());
     }
@@ -94,23 +143,17 @@ where
     Ok(stdout)
 }
 
-#[allow(clippy::missing_docs_in_private_items)]
-fn follow_executable<P>(path: P, args: &[&str]) -> anyhow::Result<BufReader<ChildStdout>>
-where
-    P: AsRef<Path>,
-{
-    let mut child = Command::new(path.as_ref())
-        .args(args)
-        .stdout(Stdio::piped())
-        .kill_on_drop(true)
-        .spawn()?;
-    let child_stdout = child.stdout.take().ok_or_else(|| ExecutableError::NoStdoutHandle)?;
-
-    let child_path = path.as_ref().to_owned();
-    task::spawn(async move {
-        let status = child.await.expect("child encountered an error");
-        debug!("{} returned status {}", child_path.display(), status);
-    });
-
-    Ok(BufReader::new(child_stdout))
+/// Asynchronously waits for a given child process to exit. Will not drop the child if the task is cancelled.
+async fn wait_for_child(child: &mut Child) -> anyhow::Result<()> {
+    let status = child.await?;
+    if status.success() {
+        Ok(())
+    } else {
+        Err(ExecutableError::Unsuccesfull {
+            exit_code: status.code(),
+            stdout: None,
+            stderr: None,
+        }
+        .into())
+    }
 }

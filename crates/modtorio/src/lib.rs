@@ -31,11 +31,12 @@ use futures::{future::try_join_all, TryStreamExt};
 use lazy_static::lazy_static;
 use mod_portal::ModPortal;
 use rpc::{
-    instance_status::{self, game::GameStatus, Game},
+    instance_status::{self, Game},
     mod_rpc_server::{ModRpc, ModRpcServer},
+    send_command_request::Command,
     Empty, EnsureModDependenciesRequest, GetServerSettingsRequest, ImportRequest, InstallModRequest, InstanceStatus,
-    Progress, RunServerRequest, ServerSettings, SetServerSettingsRequest, UpdateModsRequest, UpdateStoreRequest,
-    VersionInformation,
+    Progress, RunServerRequest, SendCommandRequest, ServerSettings, SetServerSettingsRequest, UpdateModsRequest,
+    UpdateStoreRequest, VersionInformation,
 };
 use std::{path::Path, sync::Arc};
 use store::Store;
@@ -246,10 +247,13 @@ impl Modtorio {
         let mut rpc_games = Vec::new();
 
         for game in self.games.lock().await.iter() {
+            let status = game.status().await.into();
+            let game_id = game.store_id().await.unwrap_or(0);
+
             rpc_games.push(Game {
                 path: format!("{}", game.root().display()),
-                status: GameStatus::Shutdown.into(),
-                game_id: game.store_id().await.unwrap_or(0),
+                status,
+                game_id,
             });
         }
 
@@ -548,6 +552,7 @@ impl Modtorio {
         }
     }
 
+    /// Runs a given game instance.
     async fn run_server(&self, game_id: GameStoreId) -> anyhow::Result<()> {
         self.assert_instance_status(instance_status::Status::Running).await?;
 
@@ -562,7 +567,44 @@ impl Modtorio {
         }
 
         if let Some(game) = game {
-            game.run().await?;
+            if let Err(e) = game.run().await {
+                error!("Server ID {} failed to run: {}", game_id, e);
+                Err(e)
+            } else {
+                info!("Server ID {} started", game_id);
+                Ok(())
+            }
+        } else {
+            Err(RpcError::NoSuchGame(game_id).into())
+        }
+    }
+
+    /// Sends a command to a given game instance.
+    async fn send_server_command(
+        &self,
+        game_id: GameStoreId,
+        command: i32,
+        arguments: Vec<String>,
+    ) -> anyhow::Result<()> {
+        self.assert_instance_status(instance_status::Status::Running).await?;
+
+        let mut games = self.games.lock().await;
+        let mut game = None;
+        for g in games.iter_mut() {
+            if let Some(id) = g.store_id().await {
+                if id == game_id {
+                    game = Some(g);
+                }
+            }
+        }
+
+        if let Some(game) = game {
+            let command = match command {
+                0 => Command::Raw,
+                i => return Err(RpcError::NoSuchCommand(i).into()),
+            };
+
+            game.send_command(command, arguments).await?;
 
             Ok(())
         } else {
@@ -747,13 +789,34 @@ impl ModRpc for Modtorio {
             }
         }
     }
+
+    async fn send_server_command(&self, req: Request<SendCommandRequest>) -> Result<Response<Empty>, Status> {
+        log_rpc_request(&req);
+
+        let msg = req.into_inner();
+        match self.send_server_command(msg.game_id, msg.command, msg.arguments).await {
+            Ok(_) => {
+                let resp = Response::new(Empty {});
+                log_rpc_response(&resp);
+                Ok(resp)
+            }
+            Err(e) => {
+                error!("RPC send server command failed: {}", e);
+                if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
+                    Err(rpc_error.into())
+                } else {
+                    Err(RpcError::Internal(e).into())
+                }
+            }
+        }
+    }
 }
 
 /// Creates a new bounded channel and returns the receiver and sender, the sender wrapped in an
 /// Arc<Mutex>.
-fn channel<T>() -> (Arc<Mutex<mpsc::Sender<T>>>, mpsc::Receiver<T>) {
+fn channel<T>() -> (mpsc::Sender<T>, mpsc::Receiver<T>) {
     let (tx, rx) = mpsc::channel(64);
-    (Arc::new(Mutex::new(tx)), rx)
+    (tx, rx)
 }
 
 /// Logs a given RPC request.

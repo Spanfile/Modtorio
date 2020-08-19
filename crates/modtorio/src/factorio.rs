@@ -11,11 +11,11 @@ use crate::{
     util::{ext::PathExt, status, status::AsyncProgressChannelExt},
     Config, ModPortal,
 };
-use executable::Executable;
+use executable::{Executable, ExecutableState};
 use log::*;
 use models::GameSettings;
 use mods::{Mods, ModsBuilder};
-use rpc::instance_status::game::GameStatus;
+use rpc::{instance_status::game::GameStatus, send_command_request::Command};
 use settings::ServerSettings;
 use std::{
     fs,
@@ -23,8 +23,7 @@ use std::{
     sync::Arc,
 };
 use tokio::{
-    io::AsyncBufReadExt,
-    sync::{Mutex, RwLock},
+    sync::{mpsc, Mutex, RwLock},
     task,
 };
 
@@ -53,7 +52,9 @@ pub struct Factorio {
     /// Reference to the program store.
     store: Arc<Store>,
     /// The server's status.
-    status: RwLock<GameStatus>,
+    status: Arc<RwLock<GameStatus>>,
+    exec_stdin_tx: Mutex<Option<mpsc::Sender<String>>>,
+    exec_stdout_rx: Mutex<Option<mpsc::Receiver<String>>>,
 }
 
 /// Builds a new instance of a [`Factorio`](Factorio) server by importing its information from the
@@ -128,16 +129,68 @@ impl Factorio {
     /// Runs the server.
     pub async fn run(&self) -> anyhow::Result<()> {
         self.assert_status(GameStatus::Shutdown).await?;
+        debug!("Running server executable");
 
-        let reader = self.executable.run().await?;
-        self.set_status(GameStatus::Starting).await;
+        let (stdin_tx, stdin_rx) = mpsc::channel(64);
+        let (stdout_tx, stdout_rx) = mpsc::channel(64);
 
+        *self.exec_stdin_tx.lock().await = Some(stdin_tx);
+        *self.exec_stdout_rx.lock().await = Some(stdout_rx);
+
+        self.set_status(GameStatus::Running).await;
+        let mut state_rx = self.executable.run(stdout_tx, stdin_rx).await?;
+
+        let status = Arc::clone(&self.status);
         task::spawn(async move {
-            let mut reader = reader.lines();
-            while let Some(line) = reader.next_line().await.expect("failed to read child stdout line") {
-                debug!("Game stdout: {}", line);
+            debug!("Executable running, beginning listening for state changes");
+            while let Some(state) = state_rx.recv().await {
+                match state {
+                    ExecutableState::GameState(game_state) => {
+                        debug!("Server executable got new game state: {:?}", game_state);
+                    }
+                    ExecutableState::Exited(exit_result) => {
+                        debug!("Server executable exited with {:?}", exit_result);
+                        if let Err(e) = exit_result {
+                            error!("Server executable exited with error: {:?}", e);
+                        } else {
+                            info!("Server executable exited succesfully");
+                        }
+
+                        *status.write().await = GameStatus::Shutdown;
+                    }
+                }
             }
         });
+
+        Ok(())
+    }
+
+    /// Sends a command to the running executable.
+    pub async fn send_command(&self, command: Command, arguments: Vec<String>) -> anyhow::Result<()> {
+        self.assert_status(GameStatus::Running).await?;
+
+        debug!("Building command from {:?}, arguments: {:?}", command, arguments);
+        let mut command_components = Vec::new();
+        match command {
+            Command::Raw => {
+                command_components.extend(arguments);
+            }
+            Command::Say => {
+                // TODO
+                todo!()
+            }
+            Command::Save => {
+                command_components.push(String::from("save"));
+                command_components.extend(arguments);
+            }
+            Command::Quit => {
+                command_components.push(String::from("quit"));
+            }
+        }
+
+        let command_string = format!("/{}\n", command_components.join(" "));
+        debug!("Final command string: {}", command_string);
+        self.write_to_exec_stdin(command_string).await?;
 
         Ok(())
     }
@@ -196,6 +249,15 @@ impl Factorio {
         } else {
             Err(ServerError::InvalidStatus(status).into())
         }
+    }
+
+    /// Writes a given `String` to the running executable's stdin tx channel.
+    async fn write_to_exec_stdin(&self, msg: String) -> anyhow::Result<()> {
+        if let Some(stdin_tx) = self.exec_stdin_tx.lock().await.as_mut() {
+            stdin_tx.send(msg).await?;
+        }
+
+        Ok(())
     }
 }
 
@@ -287,7 +349,7 @@ impl Importer {
         };
 
         if let Some(prog_tx) = &self.prog_tx {
-            mods_builder = mods_builder.with_status_updates(Arc::clone(prog_tx));
+            mods_builder = mods_builder.with_status_updates(prog_tx.clone());
         }
 
         self.prog_tx
@@ -305,7 +367,9 @@ impl Importer {
             root: self.root,
             store_id: Arc::new(Mutex::new(self.game_store_id)),
             store,
-            status: RwLock::new(GameStatus::Shutdown),
+            status: Arc::new(RwLock::new(GameStatus::Shutdown)),
+            exec_stdin_tx: Mutex::new(None),
+            exec_stdout_rx: Mutex::new(None),
         })
     }
 }
