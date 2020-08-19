@@ -56,6 +56,7 @@ message InstanceStatus {
       STARTING = 1;
       RUNNING = 2;
       SHUTTING_DOWN = 3;
+      CRASHED = 4;
     };
     GameStatus status = 2;
     int64 game_id = 3;

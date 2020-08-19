@@ -4,19 +4,24 @@
 pub mod executable;
 pub mod mods;
 pub mod settings;
+mod status;
 
 use crate::{
     error::ServerError,
     store::{models, Store},
-    util::{ext::PathExt, status, status::AsyncProgressChannelExt},
+    util::{
+        async_status::{self, AsyncProgressChannel, AsyncProgressChannelExt},
+        ext::PathExt,
+    },
     Config, ModPortal,
 };
-use executable::{Executable, ExecutableState};
+use executable::{Executable, ExecutableState, GameState};
 use log::*;
 use models::GameSettings;
 use mods::{Mods, ModsBuilder};
 use rpc::{instance_status::game::GameStatus, send_command_request::Command};
 use settings::ServerSettings;
+use status::ServerStatus;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -52,8 +57,10 @@ pub struct Factorio {
     /// Reference to the program store.
     store: Arc<Store>,
     /// The server's status.
-    status: Arc<RwLock<GameStatus>>,
+    status: Arc<RwLock<ServerStatus>>,
+    /// The running executable's stdin transmit channel.
     exec_stdin_tx: Mutex<Option<mpsc::Sender<String>>>,
+    /// The running executable's stdout receiver channel.
     exec_stdout_rx: Mutex<Option<mpsc::Receiver<String>>>,
 }
 
@@ -69,19 +76,19 @@ pub struct Importer {
     /// The program's store ID.
     game_store_id: Option<GameStoreId>,
     /// A status update channel.
-    prog_tx: Option<status::AsyncProgressChannel>,
+    prog_tx: Option<AsyncProgressChannel>,
 }
 
 impl Factorio {
     /// Updates all information about the instance in the program store.
-    pub async fn update_store(&self, prog_tx: Option<status::AsyncProgressChannel>) -> anyhow::Result<()> {
+    pub async fn update_store(&self, prog_tx: Option<AsyncProgressChannel>) -> anyhow::Result<()> {
         self.store.begin_transaction()?;
 
         let mut store_id = self.store_id.lock().await;
         let id = if let Some(c) = *store_id {
             info!("Updating existing game ID {} store", c);
             prog_tx
-                .send_status(status::indefinite("Updating existing stored game..."))
+                .send_status(async_status::indefinite("Updating existing stored game..."))
                 .await?;
 
             self.store
@@ -95,7 +102,7 @@ impl Factorio {
         } else {
             info!("Creating new stored game...");
             prog_tx
-                .send_status(status::indefinite("Creating new stored game..."))
+                .send_status(async_status::indefinite("Creating new stored game..."))
                 .await?;
 
             let new_id = self
@@ -122,7 +129,7 @@ impl Factorio {
         self.mods.update_store(id, prog_tx).await?;
         self.store.commit_transaction()?;
 
-        info!("Game ID {} stored updated", id);
+        info!("Game ID {} store updated", id);
         Ok(())
     }
 
@@ -137,7 +144,7 @@ impl Factorio {
         *self.exec_stdin_tx.lock().await = Some(stdin_tx);
         *self.exec_stdout_rx.lock().await = Some(stdout_rx);
 
-        self.set_status(GameStatus::Running).await;
+        self.status.write().await.set_game_status(GameStatus::Starting);
         let mut state_rx = self.executable.run(stdout_tx, stdin_rx).await?;
 
         let status = Arc::clone(&self.status);
@@ -147,16 +154,32 @@ impl Factorio {
                 match state {
                     ExecutableState::GameState(game_state) => {
                         debug!("Server executable got new game state: {:?}", game_state);
+
+                        match game_state {
+                            GameState::InGame => {
+                                if status.read().await.game_status() == GameStatus::Starting {
+                                    info!("Game started and is now running");
+                                    status.write().await.set_game_status(GameStatus::Running);
+                                }
+                            }
+                            GameState::DisconnectingScheduled => {
+                                if status.read().await.game_status() == GameStatus::Running {
+                                    info!("Game shutting down");
+                                    status.write().await.set_game_status(GameStatus::ShuttingDown);
+                                }
+                            }
+                            _ => {}
+                        }
                     }
                     ExecutableState::Exited(exit_result) => {
                         debug!("Server executable exited with {:?}", exit_result);
                         if let Err(e) = exit_result {
                             error!("Server executable exited with error: {:?}", e);
+                            status.write().await.set_game_status(GameStatus::Crashed);
                         } else {
-                            info!("Server executable exited succesfully");
+                            info!("Game shut down succesfully");
+                            status.write().await.set_game_status(GameStatus::Shutdown);
                         }
-
-                        *status.write().await = GameStatus::Shutdown;
                     }
                 }
             }
@@ -232,22 +255,17 @@ impl Factorio {
     }
 
     /// Returns the server's status.
-    pub async fn status(&self) -> GameStatus {
-        *self.status.read().await
-    }
-
-    /// Sets the server's status.
-    async fn set_status(&self, status: GameStatus) {
-        *self.status.write().await = status;
+    pub async fn game_status(&self) -> GameStatus {
+        self.status.read().await.game_status()
     }
 
     /// Asserts that the server's status is `expected`, otherwise returns `ServerError::InvalidStatus`.
     async fn assert_status(&self, expected: GameStatus) -> anyhow::Result<()> {
-        let status = self.status().await;
+        let status = self.game_status().await;
         if status == expected {
             Ok(())
         } else {
-            Err(ServerError::InvalidStatus(status).into())
+            Err(ServerError::InvalidGameStatus(status).into())
         }
     }
 
@@ -316,7 +334,7 @@ impl Importer {
     }
 
     /// Specifies an `AsyncProgressChannel` to use for status updates when importing the game.
-    pub fn with_status_updates(self, prog_tx: status::AsyncProgressChannel) -> Self {
+    pub fn with_status_updates(self, prog_tx: AsyncProgressChannel) -> Self {
         Self {
             prog_tx: Some(prog_tx),
             ..self
@@ -333,7 +351,7 @@ impl Importer {
         let mut mods_builder = ModsBuilder::root(self.root.join(MODS_PATH));
 
         self.prog_tx
-            .send_status(status::indefinite("Reading server settings..."))
+            .send_status(async_status::indefinite("Reading server settings..."))
             .await?;
         let settings = if let Some(game_store_id) = self.game_store_id {
             // TODO: ugly side effect
@@ -353,11 +371,13 @@ impl Importer {
         }
 
         self.prog_tx
-            .send_status(status::indefinite("Verifying executable..."))
+            .send_status(async_status::indefinite("Verifying executable..."))
             .await?;
         let executable = Executable::new(self.executable).await?;
 
-        self.prog_tx.send_status(status::indefinite("Loading mods...")).await?;
+        self.prog_tx
+            .send_status(async_status::indefinite("Loading mods..."))
+            .await?;
         let mods = mods_builder.build(config, portal, Arc::clone(&store)).await?;
 
         Ok(Factorio {
@@ -367,7 +387,7 @@ impl Importer {
             root: self.root,
             store_id: Arc::new(Mutex::new(self.game_store_id)),
             store,
-            status: Arc::new(RwLock::new(GameStatus::Shutdown)),
+            status: Arc::new(RwLock::new(ServerStatus::default())),
             exec_stdin_tx: Mutex::new(None),
             exec_stdout_rx: Mutex::new(None),
         })

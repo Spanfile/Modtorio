@@ -10,10 +10,10 @@ use crate::{
     mod_portal::ModPortal,
     store::Store,
     util,
-    util::{ext::PathExt, status},
+    util::{async_status, ext::PathExt},
 };
+use async_status::{AsyncProgressChannel, AsyncProgressChannelExt};
 use log::*;
-use status::AsyncProgressChannelExt;
 use std::{
     collections::{hash_map::Entry, HashMap, HashSet},
     path::PathBuf,
@@ -35,7 +35,7 @@ pub struct ModsBuilder {
     /// The store ID of the game these mods belong to.
     game_store_id: Option<GameStoreId>,
     /// A status update channel.
-    prog_tx: Option<status::AsyncProgressChannel>,
+    prog_tx: Option<AsyncProgressChannel>,
 }
 
 impl<'a> ModsBuilder {
@@ -58,7 +58,7 @@ impl<'a> ModsBuilder {
     }
 
     /// Specifies an `AsyncProgressChannel` to use for status updates when building the mods.
-    pub fn with_status_updates(self, prog_tx: status::AsyncProgressChannel) -> Self {
+    pub fn with_status_updates(self, prog_tx: AsyncProgressChannel) -> Self {
         Self {
             prog_tx: Some(prog_tx),
             ..self
@@ -81,7 +81,7 @@ impl<'a> ModsBuilder {
 
         for (index, game_mod) in mods.into_iter().enumerate() {
             self.prog_tx
-                .send_status(status::definite(
+                .send_status(async_status::definite(
                     &format!("Loading mod from store: {}", game_mod.factorio_mod),
                     index as u32,
                     max_mods,
@@ -118,7 +118,7 @@ impl<'a> ModsBuilder {
         }
 
         self.prog_tx
-            .send_status(status::indefinite("Checking for non-stored mod zip archives..."))
+            .send_status(async_status::indefinite("Checking for non-stored mod zip archives..."))
             .await?;
         debug!(
             "{} mods loaded from store, checking for non-stored zips...",
@@ -132,7 +132,7 @@ impl<'a> ModsBuilder {
             let entry_file_name = entry.get_file_name()?;
             trace!("Checking if {} is loaded...", entry_file_name);
             self.prog_tx
-                .send_status(status::definite(
+                .send_status(async_status::definite(
                     &format!("Checking if {} is loaded...", entry.display()),
                     index as u32,
                     max_zips,
@@ -145,7 +145,7 @@ impl<'a> ModsBuilder {
                     entry.display()
                 );
                 self.prog_tx
-                    .send_status(status::definite(
+                    .send_status(async_status::definite(
                         &format!("Loading {}...", entry.display()),
                         index as u32,
                         max_zips,
@@ -188,7 +188,7 @@ impl<'a> ModsBuilder {
         let max_entries = entries.len() as u32;
         for (index, entry) in entries.iter().enumerate() {
             self.prog_tx
-                .send_status(status::definite(
+                .send_status(async_status::definite(
                     &format!("Loading mod from zip archive: {}", entry.display()),
                     index as u32,
                     max_entries,

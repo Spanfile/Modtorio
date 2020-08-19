@@ -48,8 +48,8 @@ use tokio::{
 };
 use tonic::{transport::Server, Request, Response, Status};
 use util::{
-    status,
-    status::{AsyncProgressChannel, AsyncProgressChannelExt, AsyncProgressResult},
+    async_status,
+    async_status::{AsyncProgressChannel, AsyncProgressChannelExt, AsyncProgressResult},
     HumanVersion,
 };
 
@@ -247,7 +247,7 @@ impl Modtorio {
         let mut rpc_games = Vec::new();
 
         for game in self.games.lock().await.iter() {
-            let status = game.status().await.into();
+            let status = game.game_status().await.into();
             let game_id = game.store_id().await.unwrap_or(0);
 
             rpc_games.push(Game {
@@ -266,7 +266,7 @@ impl Modtorio {
     }
 
     /// Imports a new Factorio instance from a given path to its root directory.
-    async fn import_game<P>(self, path: P, prog_tx: status::AsyncProgressChannel)
+    async fn import_game<P>(self, path: P, prog_tx: AsyncProgressChannel)
     where
         P: AsRef<Path>,
     {
@@ -314,7 +314,7 @@ impl Modtorio {
             {
                 Ok(game) => {
                     info!("Imported new Factorio server instance from {}", path.display());
-                    if !send_status(&prog_tx, status::indefinite("Game imported")).await {
+                    if !send_status(&prog_tx, async_status::indefinite("Game imported")).await {
                         return;
                     }
                     game
@@ -333,12 +333,12 @@ impl Modtorio {
             }
 
             self.games.lock().await.push(game);
-            send_status(&prog_tx, status::done()).await;
+            send_status(&prog_tx, async_status::done()).await;
         });
     }
 
     /// Updates a given game instance's store.
-    async fn update_store(self, game_id: GameStoreId, prog_tx: status::AsyncProgressChannel) {
+    async fn update_store(self, game_id: GameStoreId, prog_tx: AsyncProgressChannel) {
         if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
             if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
                 send_status(&prog_tx, Err(rpc_error.into())).await;
@@ -366,7 +366,7 @@ impl Modtorio {
                     return;
                 }
 
-                send_status(&prog_tx, status::done()).await;
+                send_status(&prog_tx, async_status::done()).await;
             } else {
                 send_status(&prog_tx, Err(RpcError::NoSuchGame(game_id).into())).await;
             }
@@ -379,7 +379,7 @@ impl Modtorio {
         game_id: GameStoreId,
         mod_name: String,
         version: Option<HumanVersion>,
-        prog_tx: status::AsyncProgressChannel,
+        prog_tx: AsyncProgressChannel,
     ) {
         if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
             if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
@@ -417,7 +417,7 @@ impl Modtorio {
                     return;
                 }
 
-                send_status(&prog_tx, status::done()).await;
+                send_status(&prog_tx, async_status::done()).await;
             } else {
                 send_status(&prog_tx, Err(RpcError::NoSuchGame(game_id).into())).await;
             }
@@ -425,7 +425,7 @@ impl Modtorio {
     }
 
     /// Updates the installed mods of a given game instance.
-    async fn update_mods(self, game_id: GameStoreId, prog_tx: status::AsyncProgressChannel) {
+    async fn update_mods(self, game_id: GameStoreId, prog_tx: AsyncProgressChannel) {
         if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
             if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
                 send_status(&prog_tx, Err(rpc_error.into())).await;
@@ -453,7 +453,7 @@ impl Modtorio {
                     return;
                 }
 
-                send_status(&prog_tx, status::done()).await;
+                send_status(&prog_tx, async_status::done()).await;
             } else {
                 send_status(&prog_tx, Err(RpcError::NoSuchGame(game_id).into())).await;
             }
@@ -461,7 +461,7 @@ impl Modtorio {
     }
 
     /// Updates the installed mods of a given game instance.
-    async fn ensure_mod_dependencies(self, game_id: GameStoreId, prog_tx: status::AsyncProgressChannel) {
+    async fn ensure_mod_dependencies(self, game_id: GameStoreId, prog_tx: AsyncProgressChannel) {
         if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
             if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
                 send_status(&prog_tx, Err(rpc_error.into())).await;
@@ -489,7 +489,7 @@ impl Modtorio {
                     return;
                 }
 
-                send_status(&prog_tx, status::done()).await;
+                send_status(&prog_tx, async_status::done()).await;
             } else {
                 send_status(&prog_tx, Err(RpcError::NoSuchGame(game_id).into())).await;
             }
@@ -571,7 +571,7 @@ impl Modtorio {
                 error!("Server ID {} failed to run: {}", game_id, e);
                 Err(e)
             } else {
-                info!("Server ID {} started", game_id);
+                info!("Server ID {} starting", game_id);
                 Ok(())
             }
         } else {

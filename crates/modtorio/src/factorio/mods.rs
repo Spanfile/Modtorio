@@ -9,13 +9,12 @@ use crate::{
     error::ModError,
     mod_common::{DownloadResult, Mod, Requirement},
     store::{models, Store},
-    util::{ext::PathExt, status, HumanVersion},
+    util::{async_status, ext::PathExt, HumanVersion},
     Config, ModPortal,
 };
-pub use mods_builder::ModsBuilder;
-
+use async_status::{AsyncProgressChannel, AsyncProgressChannelExt};
 use log::*;
-use status::AsyncProgressChannelExt;
+pub use mods_builder::ModsBuilder;
 use std::{
     collections::{hash_map::Entry, HashMap},
     path::PathBuf,
@@ -53,7 +52,7 @@ impl Mods {
     pub async fn update_store(
         &self,
         game_id: GameStoreId,
-        prog_tx: Option<status::AsyncProgressChannel>,
+        prog_tx: Option<AsyncProgressChannel>,
     ) -> anyhow::Result<()> {
         debug!("Updating stored mods for game {}", game_id);
         let new_game_mods = Mutex::new(Vec::new());
@@ -64,7 +63,7 @@ impl Mods {
             let mod_display = fact_mod.display().await;
 
             prog_tx
-                .send_status(status::definite(
+                .send_status(async_status::definite(
                     &format!("Updating mod store for {}...", mod_display),
                     index as u32,
                     max_mods,
@@ -116,7 +115,7 @@ impl Mods {
         &mut self,
         name: &str,
         version: Option<HumanVersion>,
-        prog_tx: Option<status::AsyncProgressChannel>,
+        prog_tx: Option<AsyncProgressChannel>,
     ) -> anyhow::Result<()> {
         if let Some(version) = version {
             info!("Adding '{}' ver. {:?}", name, version);
@@ -125,7 +124,7 @@ impl Mods {
         }
 
         prog_tx
-            .send_status(status::indefinite(&format!("Installing {}...", name)))
+            .send_status(async_status::indefinite(&format!("Installing {}...", name)))
             .await?;
 
         let new_mod = self.add_or_update_in_place(name, version).await?;
@@ -136,10 +135,10 @@ impl Mods {
     /// Updates the portal info for all mods and downloads their most recent version if the
     /// currently installed version is older.
     #[allow(dead_code)]
-    pub async fn update(&mut self, prog_tx: Option<status::AsyncProgressChannel>) -> anyhow::Result<()> {
+    pub async fn update(&mut self, prog_tx: Option<AsyncProgressChannel>) -> anyhow::Result<()> {
         info!("Checking for mod updates...");
         prog_tx
-            .send_status(status::indefinite("Checking for mod updates..."))
+            .send_status(async_status::indefinite("Checking for mod updates..."))
             .await?;
 
         let mut update_batcher = UpdateBatcher::new(self.portal.as_ref());
@@ -154,7 +153,7 @@ impl Mods {
         let updates = update_batcher.get_updates().await?;
         info!("Found {} updates", updates.len());
         prog_tx
-            .send_status(status::indefinite(&format!("Found {} updates", updates.len())))
+            .send_status(async_status::indefinite(&format!("Found {} updates", updates.len())))
             .await?;
 
         if !updates.is_empty() {
@@ -165,7 +164,7 @@ impl Mods {
         for (index, update) in updates.iter().enumerate() {
             info!("Updating {}...", update);
             prog_tx
-                .send_status(status::definite(
+                .send_status(async_status::definite(
                     &format!("Updating {}...", update),
                     index as u32,
                     max_updates,
@@ -185,7 +184,7 @@ impl Mods {
     ///
     /// [CannotEnsureDependency]: crate::error::ModError::CannotEnsureDependency
     #[allow(dead_code)]
-    pub async fn ensure_dependencies(&mut self, prog_tx: Option<status::AsyncProgressChannel>) -> anyhow::Result<()> {
+    pub async fn ensure_dependencies(&mut self, prog_tx: Option<AsyncProgressChannel>) -> anyhow::Result<()> {
         info!("Ensuring mod dependencies are met...");
 
         let mut missing: Vec<String> = Vec::new();
@@ -195,7 +194,7 @@ impl Mods {
         for (index, fact_mod) in mods.into_iter().enumerate() {
             debug!("Ensuring '{}'s dependencies are met...", fact_mod.name().await);
             prog_tx
-                .send_status(status::definite(
+                .send_status(async_status::definite(
                     &format!("Ensuring '{}'s dependencies are met...", fact_mod.title().await),
                     index as u32,
                     max_mods,
@@ -213,7 +212,7 @@ impl Mods {
             let max_missing = missing.len() as u32;
             for (index, miss) in missing.iter().enumerate() {
                 prog_tx
-                    .send_status(status::definite(
+                    .send_status(async_status::definite(
                         &format!("Installing missing mod '{}'...", miss),
                         index as u32,
                         max_missing,

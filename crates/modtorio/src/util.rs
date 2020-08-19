@@ -1,5 +1,6 @@
 //! Provides several utilities and helper functions.
 
+pub mod async_status;
 pub mod checksum;
 pub mod env;
 pub mod ext;
@@ -7,7 +8,6 @@ pub mod file;
 mod human_version;
 mod limit;
 mod log_level;
-pub mod status;
 
 use ext::PathExt;
 pub use human_version::{Comparator, HumanVersion, HumanVersionReq};

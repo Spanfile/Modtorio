@@ -1,5 +1,7 @@
 //! Provides objects that represent a Factorio server's state, both the executable's and the server's in-game state.
 
+use strum_macros::EnumString;
+
 /// Represesnts the server executable's state.
 #[derive(Debug)]
 pub enum ExecutableState {
@@ -10,9 +12,11 @@ pub enum ExecutableState {
 }
 
 /// Represents the in-game state.
-#[derive(Debug)]
+#[derive(Debug, EnumString, Eq, PartialEq)]
 pub enum GameState {
-    /// The game is being created.
+    /// The game is initialising.
+    Initialising,
+    /// The game is initialised.
     Ready,
     /// The server is preparing to host the game.
     PreparedToHostGame,
@@ -20,6 +24,8 @@ pub enum GameState {
     CreatingGame,
     /// The game is running.
     InGame,
+    /// The game is saving the map.
+    InGameSavingMap,
     /// The game is preparing to disconnect.
     DisconnectingScheduled,
     /// The game is disconnecting.

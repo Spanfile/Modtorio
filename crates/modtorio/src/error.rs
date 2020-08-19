@@ -301,5 +301,13 @@ pub enum UpdateBatcherError {
 pub enum ServerError {
     /// Returned when trying to change the server's state and its current status is invalid given the change.
     #[error("Invalid game status: {0:?}")]
-    InvalidStatus(GameStatus),
+    InvalidGameStatus(GameStatus),
+}
+
+/// Represents the parser error for `GameEvent`.
+#[derive(Debug, Error)]
+pub enum GameEventError {
+    /// Returned when a given string failed to be parsed into a `GameEvent`.
+    #[error("The line '{0}' failed to be parsed into a GameEvent")]
+    FailedToParse(String),
 }

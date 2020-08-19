@@ -1,10 +1,12 @@
 //! Provides utilities to work with a Factorio server's executable.
 
 mod executable_state;
+mod game_event;
 mod version_information;
 
 use crate::error::ExecutableError;
 pub use executable_state::{ExecutableState, GameState};
+use game_event::GameEvent;
 use log::*;
 use std::{
     path::{Path, PathBuf},
@@ -72,6 +74,25 @@ impl Executable {
         let mut stdout_reader = BufReader::new(stdout).lines();
 
         let (mut state_tx, state_rx) = mpsc::channel(64);
+        let (mut stdout_proc_tx, mut stdout_proc_rx) = mpsc::channel::<String>(64);
+        let (mut event_tx, mut event_rx) = mpsc::channel(64);
+
+        task::spawn(async move {
+            while let Some(stdout_line) = stdout_proc_rx.recv().await {
+                trace!("Processing stdout line: {}", stdout_line);
+                let event = match stdout_line.parse::<GameEvent>() {
+                    Ok(event) => event,
+                    Err(e) => {
+                        trace!("Couldn't parse GameEvent: {}", e);
+                        continue;
+                    }
+                };
+
+                if let Err(e) = event_tx.send(event).await {
+                    error!("Writing to event tx failed: {}", e);
+                }
+            }
+        });
 
         task::spawn(async move {
             loop {
@@ -83,16 +104,35 @@ impl Executable {
                         }
                         break;
                     }
-                    stdout_line = stdout_reader.next_line() => {
-                        if let Some(stdout_line) = stdout_line.expect("failed to read child stdout line") {
-                            debug!("Child stdout: {}", stdout_line);
-                        }
-                    }
+
                     msg = stdin_rx.recv() => {
                         if let Some(msg) = msg {
                             trace!("Got input from stdin channel: {}", msg);
                             if let Err(e) = stdin.write_all(msg.as_bytes()).await {
                                 error!("Writing to child stdin failed: {}", e);
+                            }
+                        }
+                    }
+
+                    stdout_line = stdout_reader.next_line() => {
+                        if let Some(stdout_line) = stdout_line.expect("failed to read child stdout line") {
+                            debug!("Child stdout: {}", stdout_line);
+                            if let Err(e) = stdout_proc_tx.send(stdout_line).await {
+                                error!("Writing stdout line to stdout processor tx failed: {}", e);
+                            }
+                        }
+                    }
+
+                    event = event_rx.recv() => {
+                        if let Some(event) = event {
+                            debug!("Game event: {:?}", event);
+
+                            match event {
+                                GameEvent::GameStateChanged { from: _, to } => {
+                                    if let Err(e) = state_tx.send(ExecutableState::GameState(to)).await {
+                                        error!("Writing executable state to state tx failed: {}", e);
+                                    }
+                                }
                             }
                         }
                     }
