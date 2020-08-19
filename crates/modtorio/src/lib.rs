@@ -248,7 +248,7 @@ impl Modtorio {
 
         for game in self.games.lock().await.iter() {
             let status = game.game_status().await.into();
-            let game_id = game.store_id().await.unwrap_or(0);
+            let game_id = game.store_id_option().await.unwrap_or(0);
 
             rpc_games.push(Game {
                 path: format!("{}", game.root().display()),
@@ -352,7 +352,7 @@ impl Modtorio {
             let games = self.games.lock().await;
             let mut game = None;
             for g in games.iter() {
-                if let Some(id) = g.store_id().await {
+                if let Some(id) = g.store_id_option().await {
                     if id == game_id {
                         game = Some(g);
                     }
@@ -394,7 +394,7 @@ impl Modtorio {
             let mut games = self.games.lock().await;
             let mut game = None;
             for g in games.iter_mut() {
-                if let Some(id) = g.store_id().await {
+                if let Some(id) = g.store_id_option().await {
                     if id == game_id {
                         game = Some(g);
                     }
@@ -439,7 +439,7 @@ impl Modtorio {
             let mut games = self.games.lock().await;
             let mut game = None;
             for g in games.iter_mut() {
-                if let Some(id) = g.store_id().await {
+                if let Some(id) = g.store_id_option().await {
                     if id == game_id {
                         game = Some(g);
                     }
@@ -475,7 +475,7 @@ impl Modtorio {
             let mut games = self.games.lock().await;
             let mut game = None;
             for g in games.iter_mut() {
-                if let Some(id) = g.store_id().await {
+                if let Some(id) = g.store_id_option().await {
                     if id == game_id {
                         game = Some(g);
                     }
@@ -503,7 +503,7 @@ impl Modtorio {
         let mut games = self.games.lock().await;
         let mut game = None;
         for g in games.iter_mut() {
-            if let Some(id) = g.store_id().await {
+            if let Some(id) = g.store_id_option().await {
                 if id == game_id {
                     game = Some(g);
                 }
@@ -527,7 +527,7 @@ impl Modtorio {
         let mut games = self.games.lock().await;
         let mut game = None;
         for g in games.iter_mut() {
-            if let Some(id) = g.store_id().await {
+            if let Some(id) = g.store_id_option().await {
                 if id == game_id {
                     game = Some(g);
                 }
@@ -559,7 +559,7 @@ impl Modtorio {
         let mut games = self.games.lock().await;
         let mut game = None;
         for g in games.iter_mut() {
-            if let Some(id) = g.store_id().await {
+            if let Some(id) = g.store_id_option().await {
                 if id == game_id {
                     game = Some(g);
                 }
@@ -591,7 +591,7 @@ impl Modtorio {
         let mut games = self.games.lock().await;
         let mut game = None;
         for g in games.iter_mut() {
-            if let Some(id) = g.store_id().await {
+            if let Some(id) = g.store_id_option().await {
                 if id == game_id {
                     game = Some(g);
                 }

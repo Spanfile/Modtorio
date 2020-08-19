@@ -299,9 +299,12 @@ pub enum UpdateBatcherError {
 /// Represents all types of errors that can occur with a Factorio server.
 #[derive(Debug, Error)]
 pub enum ServerError {
-    /// Returned when trying to change the server's state and its current status is invalid given the change.
+    /// Returned when trying to change a server's state and its current status is invalid given the change.
     #[error("Invalid game status: {0:?}")]
     InvalidGameStatus(GameStatus),
+    /// Returned when trying to access a server's store ID when it hasn't been added to the store yet.
+    #[error("The game hasn't been added to the program store yet")]
+    GameNotInStore,
 }
 
 /// Represents the parser error for `GameEvent`.

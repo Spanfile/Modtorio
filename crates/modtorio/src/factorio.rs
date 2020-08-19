@@ -136,7 +136,8 @@ impl Factorio {
     /// Runs the server.
     pub async fn run(&self) -> anyhow::Result<()> {
         self.assert_status(GameStatus::Shutdown).await?;
-        debug!("Running server executable");
+        let store_id = self.store_id().await?;
+        debug!("Running game ID {} executable", store_id);
 
         let (stdin_tx, stdin_rx) = mpsc::channel(64);
         let (stdout_tx, stdout_rx) = mpsc::channel(64);
@@ -149,22 +150,25 @@ impl Factorio {
 
         let status = Arc::clone(&self.status);
         task::spawn(async move {
-            debug!("Executable running, beginning listening for state changes");
+            debug!(
+                "Game ID {} executable running, beginning listening for state changes",
+                store_id
+            );
             while let Some(state) = state_rx.recv().await {
                 match state {
                     ExecutableState::GameState(game_state) => {
-                        debug!("Server executable got new game state: {:?}", game_state);
+                        debug!("Game ID {} executable got new game state: {:?}", store_id, game_state);
 
                         match game_state {
                             GameState::InGame => {
                                 if status.read().await.game_status() == GameStatus::Starting {
-                                    info!("Game started and is now running");
+                                    info!("Game ID {} started and is now running", store_id);
                                     status.write().await.set_game_status(GameStatus::Running);
                                 }
                             }
                             GameState::DisconnectingScheduled => {
                                 if status.read().await.game_status() == GameStatus::Running {
-                                    info!("Game shutting down");
+                                    info!("Game ID {} shutting down", store_id);
                                     status.write().await.set_game_status(GameStatus::ShuttingDown);
                                 }
                             }
@@ -172,12 +176,12 @@ impl Factorio {
                         }
                     }
                     ExecutableState::Exited(exit_result) => {
-                        debug!("Server executable exited with {:?}", exit_result);
+                        debug!("Game ID {} executable exited with {:?}", store_id, exit_result);
                         if let Err(e) = exit_result {
-                            error!("Server executable exited with error: {:?}", e);
+                            error!("Game ID {} executable exited with error: {:?}", store_id, e);
                             status.write().await.set_game_status(GameStatus::Crashed);
                         } else {
-                            info!("Game shut down succesfully");
+                            info!("Game ID {} exited succesfully", store_id);
                             status.write().await.set_game_status(GameStatus::Shutdown);
                         }
                     }
@@ -250,8 +254,17 @@ impl Factorio {
 
     /// Returns the server's store ID. The value is `None` if the server has been newly created and hasn't yet been
     /// added to the program store.
-    pub async fn store_id(&self) -> Option<GameStoreId> {
+    pub async fn store_id_option(&self) -> Option<GameStoreId> {
         *self.store_id.lock().await
+    }
+
+    /// Returns the server's store ID. The value is `None` if the server has been newly created and hasn't yet been
+    /// added to the program store.
+    pub async fn store_id(&self) -> anyhow::Result<GameStoreId> {
+        self.store_id
+            .lock()
+            .await
+            .ok_or_else(|| ServerError::GameNotInStore.into())
     }
 
     /// Returns the server's status.
