@@ -1,11 +1,9 @@
 //! Provides utilities to work with a Factorio server's executable.
 
-mod executable_state;
 mod game_event;
 mod version_information;
 
 use crate::error::ExecutableError;
-pub use executable_state::{ExecutableEvent, GameState};
 pub use game_event::GameEvent;
 use log::*;
 use std::{
@@ -28,6 +26,15 @@ pub const DEFAULT_PATH: &str = "bin/x64/factorio";
 pub struct Executable {
     /// The path to the executable.
     path: PathBuf,
+}
+
+/// Represesnts an event that happened with the executable.
+#[derive(Debug)]
+pub enum ExecutableEvent {
+    /// Represents an event that happened in the server.
+    GameEvent(GameEvent),
+    /// The executable exited with a given result.
+    Exited(anyhow::Result<()>),
 }
 
 impl Executable {

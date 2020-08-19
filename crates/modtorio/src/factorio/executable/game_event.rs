@@ -1,5 +1,4 @@
-use super::GameState;
-use crate::error::GameEventError;
+use crate::{error::GameEventError, factorio::status::InGameStatus};
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::str::FromStr;
@@ -10,9 +9,9 @@ pub enum GameEvent {
     /// The game's state changed.
     GameStateChanged {
         /// The previous state.
-        from: GameState,
+        from: InGameStatus,
         /// The current state.
-        to: GameState,
+        to: InGameStatus,
     },
     /// A peer's connection was refused.
     RefusingConnection {
@@ -75,8 +74,8 @@ impl FromStr for GameEvent {
 fn factorio_initialised(s: &str) -> Option<GameEvent> {
     if s.ends_with("Factorio initialised") {
         Some(GameEvent::GameStateChanged {
-            from: GameState::Initialising,
-            to: GameState::Ready,
+            from: InGameStatus::Initialising,
+            to: InGameStatus::Ready,
         })
     } else {
         None
@@ -91,8 +90,8 @@ fn game_state_changed(s: &str) -> Option<GameEvent> {
     }
 
     let captures = RE.captures(s)?;
-    let from = GameState::from_str(captures.get(1)?.as_str()).ok()?;
-    let to = GameState::from_str(captures.get(2)?.as_str()).ok()?;
+    let from = InGameStatus::from_str(captures.get(1)?.as_str()).ok()?;
+    let to = InGameStatus::from_str(captures.get(2)?.as_str()).ok()?;
 
     Some(GameEvent::GameStateChanged { from, to })
 }

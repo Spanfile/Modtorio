@@ -26,18 +26,11 @@ use chrono::{DateTime, Utc};
 use common::net::NetAddress;
 use config::Config;
 use error::{ModPortalError, RpcError};
-use factorio::{Factorio, GameStoreId};
+use factorio::{Factorio, GameStoreId, ServerStatus};
 use futures::{future::try_join_all, TryStreamExt};
 use lazy_static::lazy_static;
 use mod_portal::ModPortal;
-use rpc::{
-    instance_status::{self, Game},
-    mod_rpc_server::{ModRpc, ModRpcServer},
-    send_command_request::Command,
-    Empty, EnsureModDependenciesRequest, GetServerSettingsRequest, ImportRequest, InstallModRequest, InstanceStatus,
-    Progress, RunServerRequest, SendCommandRequest, ServerSettings, SetServerSettingsRequest, UpdateModsRequest,
-    UpdateStoreRequest, VersionInformation,
-};
+use rpc::{instance_status, mod_rpc_server, send_command_request};
 use std::{path::Path, sync::Arc};
 use store::Store;
 use tokio::{
@@ -172,7 +165,7 @@ impl Modtorio {
 
         for listen in listen_addresses {
             // TODO: TLS
-            let server = Server::builder().add_service(ModRpcServer::new(self.clone()));
+            let server = Server::builder().add_service(mod_rpc_server::ModRpcServer::new(self.clone()));
             rpc_listeners.push(match listen {
                 NetAddress::TCP(addr) => {
                     debug!("Starting RPC server on TCP {}", addr);
@@ -243,14 +236,14 @@ impl Modtorio {
     }
 
     /// Returns this instance's managed games in RPC format.
-    async fn get_rpc_games(&self) -> Vec<Game> {
+    async fn get_rpc_games(&self) -> Vec<instance_status::Game> {
         let mut rpc_games = Vec::new();
 
         for game in self.games.lock().await.iter() {
-            let status = game.game_status().await.into();
+            let status = game.status().await.game_status() as i32;
             let game_id = game.store_id_option().await.unwrap_or(0);
 
-            rpc_games.push(Game {
+            rpc_games.push(instance_status::Game {
                 path: format!("{}", game.root().display()),
                 status,
                 game_id,
@@ -497,7 +490,7 @@ impl Modtorio {
     }
 
     /// Retrieves a given game instance's server settings.
-    async fn get_server_settings(&self, game_id: GameStoreId) -> anyhow::Result<ServerSettings> {
+    async fn get_server_settings(&self, game_id: GameStoreId) -> anyhow::Result<rpc::ServerSettings> {
         self.assert_instance_status(instance_status::Status::Running).await?;
 
         let mut games = self.games.lock().await;
@@ -511,7 +504,7 @@ impl Modtorio {
         }
 
         if let Some(game) = game {
-            let mut rpc_server_settings = ServerSettings::default();
+            let mut rpc_server_settings = rpc::ServerSettings::default();
             game.settings().to_rpc_format(&mut rpc_server_settings)?;
 
             Ok(rpc_server_settings)
@@ -521,7 +514,11 @@ impl Modtorio {
     }
 
     /// Sets a given game instance's server settings.
-    async fn set_server_settings(&self, game_id: GameStoreId, settings: Option<ServerSettings>) -> anyhow::Result<()> {
+    async fn set_server_settings(
+        &self,
+        game_id: GameStoreId,
+        settings: Option<rpc::ServerSettings>,
+    ) -> anyhow::Result<()> {
         self.assert_instance_status(instance_status::Status::Running).await?;
 
         let mut games = self.games.lock().await;
@@ -600,7 +597,7 @@ impl Modtorio {
 
         if let Some(game) = game {
             let command = match command {
-                0 => Command::Raw,
+                0 => send_command_request::Command::Raw,
                 i => return Err(RpcError::NoSuchCommand(i).into()),
             };
 
@@ -611,20 +608,44 @@ impl Modtorio {
             Err(RpcError::NoSuchGame(game_id).into())
         }
     }
+
+    /// Sends a command to a given game instance.
+    async fn get_server_status(&self, game_id: GameStoreId) -> anyhow::Result<ServerStatus> {
+        self.assert_instance_status(instance_status::Status::Running).await?;
+
+        let mut games = self.games.lock().await;
+        let mut game = None;
+        for g in games.iter_mut() {
+            if let Some(id) = g.store_id_option().await {
+                if id == game_id {
+                    game = Some(g);
+                }
+            }
+        }
+
+        if let Some(game) = game {
+            Ok(game.status().await)
+        } else {
+            Err(RpcError::NoSuchGame(game_id).into())
+        }
+    }
 }
 
 #[tonic::async_trait]
-impl ModRpc for Modtorio {
-    type ImportGameStream = mpsc::Receiver<Result<Progress, Status>>;
-    type UpdateStoreStream = mpsc::Receiver<Result<Progress, Status>>;
-    type InstallModStream = mpsc::Receiver<Result<Progress, Status>>;
-    type UpdateModsStream = mpsc::Receiver<Result<Progress, Status>>;
-    type EnsureModDependenciesStream = mpsc::Receiver<Result<Progress, Status>>;
+impl mod_rpc_server::ModRpc for Modtorio {
+    type ImportGameStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
+    type UpdateStoreStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
+    type InstallModStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
+    type UpdateModsStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
+    type EnsureModDependenciesStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
 
-    async fn get_version_information(&self, req: Request<Empty>) -> Result<Response<VersionInformation>, Status> {
+    async fn get_version_information(
+        &self,
+        req: Request<rpc::Empty>,
+    ) -> Result<Response<rpc::VersionInformation>, Status> {
         log_rpc_request(&req);
 
-        let resp = Response::new(VersionInformation {
+        let resp = Response::new(rpc::VersionInformation {
             version: Some((*HVER_VERSION).into()),
             protocol_version: Some(
                 rpc::VERSION
@@ -638,14 +659,14 @@ impl ModRpc for Modtorio {
         Ok(resp)
     }
 
-    async fn get_instance_status(&self, req: Request<Empty>) -> Result<Response<InstanceStatus>, Status> {
+    async fn get_instance_status(&self, req: Request<rpc::Empty>) -> Result<Response<rpc::InstanceStatus>, Status> {
         log_rpc_request(&req);
 
         let uptime = self.get_uptime().await;
         let games = self.get_rpc_games().await;
         let instance_status = self.get_instance_status().await;
 
-        let resp = Response::new(InstanceStatus {
+        let resp = Response::new(rpc::InstanceStatus {
             uptime: uptime.num_seconds(),
             games,
             instance_status: instance_status.into(),
@@ -657,7 +678,7 @@ impl ModRpc for Modtorio {
 
     // I tried to macro these repetitive functions into DRYness but the tonic::async_trait macro messes with them in
     // some funky way that a macro_rules! didn't work as I'd hoped and I just couldn't bother to figure it out
-    async fn import_game(&self, req: Request<ImportRequest>) -> Result<Response<Self::ImportGameStream>, Status> {
+    async fn import_game(&self, req: Request<rpc::ImportRequest>) -> Result<Response<Self::ImportGameStream>, Status> {
         log_rpc_request(&req);
         let (tx, rx) = channel();
 
@@ -671,7 +692,7 @@ impl ModRpc for Modtorio {
 
     async fn update_store(
         &self,
-        req: Request<UpdateStoreRequest>,
+        req: Request<rpc::UpdateStoreRequest>,
     ) -> Result<Response<Self::UpdateStoreStream>, Status> {
         log_rpc_request(&req);
         let (tx, rx) = channel();
@@ -684,7 +705,10 @@ impl ModRpc for Modtorio {
         Ok(resp)
     }
 
-    async fn install_mod(&self, req: Request<InstallModRequest>) -> Result<Response<Self::InstallModStream>, Status> {
+    async fn install_mod(
+        &self,
+        req: Request<rpc::InstallModRequest>,
+    ) -> Result<Response<Self::InstallModStream>, Status> {
         log_rpc_request(&req);
         let (tx, rx) = channel();
 
@@ -697,7 +721,10 @@ impl ModRpc for Modtorio {
         Ok(resp)
     }
 
-    async fn update_mods(&self, req: Request<UpdateModsRequest>) -> Result<Response<Self::UpdateModsStream>, Status> {
+    async fn update_mods(
+        &self,
+        req: Request<rpc::UpdateModsRequest>,
+    ) -> Result<Response<Self::UpdateModsStream>, Status> {
         log_rpc_request(&req);
         let (tx, rx) = channel();
 
@@ -711,7 +738,7 @@ impl ModRpc for Modtorio {
 
     async fn ensure_mod_dependencies(
         &self,
-        req: Request<EnsureModDependenciesRequest>,
+        req: Request<rpc::EnsureModDependenciesRequest>,
     ) -> Result<Response<Self::EnsureModDependenciesStream>, Status> {
         log_rpc_request(&req);
         let (tx, rx) = channel();
@@ -726,8 +753,8 @@ impl ModRpc for Modtorio {
 
     async fn get_server_settings(
         &self,
-        req: Request<GetServerSettingsRequest>,
-    ) -> Result<Response<ServerSettings>, Status> {
+        req: Request<rpc::GetServerSettingsRequest>,
+    ) -> Result<Response<rpc::ServerSettings>, Status> {
         log_rpc_request(&req);
 
         let msg = req.into_inner();
@@ -748,13 +775,16 @@ impl ModRpc for Modtorio {
         }
     }
 
-    async fn set_server_settings(&self, req: Request<SetServerSettingsRequest>) -> Result<Response<Empty>, Status> {
+    async fn set_server_settings(
+        &self,
+        req: Request<rpc::SetServerSettingsRequest>,
+    ) -> Result<Response<rpc::Empty>, Status> {
         log_rpc_request(&req);
 
         let msg = req.into_inner();
         match self.set_server_settings(msg.game_id, msg.settings).await {
             Ok(_) => {
-                let resp = Response::new(Empty {});
+                let resp = Response::new(rpc::Empty {});
                 log_rpc_response(&resp);
                 Ok(resp)
             }
@@ -769,13 +799,13 @@ impl ModRpc for Modtorio {
         }
     }
 
-    async fn run_server(&self, req: Request<RunServerRequest>) -> Result<Response<Empty>, Status> {
+    async fn run_server(&self, req: Request<rpc::RunServerRequest>) -> Result<Response<rpc::Empty>, Status> {
         log_rpc_request(&req);
 
         let msg = req.into_inner();
         match self.run_server(msg.game_id).await {
             Ok(_) => {
-                let resp = Response::new(Empty {});
+                let resp = Response::new(rpc::Empty {});
                 log_rpc_response(&resp);
                 Ok(resp)
             }
@@ -790,18 +820,42 @@ impl ModRpc for Modtorio {
         }
     }
 
-    async fn send_server_command(&self, req: Request<SendCommandRequest>) -> Result<Response<Empty>, Status> {
+    async fn send_server_command(&self, req: Request<rpc::SendCommandRequest>) -> Result<Response<rpc::Empty>, Status> {
         log_rpc_request(&req);
 
         let msg = req.into_inner();
         match self.send_server_command(msg.game_id, msg.command, msg.arguments).await {
             Ok(_) => {
-                let resp = Response::new(Empty {});
+                let resp = Response::new(rpc::Empty {});
                 log_rpc_response(&resp);
                 Ok(resp)
             }
             Err(e) => {
                 error!("RPC send server command failed: {}", e);
+                if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
+                    Err(rpc_error.into())
+                } else {
+                    Err(RpcError::Internal(e).into())
+                }
+            }
+        }
+    }
+
+    async fn get_server_status(
+        &self,
+        req: Request<rpc::ServerStatusRequest>,
+    ) -> Result<Response<rpc::ServerStatus>, Status> {
+        log_rpc_request(&req);
+
+        let msg = req.into_inner();
+        match self.get_server_status(msg.game_id).await {
+            Ok(status) => {
+                let resp = Response::new(status.into());
+                log_rpc_response(&resp);
+                Ok(resp)
+            }
+            Err(e) => {
+                error!("RPC get server status failed: {}", e);
                 if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
                     Err(rpc_error.into())
                 } else {

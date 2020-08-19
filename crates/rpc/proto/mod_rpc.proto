@@ -18,6 +18,7 @@ service ModRpc {
 
   rpc RunServer(RunServerRequest) returns (Empty);
   rpc SendServerCommand(SendCommandRequest) returns (Empty);
+  rpc GetServerStatus(ServerStatusRequest) returns (ServerStatus);
 }
 
 message Empty {}
@@ -45,21 +46,21 @@ message VersionInformation {
   Version protocol_version = 2;
 }
 
+enum GameStatus {
+  SHUTDOWN = 0;
+  STARTING = 1;
+  RUNNING = 2;
+  SHUTTING_DOWN = 3;
+  CRASHED = 4;
+};
+
 message InstanceStatus {
   int64 uptime = 1;
 
   message Game {
-    string path = 1;
-
-    enum GameStatus {
-      SHUTDOWN = 0;
-      STARTING = 1;
-      RUNNING = 2;
-      SHUTTING_DOWN = 3;
-      CRASHED = 4;
-    };
+    int64 game_id = 1;
     GameStatus status = 2;
-    int64 game_id = 3;
+    string path = 3;
   };
   repeated Game games = 2;
 
@@ -68,6 +69,24 @@ message InstanceStatus {
     RUNNING = 1;
   };
   Status instance_status = 3;
+}
+
+message ServerStatus {
+  int64 uptime = 1;
+  GameStatus status = 2;
+
+  enum InGameStatus {
+    INITIALISING = 0;
+    READY = 1;
+    PREPARED_TO_HOST_GAME = 2;
+    CREATING_GAME = 3;
+    IN_GAME = 4;
+    IN_GAME_SAVING_MAP = 5;
+    DISCONNECTING_SCHEDULED = 6;
+    DISCONNECTING = 7;
+    CLOSED = 8;
+  };
+  InGameStatus in_game_status = 3;
 }
 
 message ImportRequest { string path = 1; }
@@ -97,6 +116,7 @@ message SendCommandRequest {
   Command command = 2;
   repeated string arguments = 3;
 }
+message ServerStatusRequest { int64 game_id = 1; }
 
 message ServerSettings {
   string name = 1;

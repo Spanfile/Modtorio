@@ -1,8 +1,11 @@
 //! Provides all error types the program uses.
 
-use crate::{factorio::GameStoreId, mod_common::Dependency, util::HumanVersion};
+use crate::{
+    factorio::{GameStatus, GameStoreId},
+    mod_common::Dependency,
+    util::HumanVersion,
+};
 use chrono::{DateTime, Utc};
-use rpc::instance_status::game::GameStatus;
 use std::path::PathBuf;
 use thiserror::Error;
 

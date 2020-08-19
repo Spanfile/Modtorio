@@ -15,13 +15,12 @@ use crate::{
     },
     Config, ModPortal,
 };
-use executable::{Executable, ExecutableEvent, GameEvent, GameState};
+use executable::{Executable, ExecutableEvent, GameEvent};
 use log::*;
 use models::GameSettings;
 use mods::{Mods, ModsBuilder};
-use rpc::{instance_status::game::GameStatus, send_command_request::Command};
+use rpc::send_command_request::Command;
 use settings::ServerSettings;
-use status::ServerStatus;
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -31,6 +30,8 @@ use tokio::{
     sync::{mpsc, Mutex, RwLock},
     task,
 };
+
+pub use status::{GameStatus, InGameStatus, ServerStatus};
 
 /// The file name of the JSON file used to store a Factorio server's settings.
 const SERVER_SETTINGS_FILENAME: &str = "server-settings.json";
@@ -161,21 +162,28 @@ impl Factorio {
                         debug!("Game ID {} got new game event: {:?}", store_id, game_event);
 
                         match game_event {
-                            GameEvent::GameStateChanged { from: _, to } => match to {
-                                GameState::InGame => {
-                                    if status.read().await.game_status() == GameStatus::Starting {
-                                        info!("Game ID {} started and is now running", store_id);
-                                        status.write().await.set_game_status(GameStatus::Running);
+                            GameEvent::GameStateChanged { from: _, to } => {
+                                let mut status_w = status.write().await;
+                                status_w.set_in_game_status(to);
+
+                                match to {
+                                    InGameStatus::InGame => {
+                                        if status_w.game_status() == GameStatus::Starting {
+                                            info!("Game ID {} started and is now running", store_id);
+                                            status_w.set_game_status(GameStatus::Running);
+                                        }
+                                    }
+                                    InGameStatus::DisconnectingScheduled => {
+                                        if status_w.game_status() == GameStatus::Running {
+                                            info!("Game ID {} shutting down", store_id);
+                                            status_w.set_game_status(GameStatus::ShuttingDown);
+                                        }
+                                    }
+                                    in_game_status => {
+                                        trace!("Unhandled in-game status: {:?}", in_game_status);
                                     }
                                 }
-                                GameState::DisconnectingScheduled => {
-                                    if status.read().await.game_status() == GameStatus::Running {
-                                        info!("Game ID {} shutting down", store_id);
-                                        status.write().await.set_game_status(GameStatus::ShuttingDown);
-                                    }
-                                }
-                                _ => {}
-                            },
+                            }
                             GameEvent::RefusingConnection { peer, username, reason } => {
                                 info!(
                                     "Game ID {} refusing connection for '{}' (addr {}): {}",
@@ -284,17 +292,17 @@ impl Factorio {
     }
 
     /// Returns the server's status.
-    pub async fn game_status(&self) -> GameStatus {
-        self.status.read().await.game_status()
+    pub async fn status(&self) -> ServerStatus {
+        *self.status.read().await
     }
 
     /// Asserts that the server's status is `expected`, otherwise returns `ServerError::InvalidStatus`.
     async fn assert_status(&self, expected: GameStatus) -> anyhow::Result<()> {
-        let status = self.game_status().await;
-        if status == expected {
+        let status = self.status().await;
+        if status.game_status() == expected {
             Ok(())
         } else {
-            Err(ServerError::InvalidGameStatus(status).into())
+            Err(ServerError::InvalidGameStatus(status.game_status()).into())
         }
     }
 
