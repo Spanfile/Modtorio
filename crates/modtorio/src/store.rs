@@ -113,6 +113,7 @@ where
         debug!("Schema checksums match: {}", checksums_match);
 
         if !checksums_match {
+            // TODO: data migration when the schema changes
             warn!("Store database schema checksum mismatch - applying new schema");
             apply_store_schema(&store, &self.schema).await?;
 
