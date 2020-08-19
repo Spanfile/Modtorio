@@ -1,7 +1,14 @@
 [package]
 authors = ["Spanfile <spansdev@gmail.com>"]
+categories = ["command-line-utilities"]
+description = "A wrapper for a Factorio server to help manage all its aspects"
 edition = "2018"
+homepage = "https://git.spans.me/Spanfile/Modtorio"
+keywords = ["cli"]
+license = "MIT"
 name = "modtorio"
+readme = "README.md"
+repository = "https://git.spans.me/Spanfile/Modtorio"
 version = "0.1.0"
 
 [dependencies]

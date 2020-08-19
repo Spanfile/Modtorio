@@ -6,17 +6,9 @@ name = "rpc"
 version = "0.1.0"
 
 [dependencies]
-anyhow = "1.0.32"
 log = "0.4.11"
 prost = "0.6.1"
-tonic = "0.3.0"
-
-[dependencies.common]
-path = "../common"
-
-[dependencies.tokio]
-features = ["macros"]
-version = "0.2.22"
+tonic = {version = "0.3.0", features = ["prost"]}
 
 [build-dependencies]
 tonic-build = "0.3.0"
