@@ -63,6 +63,7 @@ pub struct Factorio {
     exec_stdin_tx: Mutex<Option<mpsc::Sender<String>>>,
     /// The running executable's stdout receiver channel.
     exec_stdout_rx: Mutex<Option<mpsc::Receiver<String>>>,
+    /// The signal receiver for the executable's exit.
     exec_shutdown_rx: Mutex<Option<watch::Receiver<()>>>,
 }
 

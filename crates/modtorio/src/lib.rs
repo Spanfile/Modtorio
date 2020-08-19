@@ -26,7 +26,7 @@ use chrono::{DateTime, Utc};
 use common::net::NetAddress;
 use config::Config;
 use error::{ModPortalError, RpcError};
-use factorio::{Factorio, GameStatus, GameStoreId, ServerStatus};
+use factorio::{Factorio, GameStoreId, ServerStatus};
 use futures::{
     future::{join_all, try_join_all},
     TryStreamExt,

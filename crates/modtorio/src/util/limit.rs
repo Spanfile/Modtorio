@@ -1,3 +1,5 @@
+//! Provides the `Limit` struct.
+
 use serde::{de, de::Visitor, Deserialize, Serialize};
 use std::{fmt, fmt::Formatter};
 
