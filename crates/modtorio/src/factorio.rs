@@ -27,7 +27,7 @@ use std::{
     sync::Arc,
 };
 use tokio::{
-    sync::{mpsc, Mutex, RwLock},
+    sync::{mpsc, watch, Mutex, RwLock},
     task,
 };
 
@@ -63,6 +63,7 @@ pub struct Factorio {
     exec_stdin_tx: Mutex<Option<mpsc::Sender<String>>>,
     /// The running executable's stdout receiver channel.
     exec_stdout_rx: Mutex<Option<mpsc::Receiver<String>>>,
+    exec_shutdown_rx: Mutex<Option<watch::Receiver<()>>>,
 }
 
 /// Builds a new instance of a [`Factorio`](Factorio) server by importing its information from the
@@ -142,12 +143,15 @@ impl Factorio {
 
         let (stdin_tx, stdin_rx) = mpsc::channel(64);
         let (stdout_tx, stdout_rx) = mpsc::channel(64);
-
         *self.exec_stdin_tx.lock().await = Some(stdin_tx);
         *self.exec_stdout_rx.lock().await = Some(stdout_rx);
 
         self.status.write().await.set_game_status(GameStatus::Starting);
         let mut state_rx = self.executable.run(stdout_tx, stdin_rx).await?;
+
+        let (shutdown_tx, mut shutdown_rx) = watch::channel(());
+        shutdown_rx.recv().await;
+        *self.exec_shutdown_rx.lock().await = Some(shutdown_rx);
 
         let status = Arc::clone(&self.status);
         status.write().await.reset_started_at();
@@ -161,12 +165,24 @@ impl Factorio {
             while let Some(event) = state_rx.recv().await {
                 match event {
                     ExecutableEvent::GameEvent(game_event) => process_game_event(store_id, game_event, &status).await,
-                    ExecutableEvent::Exited(exit_result) => process_exited_event(store_id, exit_result, &status).await,
+                    ExecutableEvent::Exited(exit_result) => {
+                        process_exited_event(store_id, exit_result, &status).await;
+                        break;
+                    }
                 }
             }
+
+            shutdown_tx.broadcast(()).expect("failed to send shutdown signal");
         });
 
         Ok(())
+    }
+
+    /// Asynchronously waits for the game executable to shut down. Returns immediately if the executable isn't running.
+    pub async fn wait_for_shutdown(&self) {
+        if let Some(mut rx) = self.exec_shutdown_rx.lock().await.clone() {
+            rx.recv().await;
+        }
     }
 
     /// Sends a command to the running executable.
@@ -380,6 +396,7 @@ impl Importer {
             status: Arc::new(RwLock::new(ServerStatus::default())),
             exec_stdin_tx: Mutex::new(None),
             exec_stdout_rx: Mutex::new(None),
+            exec_shutdown_rx: Mutex::new(None),
         })
     }
 }

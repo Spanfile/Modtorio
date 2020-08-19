@@ -26,8 +26,11 @@ use chrono::{DateTime, Utc};
 use common::net::NetAddress;
 use config::Config;
 use error::{ModPortalError, RpcError};
-use factorio::{Factorio, GameStoreId, ServerStatus};
-use futures::{future::try_join_all, TryStreamExt};
+use factorio::{Factorio, GameStatus, GameStoreId, ServerStatus};
+use futures::{
+    future::{join_all, try_join_all},
+    TryStreamExt,
+};
 use lazy_static::lazy_static;
 use mod_portal::ModPortal;
 use rpc::{instance_status, mod_rpc_server, send_command_request};
@@ -36,7 +39,7 @@ use store::Store;
 use tokio::{
     fs,
     net::UnixListener,
-    sync::{mpsc, Mutex},
+    sync::{mpsc, watch, Mutex},
     task,
 };
 use tonic::{transport::Server, Request, Response, Status};
@@ -143,18 +146,29 @@ impl Modtorio {
 
     /// Runs a given Modtorio instance.
     pub async fn run(self) -> anyhow::Result<()> {
-        let server_task = tokio::spawn(self.run_rpc());
+        let (shutdown_tx, mut shutdown_rx) = watch::channel(());
+        shutdown_rx.recv().await;
 
-        if let Err(e) = tokio::try_join!(server_task) {
-            error!("Async task failed with: {}", e);
-            Err(e.into())
+        task::spawn(async move {
+            term_signal().await;
+            debug!("SIGINT caught, sending shutdown signal");
+            info!("Shutting down");
+            shutdown_tx.broadcast(()).expect("failed to broadcast shutdown signal");
+        });
+
+        let result = if let Err(e) = self.run_rpc(shutdown_rx).await {
+            error!("RPC server failed with: {}", e);
+            Err(e)
         } else {
             Ok(())
-        }
+        };
+
+        self.wait_for_games_to_shutdown().await?;
+        result
     }
 
     /// Runs the RPC server.
-    async fn run_rpc(self) -> anyhow::Result<()> {
+    async fn run_rpc(&self, shutdown_rx: watch::Receiver<()>) -> anyhow::Result<()> {
         let listen_addresses = self.config.listen();
 
         if listen_addresses.is_empty() {
@@ -171,9 +185,10 @@ impl Modtorio {
                     debug!("Starting RPC server on TCP {}", addr);
 
                     let addr = *addr;
+                    let shutdown_signal = wait_for_signal(shutdown_rx.clone());
                     task::spawn(async move {
                         server
-                            .serve_with_shutdown(addr, term_signal())
+                            .serve_with_shutdown(addr, shutdown_signal)
                             .await
                             .expect("RPC TCP listener failed");
                         debug!("RPC TCP listener on {} shut down", addr);
@@ -183,10 +198,11 @@ impl Modtorio {
                     debug!("Starting RPC server on Unix {}", path.display());
 
                     let path = path.to_owned();
+                    let shutdown_signal = wait_for_signal(shutdown_rx.clone());
                     task::spawn(async move {
                         let mut unix = UnixListener::bind(&path).expect("failed to bind to unix socket");
                         server
-                            .serve_with_incoming_shutdown(unix.incoming().map_ok(unix::UnixStream), term_signal())
+                            .serve_with_incoming_shutdown(unix.incoming().map_ok(unix::UnixStream), shutdown_signal)
                             .await
                             .expect("RPC Unix listener failed");
 
@@ -201,6 +217,20 @@ impl Modtorio {
         }
 
         try_join_all(rpc_listeners).await?;
+        Ok(())
+    }
+
+    /// Waits for all the currently managed games to be shut down.
+    async fn wait_for_games_to_shutdown(&self) -> anyhow::Result<()> {
+        let games = self.games.lock().await;
+        let mut waiters = Vec::new();
+
+        for game in games.iter() {
+            debug!("Waiting for game ID {} to shut down...", game.store_id().await?);
+            waiters.push(game.wait_for_shutdown());
+        }
+
+        join_all(waiters).await;
         Ok(())
     }
 
@@ -714,6 +744,11 @@ where
 /// Asynchronously returns the unit type after the current process receives a SIGINT signal (Ctrl-C).
 async fn term_signal() {
     tokio::signal::ctrl_c().await.expect("failed to listen for SIGINT");
+}
+
+/// Asynchronously returns the unit type after a given `watch::Receiver` receives a value.
+async fn wait_for_signal<T: Clone>(mut signal: watch::Receiver<T>) {
+    signal.recv().await;
 }
 
 /// Creates a new RPC response with a given message, logs it and returns it wrapped in `Ok()`.

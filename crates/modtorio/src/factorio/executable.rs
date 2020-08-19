@@ -73,7 +73,7 @@ impl Executable {
             .args(&["--start-server", "test.zip"])
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
-            .kill_on_drop(true)
+            .stderr(Stdio::null())
             .spawn()?;
 
         let stdout = child.stdout.take().ok_or_else(|| ExecutableError::NoStdioHandle)?;
