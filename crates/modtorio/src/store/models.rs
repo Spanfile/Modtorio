@@ -6,7 +6,7 @@
 //! [Model]: derive::Model
 
 use crate::{
-    factorio::GameStoreId,
+    factorio::{settings::StartBehaviour, GameStoreId},
     mod_common::Requirement,
     util::{HumanVersion, HumanVersionReq},
 };
@@ -200,4 +200,9 @@ pub struct GameSettings {
     pub bind_address: Vec<u8>,
     /// The `--bind` command line parameter's bind port.
     pub bind_port: i64,
+    /// The save file name for the `--create` and `--start-server` command line parameters.
+    pub save_name: String,
+    /// The start behaviour, a combination of the `--create`, `--start-server`, `--start-server-load-latest` and
+    /// `--start-server-load-scenario` command line parameters.
+    pub start_behaviour: StartBehaviour,
 }

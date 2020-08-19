@@ -165,4 +165,14 @@ message ServerSettings {
     fixed32 port = 3;
   }
   SocketAddr bind = 27;
+
+  string save_name = 28;
+
+  enum StartBehaviour {
+    LOAD_LATEST = 0;
+    LOAD_FILE = 1;
+    LOAD_SCENARIO = 2;
+    CREATE = 3;
+  }
+  StartBehaviour start_behaviour = 29;
 }

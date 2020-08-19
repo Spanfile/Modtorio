@@ -20,7 +20,7 @@ use log::*;
 use models::GameSettings;
 use mods::{Mods, ModsBuilder};
 use rpc::send_command_request::Command;
-use settings::ServerSettings;
+use settings::{ServerSettings, StartBehaviour};
 use std::{
     fs,
     path::{Path, PathBuf},
@@ -147,15 +147,19 @@ impl Factorio {
         *self.exec_stdin_tx.lock().await = Some(stdin_tx);
         *self.exec_stdout_rx.lock().await = Some(stdout_rx);
 
-        self.status.write().await.set_game_status(GameStatus::Starting);
-        let mut state_rx = self.executable.run(stdout_tx, stdin_rx).await?;
+        let exec_args = self.get_executable_args();
+        let mut state_rx = self.executable.run(stdout_tx, stdin_rx, &exec_args).await?;
 
         let (shutdown_tx, mut shutdown_rx) = watch::channel(());
         shutdown_rx.recv().await;
         *self.exec_shutdown_rx.lock().await = Some(shutdown_rx);
 
         let status = Arc::clone(&self.status);
-        status.write().await.reset_started_at();
+        {
+            let mut status_w = status.write().await;
+            status_w.reset_started_at();
+            status_w.set_game_status(GameStatus::Starting);
+        }
 
         task::spawn(async move {
             debug!(
@@ -283,6 +287,27 @@ impl Factorio {
         }
 
         Ok(())
+    }
+
+    /// Returns the proper server executable arguments to match the server's settings.
+    fn get_executable_args(&self) -> Vec<String> {
+        let mut args = Vec::new();
+
+        match self.settings.start.behaviour {
+            StartBehaviour::LoadLatest => args.push(String::from("--start-server-load-latest")),
+            StartBehaviour::LoadFile => args.extend(vec![
+                String::from("--start-server"),
+                self.settings.start.save_name.clone(),
+            ]),
+            _ => unimplemented!(), // TODO
+        }
+
+        args.extend(vec![
+            String::from("--bind"),
+            self.settings.network.bind_address.to_string(),
+        ]);
+
+        args
     }
 }
 

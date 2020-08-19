@@ -76,12 +76,12 @@ impl AllowCommands {
     /// Returns a new `AllowCommands` from a given `ServerSettings`.
     pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
         // TODO: ugly integer match
-        Ok(match rpc_format.allow_commands {
-            0 => AllowCommands::Yes,
-            1 => AllowCommands::No,
-            2 => AllowCommands::AdminsOnly,
-            i => panic!("invalid allow_commands value in RPC format: {}", i),
-        })
+        match rpc_format.allow_commands {
+            0 => Ok(AllowCommands::Yes),
+            1 => Ok(AllowCommands::No),
+            2 => Ok(AllowCommands::AdminsOnly),
+            v => Err(SettingsError::UnexpectedValue(v.to_string()).into()),
+        }
     }
 
     /// Modifies a given `ServerSettings` with this object's settings.

@@ -60,6 +60,8 @@ CREATE TABLE IF NOT EXISTS "game_settings" (
 	"bind_address_ip_version" INTEGER NOT NULL,
 	"bind_address" BLOB NOT NULL,
 	"bind_port" INTEGER NOT NULL,
+	"save_name" TEXT NOT NULL,
+	"start_behaviour" TEXT NOT NULL,
 	FOREIGN KEY("game") REFERENCES "game"("id")
 );
 

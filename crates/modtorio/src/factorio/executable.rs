@@ -68,9 +68,10 @@ impl Executable {
         &self,
         stdout_tx: mpsc::Sender<String>,
         mut stdin_rx: mpsc::Receiver<String>,
+        args: &[String],
     ) -> anyhow::Result<mpsc::Receiver<ExecutableEvent>> {
         let mut child = Command::new(&self.path)
-            .args(&["--start-server", "test.zip"])
+            .args(args)
             .stdin(Stdio::piped())
             .stdout(Stdio::piped())
             .stderr(Stdio::null())

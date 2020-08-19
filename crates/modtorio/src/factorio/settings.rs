@@ -8,6 +8,7 @@ mod information;
 mod network;
 mod pause;
 mod publicity;
+mod start;
 
 use crate::store::models::GameSettings;
 use allow_commands::AllowCommands;
@@ -18,6 +19,8 @@ use network::Network;
 use pause::Pause;
 use publicity::Publicity;
 use serde::{Deserialize, Serialize};
+use start::Start;
+pub use start::StartBehaviour;
 
 /// Stores a server's settings in a structured manner.
 #[derive(Deserialize, Serialize, Debug, Default)]
@@ -34,6 +37,8 @@ pub struct ServerSettings {
     pub allow_commands: AllowCommands,
     /// Contains settings related to the server's network options and traffic use.
     pub network: Network,
+    /// Contains settings related to starting the server.
+    pub start: Start,
 }
 
 #[allow(dead_code)]
@@ -54,6 +59,7 @@ impl ServerSettings {
 }
 
 impl ServerSettings {
+    // TODO: get rid of these useless Results
     /// Returns a new `ServerSettings` object by constructing it from a given `ServerSettingsGameFormat` object.
     pub fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
         Ok(Self {
@@ -63,6 +69,7 @@ impl ServerSettings {
             pause: Pause::from_game_format(game_format)?,
             allow_commands: AllowCommands::from_game_format(game_format)?,
             network: Network::from_game_format(game_format)?,
+            start: Start::default(),
         })
     }
 
@@ -87,6 +94,7 @@ impl ServerSettings {
             pause: Pause::from_store_format(store_format)?,
             allow_commands: AllowCommands::from_store_format(store_format)?,
             network: Network::from_store_format(store_format)?,
+            start: Start::from_store_format(store_format),
         })
     }
 
@@ -98,6 +106,7 @@ impl ServerSettings {
         self.pause.to_store_format(store_format)?;
         self.allow_commands.to_store_format(store_format)?;
         self.network.to_store_format(store_format)?;
+        self.start.to_store_format(store_format);
 
         Ok(())
     }
@@ -111,6 +120,7 @@ impl ServerSettings {
             pause: Pause::from_rpc_format(rpc_format)?,
             allow_commands: AllowCommands::from_rpc_format(rpc_format)?,
             network: Network::from_rpc_format(rpc_format)?,
+            start: Start::from_rpc_format(rpc_format)?,
         })
     }
 
@@ -122,6 +132,7 @@ impl ServerSettings {
         self.pause.to_rpc_format(rpc_format)?;
         self.allow_commands.to_rpc_format(rpc_format)?;
         self.network.to_rpc_format(rpc_format)?;
+        self.start.to_rpc_format(rpc_format);
 
         Ok(())
     }
