@@ -1,9 +1,11 @@
+//! Provides the `GameEvent` enum which represents a single event that happened in-game in a server.
+
 use crate::{error::GameEventError, factorio::status::InGameStatus};
 use lazy_static::lazy_static;
 use regex::Regex;
 use std::str::FromStr;
 
-/// Describes an event that happened in-game in a server.
+/// Represents a single event that happened in-game in a server.
 #[derive(Debug)]
 pub enum GameEvent {
     /// The game's state changed.

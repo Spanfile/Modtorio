@@ -158,57 +158,8 @@ impl Factorio {
 
             while let Some(event) = state_rx.recv().await {
                 match event {
-                    ExecutableEvent::GameEvent(game_event) => {
-                        debug!("Game ID {} got new game event: {:?}", store_id, game_event);
-
-                        match game_event {
-                            GameEvent::GameStateChanged { from: _, to } => {
-                                let mut status_w = status.write().await;
-                                status_w.set_in_game_status(to);
-
-                                match to {
-                                    InGameStatus::InGame => {
-                                        if status_w.game_status() == GameStatus::Starting {
-                                            info!("Game ID {} started and is now running", store_id);
-                                            status_w.set_game_status(GameStatus::Running);
-                                        }
-                                    }
-                                    InGameStatus::DisconnectingScheduled => {
-                                        if status_w.game_status() == GameStatus::Running {
-                                            info!("Game ID {} shutting down", store_id);
-                                            status_w.set_game_status(GameStatus::ShuttingDown);
-                                        }
-                                    }
-                                    in_game_status => {
-                                        trace!("Unhandled in-game status: {:?}", in_game_status);
-                                    }
-                                }
-                            }
-                            GameEvent::RefusingConnection { peer, username, reason } => {
-                                info!(
-                                    "Game ID {} refusing connection for '{}' (addr {}): {}",
-                                    store_id, username, peer, reason
-                                );
-                            }
-                            GameEvent::PeerJoined { username } => {
-                                info!("Game ID {}: {} joined the game", store_id, username);
-                            }
-                            GameEvent::PeerLeft { username } => {
-                                info!("Game ID {}: {} left the game", store_id, username);
-                            }
-                            _ => {}
-                        }
-                    }
-                    ExecutableEvent::Exited(exit_result) => {
-                        debug!("Game ID {} executable exited with {:?}", store_id, exit_result);
-                        if let Err(e) = exit_result {
-                            error!("Game ID {} executable exited with error: {:?}", store_id, e);
-                            status.write().await.set_game_status(GameStatus::Crashed);
-                        } else {
-                            info!("Game ID {} exited succesfully", store_id);
-                            status.write().await.set_game_status(GameStatus::Shutdown);
-                        }
-                    }
+                    ExecutableEvent::GameEvent(game_event) => process_game_event(store_id, game_event, &status).await,
+                    ExecutableEvent::Exited(exit_result) => process_exited_event(store_id, exit_result, &status).await,
                 }
             }
         });
@@ -428,5 +379,63 @@ impl Importer {
             exec_stdin_tx: Mutex::new(None),
             exec_stdout_rx: Mutex::new(None),
         })
+    }
+}
+
+/// Processes a given `GameEvent` for a certain game (identified by `store_id`) and modifies a given `ServerStatus`
+/// accordingly.
+async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &RwLock<ServerStatus>) {
+    debug!("Game ID {} got new game event: {:?}", store_id, event);
+
+    match event {
+        GameEvent::GameStateChanged { from: _, to } => {
+            let mut status_w = status.write().await;
+            status_w.set_in_game_status(to);
+
+            match to {
+                InGameStatus::InGame => {
+                    if status_w.game_status() == GameStatus::Starting {
+                        info!("Game ID {} started and is now running", store_id);
+                        status_w.set_game_status(GameStatus::Running);
+                    }
+                }
+                InGameStatus::DisconnectingScheduled => {
+                    if status_w.game_status() == GameStatus::Running {
+                        info!("Game ID {} shutting down", store_id);
+                        status_w.set_game_status(GameStatus::ShuttingDown);
+                    }
+                }
+                in_game_status => {
+                    trace!("Unhandled in-game status: {:?}", in_game_status);
+                }
+            }
+        }
+        GameEvent::RefusingConnection { peer, username, reason } => {
+            info!(
+                "Game ID {} refusing connection for '{}' (addr {}): {}",
+                store_id, username, peer, reason
+            );
+        }
+        GameEvent::PeerJoined { username } => {
+            info!("Game ID {}: {} joined the game", store_id, username);
+        }
+        GameEvent::PeerLeft { username } => {
+            info!("Game ID {}: {} left the game", store_id, username);
+        }
+        _ => {}
+    }
+}
+
+/// Processes a given executable exit event for a certain game (identified by `store_id`) and modifies a given
+/// `ServerStatus` accordingly.
+async fn process_exited_event(store_id: GameStoreId, exit_result: anyhow::Result<()>, status: &RwLock<ServerStatus>) {
+    debug!("Game ID {} executable exited with {:?}", store_id, exit_result);
+
+    if let Err(e) = exit_result {
+        error!("Game ID {} executable exited with error: {:?}", store_id, e);
+        status.write().await.set_game_status(GameStatus::Crashed);
+    } else {
+        info!("Game ID {} exited succesfully", store_id);
+        status.write().await.set_game_status(GameStatus::Shutdown);
     }
 }

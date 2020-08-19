@@ -331,17 +331,18 @@ impl Modtorio {
 
         task::spawn(async move {
             let mut games = self.games.lock().await;
-            if let Some(game) = find_game(game_id, &mut games).await {
-                if let Err(e) = game.update_store(Some(prog_tx.clone())).await {
-                    error!("Failed to update game store: {}", e);
-                    send_error_status(&prog_tx, e).await;
-                    return;
-                }
+            match find_game(game_id, &mut games).await {
+                Ok(game) => {
+                    if let Err(e) = game.update_store(Some(prog_tx.clone())).await {
+                        error!("Failed to update game store: {}", e);
+                        send_error_status(&prog_tx, e).await;
+                        return;
+                    }
 
-                send_status(&prog_tx, async_status::done()).await;
-            } else {
-                send_error_status(&prog_tx, RpcError::NoSuchGame(game_id)).await;
-            }
+                    send_status(&prog_tx, async_status::done()).await
+                }
+                Err(e) => send_error_status(&prog_tx, e).await,
+            };
         });
     }
 
@@ -360,26 +361,27 @@ impl Modtorio {
 
         task::spawn(async move {
             let mut games = self.games.lock().await;
-            if let Some(game) = find_game(game_id, &mut games).await {
-                if let Err(e) = game
-                    .mods_mut()
-                    .add_from_portal(&mod_name, version, Some(prog_tx.clone()))
-                    .await
-                {
-                    if let Some(ModPortalError::ClientError(reqwest::StatusCode::NOT_FOUND)) = e.downcast_ref() {
-                        error!("Failed to install mod '{}': not found ({})", mod_name, e);
-                        send_error_status(&prog_tx, RpcError::NoSuchMod(mod_name)).await;
-                    } else {
-                        error!("Failed to install mod '{}': {}", mod_name, e);
-                        send_error_status(&prog_tx, e).await;
+            match find_game(game_id, &mut games).await {
+                Ok(game) => {
+                    if let Err(e) = game
+                        .mods_mut()
+                        .add_from_portal(&mod_name, version, Some(prog_tx.clone()))
+                        .await
+                    {
+                        if let Some(ModPortalError::ClientError(reqwest::StatusCode::NOT_FOUND)) = e.downcast_ref() {
+                            error!("Failed to install mod '{}': not found ({})", mod_name, e);
+                            send_error_status(&prog_tx, RpcError::NoSuchMod(mod_name)).await;
+                        } else {
+                            error!("Failed to install mod '{}': {}", mod_name, e);
+                            send_error_status(&prog_tx, e).await;
+                        }
+                        return;
                     }
-                    return;
-                }
 
-                send_status(&prog_tx, async_status::done()).await;
-            } else {
-                send_error_status(&prog_tx, RpcError::NoSuchGame(game_id)).await;
-            }
+                    send_status(&prog_tx, async_status::done()).await
+                }
+                Err(e) => send_error_status(&prog_tx, e).await,
+            };
         });
     }
 
@@ -392,17 +394,18 @@ impl Modtorio {
 
         task::spawn(async move {
             let mut games = self.games.lock().await;
-            if let Some(game) = find_game(game_id, &mut games).await {
-                if let Err(e) = game.mods_mut().update(Some(prog_tx.clone())).await {
-                    error!("Failed to update mods: {}", e);
-                    send_error_status(&prog_tx, e).await;
-                    return;
-                }
+            match find_game(game_id, &mut games).await {
+                Ok(game) => {
+                    if let Err(e) = game.mods_mut().update(Some(prog_tx.clone())).await {
+                        error!("Failed to update mods: {}", e);
+                        send_error_status(&prog_tx, e).await;
+                        return;
+                    }
 
-                send_status(&prog_tx, async_status::done()).await;
-            } else {
-                send_error_status(&prog_tx, RpcError::NoSuchGame(game_id)).await;
-            }
+                    send_status(&prog_tx, async_status::done()).await
+                }
+                Err(e) => send_error_status(&prog_tx, e).await,
+            };
         });
     }
 
@@ -415,17 +418,18 @@ impl Modtorio {
 
         task::spawn(async move {
             let mut games = self.games.lock().await;
-            if let Some(game) = find_game(game_id, &mut games).await {
-                if let Err(e) = game.mods_mut().ensure_dependencies(Some(prog_tx.clone())).await {
-                    error!("Failed to ensure mod dependencies: {}", e);
-                    send_error_status(&prog_tx, e).await;
-                    return;
-                }
+            match find_game(game_id, &mut games).await {
+                Ok(game) => {
+                    if let Err(e) = game.mods_mut().ensure_dependencies(Some(prog_tx.clone())).await {
+                        error!("Failed to ensure mod dependencies: {}", e);
+                        send_error_status(&prog_tx, e).await;
+                        return;
+                    }
 
-                send_status(&prog_tx, async_status::done()).await;
-            } else {
-                send_error_status(&prog_tx, RpcError::NoSuchGame(game_id)).await;
-            }
+                    send_status(&prog_tx, async_status::done()).await
+                }
+                Err(e) => send_error_status(&prog_tx, e).await,
+            };
         });
     }
 
@@ -434,14 +438,11 @@ impl Modtorio {
         self.assert_instance_status(instance_status::Status::Running).await?;
 
         let mut games = self.games.lock().await;
-        if let Some(game) = find_game(game_id, &mut games).await {
-            let mut rpc_server_settings = rpc::ServerSettings::default();
-            game.settings().to_rpc_format(&mut rpc_server_settings)?;
+        let game = find_game(game_id, &mut games).await?;
+        let mut rpc_server_settings = rpc::ServerSettings::default();
+        game.settings().to_rpc_format(&mut rpc_server_settings)?;
 
-            Ok(rpc_server_settings)
-        } else {
-            Err(RpcError::NoSuchGame(game_id).into())
-        }
+        Ok(rpc_server_settings)
     }
 
     /// Sets a given game instance's server settings.
@@ -453,22 +454,19 @@ impl Modtorio {
         self.assert_instance_status(instance_status::Status::Running).await?;
 
         let mut games = self.games.lock().await;
-        if let Some(game) = find_game(game_id, &mut games).await {
-            let server_settings = if let Some(settings) = settings {
-                info!("Updating server ID {}'s settings", game_id);
-                factorio::settings::ServerSettings::from_rpc_format(&settings)?
-            } else {
-                info!("Resetting server ID {}'s settings to default", game_id);
-                factorio::settings::ServerSettings::default()
-            };
-
-            debug!("{:?}", server_settings);
-            *game.settings_mut() = server_settings;
-
-            Ok(())
+        let game = find_game(game_id, &mut games).await?;
+        let server_settings = if let Some(settings) = settings {
+            info!("Updating server ID {}'s settings", game_id);
+            factorio::settings::ServerSettings::from_rpc_format(&settings)?
         } else {
-            Err(RpcError::NoSuchGame(game_id).into())
-        }
+            info!("Resetting server ID {}'s settings to default", game_id);
+            factorio::settings::ServerSettings::default()
+        };
+
+        debug!("{:?}", server_settings);
+        *game.settings_mut() = server_settings;
+
+        Ok(())
     }
 
     /// Runs a given game instance.
@@ -476,16 +474,14 @@ impl Modtorio {
         self.assert_instance_status(instance_status::Status::Running).await?;
 
         let mut games = self.games.lock().await;
-        if let Some(game) = find_game(game_id, &mut games).await {
-            if let Err(e) = game.run().await {
-                error!("Server ID {} failed to run: {}", game_id, e);
-                Err(e)
-            } else {
-                info!("Server ID {} starting", game_id);
-                Ok(())
-            }
+        let game = find_game(game_id, &mut games).await?;
+
+        if let Err(e) = game.run().await {
+            error!("Server ID {} failed to run: {}", game_id, e);
+            Err(e)
         } else {
-            Err(RpcError::NoSuchGame(game_id).into())
+            info!("Server ID {} starting", game_id);
+            Ok(())
         }
     }
 
@@ -499,18 +495,15 @@ impl Modtorio {
         self.assert_instance_status(instance_status::Status::Running).await?;
 
         let mut games = self.games.lock().await;
-        if let Some(game) = find_game(game_id, &mut games).await {
-            let command = match command {
-                0 => send_command_request::Command::Raw,
-                i => return Err(RpcError::NoSuchCommand(i).into()),
-            };
+        let game = find_game(game_id, &mut games).await?;
+        let command = match command {
+            0 => send_command_request::Command::Raw,
+            i => return Err(RpcError::NoSuchCommand(i).into()),
+        };
 
-            game.send_command(command, arguments).await?;
+        game.send_command(command, arguments).await?;
 
-            Ok(())
-        } else {
-            Err(RpcError::NoSuchGame(game_id).into())
-        }
+        Ok(())
     }
 
     /// Sends a command to a given game instance.
@@ -518,11 +511,9 @@ impl Modtorio {
         self.assert_instance_status(instance_status::Status::Running).await?;
 
         let mut games = self.games.lock().await;
-        if let Some(game) = find_game(game_id, &mut games).await {
-            Ok(game.status().await)
-        } else {
-            Err(RpcError::NoSuchGame(game_id).into())
-        }
+        let game = find_game(game_id, &mut games).await?;
+
+        Ok(game.status().await)
     }
 }
 
@@ -732,7 +723,7 @@ fn respond<T: std::fmt::Debug>(message: T) -> Result<Response<T>, Status> {
     Ok(resp)
 }
 
-/// Creates a new RPC error respose, logs it and returns it wrapped in `Err()`.
+/// Creates a new RPC error respose, logs it and returns it.
 fn respond_err<T>(error: anyhow::Error) -> Result<Response<T>, Status> {
     error!("RPC request failed: {}", error);
 
@@ -755,14 +746,16 @@ where
     }
 }
 
-async fn find_game(game_id: GameStoreId, games: &mut Vec<Factorio>) -> Option<&mut Factorio> {
-    let mut game = None;
+/// Finds and returns a mutable reference to a game based on its store ID, or returns `RpcError::NoSuchGame` if the game
+/// isn't found.
+async fn find_game(game_id: GameStoreId, games: &mut Vec<Factorio>) -> anyhow::Result<&mut Factorio> {
     for g in games.iter_mut() {
         if let Some(id) = g.store_id_option().await {
             if id == game_id {
-                game = Some(g);
+                return Ok(g);
             }
         }
     }
-    game
+
+    Err(RpcError::NoSuchGame(game_id).into())
 }
