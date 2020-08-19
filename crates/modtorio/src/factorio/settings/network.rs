@@ -79,8 +79,8 @@ impl Default for Network {
 
 impl Network {
     /// Returns a new `Network` from a given `ServerSettingsGameFormat`.
-    pub fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
-        Ok(Self {
+    pub fn from_game_format(game_format: &ServerSettingsGameFormat) -> Self {
+        Self {
             upload: Upload {
                 max: Limit::from(game_format.max_upload_in_kilobytes_per_second),
                 slots: Limit::from(game_format.max_upload_slots),
@@ -98,11 +98,11 @@ impl Network {
             },
             // the game format does not include the listen address
             ..Default::default()
-        })
+        }
     }
 
     /// Modifies a given `ServerSettingsGameFormat` with this object's settings.
-    pub fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
+    pub fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) {
         game_format.max_upload_in_kilobytes_per_second = self.upload.max.into();
         game_format.max_upload_slots = self.upload.slots.into();
         game_format.minimum_latency_in_ticks = self.minimum_latency;
@@ -110,13 +110,11 @@ impl Network {
         game_format.maximum_segment_size = self.segment_size.size.max;
         game_format.minimum_segment_size_peer_count = self.segment_size.peer_count.min;
         game_format.maximum_segment_size_peer_count = self.segment_size.peer_count.max;
-
-        Ok(())
     }
 
     /// Returns a new `Network` from a given `GameSettings`.
-    pub fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
-        Ok(Self {
+    pub fn from_store_format(store_format: &GameSettings) -> Self {
+        Self {
             upload: Upload {
                 max: Limit::from(store_format.max_upload_in_kilobytes_per_second as u64),
                 slots: Limit::from(store_format.max_upload_slots as u64),
@@ -134,11 +132,11 @@ impl Network {
             },
             // the store format does not include the listen address
             ..Default::default()
-        })
+        }
     }
 
     /// Modifies a given `GameSettings` with this object's settings.
-    pub fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
+    pub fn to_store_format(&self, store_format: &mut GameSettings) {
         store_format.max_upload_in_kilobytes_per_second = u64::from(self.upload.max) as i64;
         store_format.max_upload_slots = u64::from(self.upload.slots) as i64;
         store_format.minimum_latency_in_ticks = self.minimum_latency as i64;
@@ -146,12 +144,10 @@ impl Network {
         store_format.maximum_segment_size = self.segment_size.size.max as i64;
         store_format.minimum_segment_size_peer_count = self.segment_size.peer_count.min as i64;
         store_format.maximum_segment_size_peer_count = self.segment_size.peer_count.max as i64;
-
-        Ok(())
     }
 
     /// Returns a new `Network` from a given `ServerSettings`.
-    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
+    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> Self {
         let bind_address = if let Some(bind_addr) = &rpc_format.bind {
             let port = bind_addr.port as u16;
             if let Some(addr) = &bind_addr.addr {
@@ -175,7 +171,7 @@ impl Network {
             Self::default().bind_address
         };
 
-        Ok(Self {
+        Self {
             upload: Upload {
                 max: Limit::from(rpc_format.max_upload_in_kilobytes_per_second),
                 slots: Limit::from(rpc_format.max_upload_slots),
@@ -192,11 +188,11 @@ impl Network {
                 },
             },
             bind_address,
-        })
+        }
     }
 
     /// Modifies a given `ServerSettings` with this object's settings.
-    pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
+    pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) {
         rpc_format.max_upload_in_kilobytes_per_second = self.upload.max.into();
         rpc_format.max_upload_slots = self.upload.slots.into();
         rpc_format.minimum_latency_in_ticks = self.minimum_latency;
@@ -211,7 +207,5 @@ impl Network {
                 IpAddr::V6(v6_addr) => socket_addr::Addr::V6(v6_addr.octets().to_vec()),
             }),
         });
-
-        Ok(())
     }
 }

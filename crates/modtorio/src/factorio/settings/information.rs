@@ -31,56 +31,50 @@ impl Default for Information {
 
 impl Information {
     /// Returns a new `Information` from a given `ServerSettingsGameFormat`.
-    pub fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
-        Ok(Self {
+    pub fn from_game_format(game_format: &ServerSettingsGameFormat) -> Self {
+        Self {
             name: game_format.name.clone(),
             description: game_format.description.clone(),
             tags: game_format.tags.clone(),
-        })
+        }
     }
 
     /// Modifies a given `ServerSettingsGameFormat` with this object's settings.
-    pub fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
+    pub fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) {
         game_format.name = self.name.clone();
         game_format.description = self.description.clone();
         game_format.tags = self.tags.clone();
-
-        Ok(())
     }
 
     /// Returns a new `Information` from a given `GameSettings`.
-    pub fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
-        Ok(Self {
+    pub fn from_store_format(store_format: &GameSettings) -> Self {
+        Self {
             name: store_format.name.clone(),
             description: store_format.description.clone(),
             tags: store_format.tags.split(TAGS_SPLITTER).map(str::to_string).collect(),
-        })
+        }
     }
 
     /// Modifies a given `GameSettings` with this object's settings.
-    pub fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
+    pub fn to_store_format(&self, store_format: &mut GameSettings) {
         store_format.name = self.name.clone();
         store_format.description = self.description.clone();
         store_format.tags = self.tags.clone().join(TAGS_SPLITTER);
-
-        Ok(())
     }
 
     /// Returns a new `Information` from a given `ServerSettings`.
-    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
-        Ok(Self {
+    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> Self {
+        Self {
             name: rpc_format.name.clone(),
             description: rpc_format.description.clone(),
             tags: rpc_format.tags.clone(),
-        })
+        }
     }
 
     /// Modifies a given `ServerSettings` with this object's settings.
-    pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
+    pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) {
         rpc_format.name = self.name.clone();
         rpc_format.description = self.description.clone();
         rpc_format.tags = self.tags.clone();
-
-        Ok(())
     }
 }

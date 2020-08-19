@@ -44,13 +44,12 @@ impl AllowCommands {
     }
 
     /// Modifies a given `ServerSettingsGameFormat` with this object's settings.
-    pub fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
+    pub fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) {
         game_format.allow_commands = match self {
             Self::Yes => String::from(YES_GAME_VALUE),
             Self::No => String::from(NO_GAME_VALUE),
             Self::AdminsOnly => String::from(ADMINS_ONLY_GAME_VALUE),
         };
-        Ok(())
     }
 
     /// Returns a new `AllowCommands` from a given `GameSettings`.
@@ -64,13 +63,12 @@ impl AllowCommands {
     }
 
     /// Modifies a given `GameSettings` with this object's settings.
-    pub fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
+    pub fn to_store_format(&self, store_format: &mut GameSettings) {
         store_format.allow_commands = match self {
             Self::Yes => String::from(YES_GAME_VALUE),
             Self::No => String::from(NO_GAME_VALUE),
             Self::AdminsOnly => String::from(ADMINS_ONLY_GAME_VALUE),
         };
-        Ok(())
     }
 
     /// Returns a new `AllowCommands` from a given `ServerSettings`.
@@ -85,12 +83,11 @@ impl AllowCommands {
     }
 
     /// Modifies a given `ServerSettings` with this object's settings.
-    pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
+    pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) {
         rpc_format.allow_commands = match self {
             Self::Yes => server_settings::AllowCommands::Yes.into(),
             Self::No => server_settings::AllowCommands::No.into(),
             Self::AdminsOnly => server_settings::AllowCommands::AdminsOnly.into(),
         };
-        Ok(())
     }
 }

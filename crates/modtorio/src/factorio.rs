@@ -391,6 +391,8 @@ impl Importer {
 
             let settings = ServerSettings::from_store_format(&store.get_settings(game_store_id).await?)?;
             debug!("Read settings from store: {:?}", settings);
+            // TODO: if the settings are changed on disk, reload them from there. use the file's last mtime as an
+            // indicator
             settings
         } else {
             let settings = ServerSettings::from_game_json(&fs::read_to_string(self.root.join(self.settings))?)?;

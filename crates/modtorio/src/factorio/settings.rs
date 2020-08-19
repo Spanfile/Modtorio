@@ -56,31 +56,28 @@ impl ServerSettings {
         self.to_game_format(&mut game_format)?;
         Ok(serde_json::to_string(&game_format)?)
     }
-}
 
-impl ServerSettings {
-    // TODO: get rid of these useless Results
     /// Returns a new `ServerSettings` object by constructing it from a given `ServerSettingsGameFormat` object.
-    pub fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
+    fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
         Ok(Self {
-            information: Information::from_game_format(game_format)?,
-            publicity: Publicity::from_game_format(game_format)?,
-            autosave: Autosave::from_game_format(game_format)?,
-            pause: Pause::from_game_format(game_format)?,
+            information: Information::from_game_format(game_format),
+            publicity: Publicity::from_game_format(game_format),
+            autosave: Autosave::from_game_format(game_format),
+            pause: Pause::from_game_format(game_format),
             allow_commands: AllowCommands::from_game_format(game_format)?,
-            network: Network::from_game_format(game_format)?,
+            network: Network::from_game_format(game_format),
             start: Start::default(),
         })
     }
 
     /// Modifies a given `ServerSettingsGameFormat` object with this object's settings.
-    pub fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
-        self.information.to_game_format(game_format)?;
-        self.publicity.to_game_format(game_format)?;
-        self.autosave.to_game_format(game_format)?;
-        self.pause.to_game_format(game_format)?;
-        self.allow_commands.to_game_format(game_format)?;
-        self.network.to_game_format(game_format)?;
+    fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
+        self.information.to_game_format(game_format);
+        self.publicity.to_game_format(game_format);
+        self.autosave.to_game_format(game_format);
+        self.pause.to_game_format(game_format);
+        self.allow_commands.to_game_format(game_format);
+        self.network.to_game_format(game_format);
 
         Ok(())
     }
@@ -88,24 +85,24 @@ impl ServerSettings {
     /// Returns a new `ServerSettings` object by constructing it from a given program store `GameSettings` object.
     pub fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
         Ok(Self {
-            information: Information::from_store_format(store_format)?,
-            publicity: Publicity::from_store_format(store_format)?,
-            autosave: Autosave::from_store_format(store_format)?,
-            pause: Pause::from_store_format(store_format)?,
+            information: Information::from_store_format(store_format),
+            publicity: Publicity::from_store_format(store_format),
+            autosave: Autosave::from_store_format(store_format),
+            pause: Pause::from_store_format(store_format),
             allow_commands: AllowCommands::from_store_format(store_format)?,
-            network: Network::from_store_format(store_format)?,
+            network: Network::from_store_format(store_format),
             start: Start::from_store_format(store_format),
         })
     }
 
     /// Modifies a given program store `GameSettings` object with this object's settings.
     pub fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
-        self.information.to_store_format(store_format)?;
-        self.publicity.to_store_format(store_format)?;
-        self.autosave.to_store_format(store_format)?;
-        self.pause.to_store_format(store_format)?;
-        self.allow_commands.to_store_format(store_format)?;
-        self.network.to_store_format(store_format)?;
+        self.information.to_store_format(store_format);
+        self.publicity.to_store_format(store_format);
+        self.autosave.to_store_format(store_format);
+        self.pause.to_store_format(store_format);
+        self.allow_commands.to_store_format(store_format);
+        self.network.to_store_format(store_format);
         self.start.to_store_format(store_format);
 
         Ok(())
@@ -114,24 +111,24 @@ impl ServerSettings {
     /// Returns a new `ServerSettings` object by constructing it from a given RPC `ServerSettings` object.
     pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
         Ok(Self {
-            information: Information::from_rpc_format(rpc_format)?,
-            publicity: Publicity::from_rpc_format(rpc_format)?,
-            autosave: Autosave::from_rpc_format(rpc_format)?,
-            pause: Pause::from_rpc_format(rpc_format)?,
+            information: Information::from_rpc_format(rpc_format),
+            publicity: Publicity::from_rpc_format(rpc_format),
+            autosave: Autosave::from_rpc_format(rpc_format),
+            pause: Pause::from_rpc_format(rpc_format),
             allow_commands: AllowCommands::from_rpc_format(rpc_format)?,
-            network: Network::from_rpc_format(rpc_format)?,
+            network: Network::from_rpc_format(rpc_format),
             start: Start::from_rpc_format(rpc_format)?,
         })
     }
 
     /// Modifies a given RPC `ServerSettings` object with this object's settings.
     pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
-        self.information.to_rpc_format(rpc_format)?;
-        self.publicity.to_rpc_format(rpc_format)?;
-        self.autosave.to_rpc_format(rpc_format)?;
-        self.pause.to_rpc_format(rpc_format)?;
-        self.allow_commands.to_rpc_format(rpc_format)?;
-        self.network.to_rpc_format(rpc_format)?;
+        self.information.to_rpc_format(rpc_format);
+        self.publicity.to_rpc_format(rpc_format);
+        self.autosave.to_rpc_format(rpc_format);
+        self.pause.to_rpc_format(rpc_format);
+        self.allow_commands.to_rpc_format(rpc_format);
+        self.network.to_rpc_format(rpc_format);
         self.start.to_rpc_format(rpc_format);
 
         Ok(())

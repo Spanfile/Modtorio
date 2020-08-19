@@ -86,8 +86,8 @@ impl Default for PublicVisibility {
 
 impl Publicity {
     /// Returns a new `Publicity` from a given `ServerSettingsGameFormat`.
-    pub fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
-        Ok(Self {
+    pub fn from_game_format(game_format: &ServerSettingsGameFormat) -> Self {
+        Self {
             public: if game_format.visibility.public {
                 Some(PublicVisibility {
                     username: game_format.username.clone(),
@@ -108,11 +108,11 @@ impl Publicity {
                 autokick: Limit::from(game_format.afk_autokick_interval),
             },
             password: game_format.game_password.clone(),
-        })
+        }
     }
 
     /// Modifies a given `ServerSettingsGameFormat` with this object's settings.
-    pub fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
+    pub fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) {
         game_format.visibility.public = self.public.is_some();
         game_format.visibility.lan = self.lan;
 
@@ -129,13 +129,11 @@ impl Publicity {
         game_format.ignore_player_limit_for_returning_players = self.player_limit.ignore_for_returning;
         game_format.afk_autokick_interval = self.player_limit.autokick.into();
         game_format.game_password = self.password.clone();
-
-        Ok(())
     }
 
     /// Returns a new `Publicity` from a given `GameSettings`.
-    pub fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
-        Ok(Self {
+    pub fn from_store_format(store_format: &GameSettings) -> Self {
+        Self {
             public: if store_format.public_visibility == 0 {
                 None
             } else {
@@ -156,11 +154,11 @@ impl Publicity {
                 autokick: Limit::from(store_format.afk_autokick_interval as u64),
             },
             password: store_format.game_password.clone(),
-        })
+        }
     }
 
     /// Modifies a given `GameSettings` with this object's settings.
-    pub fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
+    pub fn to_store_format(&self, store_format: &mut GameSettings) {
         store_format.public_visibility = self.public.is_some() as i64;
         store_format.lan_visibility = self.lan as i64;
 
@@ -177,16 +175,14 @@ impl Publicity {
         store_format.ignore_player_limit_for_returning_players = self.player_limit.ignore_for_returning as i64;
         store_format.afk_autokick_interval = u64::from(self.player_limit.autokick) as i64;
         store_format.game_password = self.password.clone();
-
-        Ok(())
     }
 
     /// Returns a new `Publicity` from a given `ServerSettings`.
-    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
+    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> Self {
         let default_vis = rpc::server_settings::Visibility::default();
         let visibility = rpc_format.visibility.as_ref().unwrap_or(&default_vis);
 
-        Ok(Self {
+        Self {
             public: if visibility.public {
                 Some(PublicVisibility {
                     username: rpc_format.username.clone(),
@@ -207,11 +203,11 @@ impl Publicity {
                 autokick: Limit::from(rpc_format.afk_autokick_interval),
             },
             password: rpc_format.game_password.clone(),
-        })
+        }
     }
 
     /// Modifies a given `ServerSettings` with this object's settings.
-    pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
+    pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) {
         rpc_format.visibility = Some(rpc::server_settings::Visibility {
             public: self.public.is_some(),
             lan: self.lan,
@@ -230,7 +226,5 @@ impl Publicity {
         rpc_format.ignore_player_limit_for_returning_players = self.player_limit.ignore_for_returning;
         rpc_format.afk_autokick_interval = self.player_limit.autokick.into();
         rpc_format.game_password = self.password.clone();
-
-        Ok(())
     }
 }
