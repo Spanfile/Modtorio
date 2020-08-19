@@ -645,7 +645,7 @@ impl mod_rpc_server::ModRpc for Modtorio {
     ) -> Result<Response<rpc::VersionInformation>, Status> {
         log_rpc_request(&req);
 
-        let resp = Response::new(rpc::VersionInformation {
+        respond(rpc::VersionInformation {
             version: Some((*HVER_VERSION).into()),
             protocol_version: Some(
                 rpc::VERSION
@@ -653,10 +653,7 @@ impl mod_rpc_server::ModRpc for Modtorio {
                     .expect("failed to parse RPC protocol buffer specification version as HumanVersion")
                     .into(),
             ),
-        });
-        log_rpc_response(&resp);
-
-        Ok(resp)
+        })
     }
 
     async fn get_instance_status(&self, req: Request<rpc::Empty>) -> Result<Response<rpc::InstanceStatus>, Status> {
@@ -666,14 +663,11 @@ impl mod_rpc_server::ModRpc for Modtorio {
         let games = self.get_rpc_games().await;
         let instance_status = self.get_instance_status().await;
 
-        let resp = Response::new(rpc::InstanceStatus {
+        respond(rpc::InstanceStatus {
             uptime: uptime.num_seconds(),
             games,
             instance_status: instance_status.into(),
-        });
-        log_rpc_response(&resp);
-
-        Ok(resp)
+        })
     }
 
     // I tried to macro these repetitive functions into DRYness but the tonic::async_trait macro messes with them in
@@ -684,10 +678,8 @@ impl mod_rpc_server::ModRpc for Modtorio {
 
         let msg = req.into_inner();
         self.clone().import_game(msg.path, tx).await;
-        let resp = Response::new(rx);
-        log_rpc_response(&resp);
 
-        Ok(resp)
+        respond(rx)
     }
 
     async fn update_store(
@@ -699,10 +691,8 @@ impl mod_rpc_server::ModRpc for Modtorio {
 
         let msg = req.into_inner();
         self.clone().update_store(msg.game_id, tx).await;
-        let resp = Response::new(rx);
-        log_rpc_response(&resp);
 
-        Ok(resp)
+        respond(rx)
     }
 
     async fn install_mod(
@@ -715,10 +705,8 @@ impl mod_rpc_server::ModRpc for Modtorio {
         let msg = req.into_inner();
         let version = msg.mod_version.map(HumanVersion::from);
         self.clone().install_mod(msg.game_id, msg.mod_name, version, tx).await;
-        let resp = Response::new(rx);
-        log_rpc_response(&resp);
 
-        Ok(resp)
+        respond(rx)
     }
 
     async fn update_mods(
@@ -730,10 +718,8 @@ impl mod_rpc_server::ModRpc for Modtorio {
 
         let msg = req.into_inner();
         self.clone().update_mods(msg.game_id, tx).await;
-        let resp = Response::new(rx);
-        log_rpc_response(&resp);
 
-        Ok(resp)
+        respond(rx)
     }
 
     async fn ensure_mod_dependencies(
@@ -745,10 +731,8 @@ impl mod_rpc_server::ModRpc for Modtorio {
 
         let msg = req.into_inner();
         self.clone().ensure_mod_dependencies(msg.game_id, tx).await;
-        let resp = Response::new(rx);
-        log_rpc_response(&resp);
 
-        Ok(resp)
+        respond(rx)
     }
 
     async fn get_server_settings(
@@ -759,19 +743,8 @@ impl mod_rpc_server::ModRpc for Modtorio {
 
         let msg = req.into_inner();
         match self.get_server_settings(msg.game_id).await {
-            Ok(s) => {
-                let resp = Response::new(s);
-                log_rpc_response(&resp);
-                Ok(resp)
-            }
-            Err(e) => {
-                error!("RPC get server settings failed: {}", e);
-                if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
-                    Err(rpc_error.into())
-                } else {
-                    Err(RpcError::Internal(e).into())
-                }
-            }
+            Ok(s) => respond(s),
+            Err(e) => respond_err(e),
         }
     }
 
@@ -783,19 +756,8 @@ impl mod_rpc_server::ModRpc for Modtorio {
 
         let msg = req.into_inner();
         match self.set_server_settings(msg.game_id, msg.settings).await {
-            Ok(_) => {
-                let resp = Response::new(rpc::Empty {});
-                log_rpc_response(&resp);
-                Ok(resp)
-            }
-            Err(e) => {
-                error!("RPC set server settings failed: {}", e);
-                if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
-                    Err(rpc_error.into())
-                } else {
-                    Err(RpcError::Internal(e).into())
-                }
-            }
+            Ok(_) => respond_empty(),
+            Err(e) => respond_err(e),
         }
     }
 
@@ -804,19 +766,8 @@ impl mod_rpc_server::ModRpc for Modtorio {
 
         let msg = req.into_inner();
         match self.run_server(msg.game_id).await {
-            Ok(_) => {
-                let resp = Response::new(rpc::Empty {});
-                log_rpc_response(&resp);
-                Ok(resp)
-            }
-            Err(e) => {
-                error!("RPC run server failed: {}", e);
-                if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
-                    Err(rpc_error.into())
-                } else {
-                    Err(RpcError::Internal(e).into())
-                }
-            }
+            Ok(_) => respond_empty(),
+            Err(e) => respond_err(e),
         }
     }
 
@@ -825,19 +776,8 @@ impl mod_rpc_server::ModRpc for Modtorio {
 
         let msg = req.into_inner();
         match self.send_server_command(msg.game_id, msg.command, msg.arguments).await {
-            Ok(_) => {
-                let resp = Response::new(rpc::Empty {});
-                log_rpc_response(&resp);
-                Ok(resp)
-            }
-            Err(e) => {
-                error!("RPC send server command failed: {}", e);
-                if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
-                    Err(rpc_error.into())
-                } else {
-                    Err(RpcError::Internal(e).into())
-                }
-            }
+            Ok(_) => respond_empty(),
+            Err(e) => respond_err(e),
         }
     }
 
@@ -849,19 +789,8 @@ impl mod_rpc_server::ModRpc for Modtorio {
 
         let msg = req.into_inner();
         match self.get_server_status(msg.game_id).await {
-            Ok(status) => {
-                let resp = Response::new(status.into());
-                log_rpc_response(&resp);
-                Ok(resp)
-            }
-            Err(e) => {
-                error!("RPC get server status failed: {}", e);
-                if let Some(rpc_error) = e.downcast_ref::<RpcError>() {
-                    Err(rpc_error.into())
-                } else {
-                    Err(RpcError::Internal(e).into())
-                }
-            }
+            Ok(status) => respond(status.into()),
+            Err(e) => respond_err(e),
         }
     }
 }
@@ -906,4 +835,27 @@ async fn send_status(prog_tx: &AsyncProgressChannel, status: AsyncProgressResult
 /// Asynchronously returns the unit type after the current process receives a SIGINT signal (Ctrl-C).
 async fn term_signal() {
     tokio::signal::ctrl_c().await.expect("failed to listen for SIGINT");
+}
+
+/// Creates a new RPC response with a given message, logs it and returns it wrapped in `Ok()`.
+fn respond<T: std::fmt::Debug>(message: T) -> Result<Response<T>, Status> {
+    let resp = Response::new(message);
+    log_rpc_response(&resp);
+    Ok(resp)
+}
+
+/// Creates a new empty RPC response, logs it and returns it wrapped in `Ok()`.
+fn respond_empty() -> Result<Response<rpc::Empty>, Status> {
+    respond(rpc::Empty {})
+}
+
+/// Creates a new RPC error respose, logs it and returns it wrapped in `Err()`.
+fn respond_err<T>(error: anyhow::Error) -> Result<Response<T>, Status> {
+    error!("RPC request failed: {}", error);
+
+    if let Some(rpc_error) = error.downcast_ref::<RpcError>() {
+        Err(rpc_error.into())
+    } else {
+        Err(RpcError::Internal(error).into())
+    }
 }
