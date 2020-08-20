@@ -519,19 +519,14 @@ impl Modtorio {
     async fn send_server_command(
         &self,
         server_id: GameStoreId,
-        command: i32,
-        arguments: Vec<String>,
+        command: Option<send_command_request::Command>,
     ) -> anyhow::Result<()> {
         self.assert_instance_status(instance_status::Status::Running).await?;
 
         let mut games = self.games.lock().await;
         let game = find_game(server_id, &mut games).await?;
-        let command = match command {
-            0 => send_command_request::Command::Raw,
-            i => return Err(RpcError::NoSuchCommand(i).into()),
-        };
-
-        game.send_command(command, arguments).await?;
+        let command = command.ok_or(RpcError::MissingArgument)?;
+        game.send_command(command.into()).await?;
 
         Ok(())
     }
@@ -682,10 +677,7 @@ impl mod_rpc_server::ModRpc for Modtorio {
         log_rpc_request(&req);
 
         let msg = req.into_inner();
-        map_to_response(
-            self.send_server_command(msg.server_id, msg.command, msg.arguments)
-                .await,
-        )
+        map_to_response(self.send_server_command(msg.server_id, msg.command).await)
     }
 
     async fn get_server_status(

@@ -1,6 +1,7 @@
 //! The whole point. Provides the [`Factorio`](Factorio) struct used to interact with a single
 //! instance of a Factorio server.
 
+mod command;
 pub mod executable;
 pub mod mods;
 pub mod settings;
@@ -19,7 +20,6 @@ use executable::{Executable, ExecutableEvent, GameEvent};
 use log::*;
 use models::GameSettings;
 use mods::{Mods, ModsBuilder};
-use rpc::send_command_request::Command;
 use settings::{ServerSettings, StartBehaviour};
 use std::{
     fs,
@@ -31,6 +31,7 @@ use tokio::{
     task,
 };
 
+pub use command::Command;
 pub use status::{ExecutionStatus, InGameStatus, ServerStatus};
 
 /// The file name of the JSON file used to store a Factorio server's settings.
@@ -191,30 +192,11 @@ impl Factorio {
     }
 
     /// Sends a command to the running executable.
-    pub async fn send_command(&self, command: Command, arguments: Vec<String>) -> anyhow::Result<()> {
+    pub async fn send_command(&self, command: Command) -> anyhow::Result<()> {
         self.assert_status(ExecutionStatus::Running).await?;
 
-        debug!("Building command from {:?}, arguments: {:?}", command, arguments);
-        let mut command_components = Vec::new();
-        match command {
-            Command::Raw => {
-                command_components.extend(arguments);
-            }
-            Command::Say => {
-                // TODO
-                todo!()
-            }
-            Command::Save => {
-                command_components.push(String::from("save"));
-                command_components.extend(arguments);
-            }
-            Command::Quit => {
-                command_components.push(String::from("quit"));
-            }
-        }
-
-        let command_string = format!("/{}\n", command_components.join(" "));
-        debug!("Final command string: {}", command_string);
+        let command_string = command.get_command_string();
+        debug!("Built command string '{}' from command {:?}", command_string, command);
         self.write_to_exec_stdin(command_string).await?;
 
         Ok(())
@@ -283,7 +265,10 @@ impl Factorio {
     /// Writes a given `String` to the running executable's stdin tx channel.
     async fn write_to_exec_stdin(&self, msg: String) -> anyhow::Result<()> {
         if let Some(stdin_tx) = self.exec_stdin_tx.lock().await.as_mut() {
+            trace!("Writing to executable stdin channel: {}", msg);
             stdin_tx.send(msg).await?;
+        } else {
+            trace!("No executable stdin when trying to write message");
         }
 
         Ok(())

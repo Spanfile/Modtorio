@@ -104,17 +104,48 @@ message SetServerSettingsRequest {
   ServerSettings settings = 2;
 }
 message RunServerRequest { int64 server_id = 1; }
+
 message SendCommandRequest {
   int64 server_id = 1;
 
-  enum Command {
-    RAW = 0;
-    SAVE = 1;
-    QUIT = 2;
-    SAY = 3;
+  message Raw { repeated string arguments = 1; }
+  message Say { string message = 1; }
+  message Whisper {
+    string player = 1;
+    string message = 2;
   }
-  Command command = 2;
-  repeated string arguments = 3;
+  message Save { string save_name = 1; }
+  message Quit {}
+  message Ban {
+    string player = 1;
+    string reason = 2;
+  }
+  message Unban { string player = 1; }
+  message Kick {
+    string player = 1;
+    string reason = 2;
+  }
+  message Mute { string player = 1; }
+  message Unmute { string player = 1; }
+  message Promote { string player = 1; }
+  message Demote { string player = 1; }
+  message Purge { string player = 1; }
+
+  oneof command {
+    Raw raw = 2;
+    Say say = 3;
+    Save save = 4;
+    Quit quit = 5;
+    Whisper whisper = 6;
+    Ban ban = 7;
+    Unban unban = 8;
+    Kick kick = 9;
+    Mute mute = 10;
+    Unmute unmute = 11;
+    Promote promote = 12;
+    Demote demote = 13;
+    Purge purge = 14;
+  }
 }
 message ServerStatusRequest { int64 server_id = 1; }
 
