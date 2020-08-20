@@ -214,6 +214,7 @@ impl Network {
                 match addr {
                     socket_addr::Addr::V4(v4_addr) => SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::from(*v4_addr), port)),
                     socket_addr::Addr::V6(v6_bytes) => {
+                        // TODO: move this into util
                         // the byte array from protobuf may contain any number of bytes. copy up to the first 16 bytes
                         // into a static array to build a v6 address
                         let mut v6_addr = [0u8; 16];

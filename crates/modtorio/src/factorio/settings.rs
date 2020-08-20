@@ -140,6 +140,8 @@ mod tests {
     use super::*;
     use crate::util::{Limit, Range};
 
+    // TODO: test for all the formats
+
     #[test]
     fn from_game_format() -> anyhow::Result<()> {
         let obj = ServerSettings::from_game_json(
