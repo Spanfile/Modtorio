@@ -16,4 +16,4 @@ Copy the sample config file `modtorio.toml.sample` into `modtorio.toml` before r
 
 Copy your mod portal credentials into `.env` (sample in `.env.sample`).
 
-To use the `./sample` directory for development, copy a valid Factorio Linux headless server into it.
+You can use a directory called `./sample` for development (git ignores it), just copy a valid Factorio Linux headless server into it.
