@@ -110,6 +110,10 @@ message SendCommandRequest {
 
   message Raw { repeated string arguments = 1; }
   message Say { string message = 1; }
+  message Whisper {
+    string player = 1;
+    string message = 2;
+  }
   message Save { string save_name = 1; }
   message Quit {}
 
@@ -118,6 +122,7 @@ message SendCommandRequest {
     Say say = 3;
     Save save = 4;
     Quit quit = 5;
+    Whisper whisper = 6;
   }
 }
 message ServerStatusRequest { int64 server_id = 1; }
