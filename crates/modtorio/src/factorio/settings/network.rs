@@ -3,6 +3,7 @@
 
 use super::ServerSettingsGameFormat;
 use crate::{
+    error::SettingsError,
     store::models::GameSettings,
     util::{Limit, Range},
 };
@@ -113,8 +114,56 @@ impl Network {
     }
 
     /// Returns a new `Network` from a given `GameSettings`.
-    pub fn from_store_format(store_format: &GameSettings) -> Self {
-        Self {
+    pub fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
+        // let bind_address = if let Some(bind_addr) = &store_format.bind_address {
+        //     let port = bind_addr.port as u16;
+        //     if let Some(addr) = &bind_addr.addr {
+        //         match addr {
+        //             socket_addr::Addr::V4(v4_addr) => SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::from(*v4_addr),
+        // port)),             socket_addr::Addr::V6(v6_bytes) => {
+        //                 // the byte array from protobuf may contain any number of bytes. copy up to the first 16
+        // bytes                 // into a static array to build a v6 address
+        //                 let mut v6_addr = [0u8; 16];
+        //                 for (i, byte) in v6_bytes.iter().take(16).enumerate() {
+        //                     v6_addr[i] = *byte;
+        //                 }
+
+        //                 SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::from(v6_addr), port, 0, 0))
+        //             }
+        //         }
+        //     } else {
+        //         SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port))
+        //     }
+        // } else {
+        //     Self::default().bind_address
+        // };
+        let bind_address = match store_format.bind_address_ip_version {
+            4 => {
+                let mut v4_addr = [0u8; 4];
+                for (i, byte) in store_format.bind_address.iter().take(4).enumerate() {
+                    v4_addr[i] = *byte;
+                }
+                SocketAddr::V4(SocketAddrV4::new(
+                    Ipv4Addr::from(v4_addr),
+                    store_format.bind_port as u16,
+                ))
+            }
+            6 => {
+                let mut v6_addr = [0u8; 16];
+                for (i, byte) in store_format.bind_address.iter().take(16).enumerate() {
+                    v6_addr[i] = *byte;
+                }
+                SocketAddr::V6(SocketAddrV6::new(
+                    Ipv6Addr::from(v6_addr),
+                    store_format.bind_port as u16,
+                    0,
+                    0,
+                ))
+            }
+            v => return Err(SettingsError::UnexpectedValue(v.to_string()).into()),
+        };
+
+        Ok(Self {
             upload: Upload {
                 max: Limit::from(store_format.max_upload_in_kilobytes_per_second as u64),
                 slots: Limit::from(store_format.max_upload_slots as u64),
@@ -130,9 +179,8 @@ impl Network {
                     max: store_format.maximum_segment_size_peer_count as u64,
                 },
             },
-            // the store format does not include the listen address
-            ..Default::default()
-        }
+            bind_address,
+        })
     }
 
     /// Modifies a given `GameSettings` with this object's settings.
@@ -144,6 +192,18 @@ impl Network {
         store_format.maximum_segment_size = self.segment_size.size.max as i64;
         store_format.minimum_segment_size_peer_count = self.segment_size.peer_count.min as i64;
         store_format.maximum_segment_size_peer_count = self.segment_size.peer_count.max as i64;
+
+        store_format.bind_port = self.bind_address.port().into();
+        match self.bind_address {
+            SocketAddr::V4(v4_socket) => {
+                store_format.bind_address_ip_version = 4;
+                store_format.bind_address = v4_socket.ip().octets().to_vec();
+            }
+            SocketAddr::V6(v6_socket) => {
+                store_format.bind_address_ip_version = 6;
+                store_format.bind_address = v6_socket.ip().octets().to_vec();
+            }
+        }
     }
 
     /// Returns a new `Network` from a given `ServerSettings`.

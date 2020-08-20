@@ -90,7 +90,7 @@ impl ServerSettings {
             autosave: Autosave::from_store_format(store_format),
             pause: Pause::from_store_format(store_format),
             allow_commands: AllowCommands::from_store_format(store_format)?,
-            network: Network::from_store_format(store_format),
+            network: Network::from_store_format(store_format)?,
             start: Start::from_store_format(store_format),
         })
     }

@@ -62,6 +62,8 @@ impl Mods {
             let mod_name = fact_mod.name().await;
             let mod_display = fact_mod.display().await;
 
+            // TODO: batch the portal update
+
             prog_tx
                 .send_status(async_status::definite(
                     &format!("Updating mod store for {}...", mod_display),
