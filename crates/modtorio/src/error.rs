@@ -223,6 +223,9 @@ pub enum RpcError {
     /// Returned when trying to run an invalid command.
     #[error("No such command identifier: {0}")]
     NoSuchCommand(i32),
+    /// Returned when the RPC request is missing a required field.
+    #[error("Missing argument")]
+    MissingArgument,
     /// Returned when an unknown or internal error occurred.
     #[error("An internal error occurred: {0}")]
     Internal(#[from] anyhow::Error),
@@ -238,9 +241,10 @@ impl From<&RpcError> for tonic::Status {
     fn from(e: &RpcError) -> Self {
         match e {
             RpcError::Internal(int) => tonic::Status::internal(int.to_string()),
-            RpcError::NoSuchMod(_) | RpcError::NoSuchGame(_) | RpcError::NoSuchCommand(_) => {
-                tonic::Status::invalid_argument(e.to_string())
-            }
+            RpcError::NoSuchMod(_)
+            | RpcError::NoSuchGame(_)
+            | RpcError::NoSuchCommand(_)
+            | RpcError::MissingArgument => tonic::Status::invalid_argument(e.to_string()),
             RpcError::GameAlreadyExists(_) => tonic::Status::already_exists(e.to_string()),
             RpcError::InvalidInstanceStatus { .. } => tonic::Status::failed_precondition(e.to_string()),
         }
