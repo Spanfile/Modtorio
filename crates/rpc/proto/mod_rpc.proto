@@ -129,6 +129,7 @@ message SendCommandRequest {
   message Unmute { string player = 1; }
   message Promote { string player = 1; }
   message Demote { string player = 1; }
+  message Purge { string player = 1; }
 
   oneof command {
     Raw raw = 2;
@@ -143,6 +144,7 @@ message SendCommandRequest {
     Unmute unmute = 11;
     Promote promote = 12;
     Demote demote = 13;
+    Purge purge = 14;
   }
 }
 message ServerStatusRequest { int64 server_id = 1; }

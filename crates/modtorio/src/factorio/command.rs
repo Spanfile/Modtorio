@@ -44,6 +44,8 @@ pub enum Command {
     Promote(String),
     /// The demote command: `/demote <player>`.
     Demote(String),
+    /// The purge command: `/purge <player>`.
+    Purge(String),
 }
 
 impl From<send_command_request::Command> for Command {
@@ -70,6 +72,7 @@ impl From<send_command_request::Command> for Command {
             send_command_request::Command::Unmute(unmute) => Self::Unmute(unmute.player),
             send_command_request::Command::Promote(promote) => Self::Promote(promote.player),
             send_command_request::Command::Demote(demote) => Self::Demote(demote.player),
+            send_command_request::Command::Purge(purge) => Self::Purge(purge.player),
         }
     }
 }
@@ -90,6 +93,7 @@ impl Command {
             Command::Unmute(player) => format!("/unmute {}", player),
             Command::Promote(player) => format!("/promote {}", player),
             Command::Demote(player) => format!("/demote {}", player),
+            Command::Purge(player) => format!("/purge {}", player),
         };
 
         format!("{}\n", command)
