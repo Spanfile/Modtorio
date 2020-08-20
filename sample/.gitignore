@@ -7,4 +7,6 @@ saves
 achievements-modded.dat
 factorio*log
 player-data.json
+server-adminlist.json
+server-banlist.json
 temp

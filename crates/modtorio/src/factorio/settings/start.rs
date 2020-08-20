@@ -30,7 +30,7 @@ pub enum StartBehaviour {
     /// Corresponds to using the `--start-server` command line option.
     LoadFile,
     /// Corresponds to using the `--start-server-load-scenario` command line option.
-    LoadScenario, // TODO: these two
+    LoadScenario,
     /// Corresponds to using the `--create` command line option.
     Create,
 }

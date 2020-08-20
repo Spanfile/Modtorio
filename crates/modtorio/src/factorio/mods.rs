@@ -105,6 +105,8 @@ impl Mods {
             debug!("Updated store for {}", mod_name);
         }
 
+        // TODO: this method won't get rid of old stored mods that don't exist anymore, so they're left in the store
+        // which causes issues when importing a game from the store
         self.store.set_mods_of_game(new_game_mods.into_inner()).await?;
         info!("Updated game ID {}'s stored mods", game_id);
 

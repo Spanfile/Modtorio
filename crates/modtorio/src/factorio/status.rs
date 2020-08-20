@@ -2,7 +2,7 @@
 //! in-game status.
 
 use chrono::{DateTime, Duration, Utc};
-use strum_macros::EnumString; // TODO: don't use these RPC enums, instead make own and convert to/from
+use strum_macros::EnumString;
 
 /// Represent a server's status in terms of the server's execution and the in-game status.
 #[derive(Debug, Copy, Clone)]
