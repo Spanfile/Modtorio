@@ -249,7 +249,7 @@ impl Factorio {
 
     /// Returns the server's status.
     pub async fn status(&self) -> ServerStatus {
-        *self.status.read().await
+        self.status.read().await.clone()
     }
 
     /// Asserts that the server's status is `expected`, otherwise returns `ServerError::InvalidStatus`.
@@ -448,12 +448,14 @@ async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &Rw
                 store_id, username, peer, reason
             );
         }
-        GameEvent::PeerJoined { username } => {
-            info!("Game ID {}: {} joined the game", store_id, username);
-        }
-        GameEvent::PeerLeft { username } => {
-            info!("Game ID {}: {} left the game", store_id, username);
-        }
+        GameEvent::PeerJoined { username } => match status.write().await.add_player(&username).await {
+            Ok(_) => info!("Game ID {}: {} joined the game", store_id, username),
+            Err(e) => error!("Failed to add new player in game ID {}: {}", store_id, e),
+        },
+        GameEvent::PeerLeft { username } => match status.write().await.remove_player(&username).await {
+            Ok(_) => info!("Game ID {}: {} left the game", store_id, username),
+            Err(e) => error!("Failed to remove player from game ID {}: {}", store_id, e),
+        },
         _ => {}
     }
 }

@@ -312,6 +312,12 @@ pub enum ServerError {
     /// Returned when trying to access a server's store ID when it hasn't been added to the store yet.
     #[error("The game hasn't been added to the program store yet")]
     GameNotInStore,
+    /// Returned when trying to add a new player with the same username as an already existing player.
+    #[error("A player with the username '{0}' already exists in the server")]
+    PlayerAlreadyExists(String),
+    /// Returned when trying to access a player when no such player with the given username exists.
+    #[error("No player with the username '{0}' exists")]
+    NoSuchPlayer(String),
 }
 
 /// Represents the parser error for `GameEvent`.

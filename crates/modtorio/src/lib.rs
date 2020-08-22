@@ -531,7 +531,7 @@ impl Modtorio {
         Ok(())
     }
 
-    /// Sends a command to a given game instance.
+    /// Returns a given server's status.
     async fn get_server_status(&self, server_id: GameStoreId) -> anyhow::Result<ServerStatus> {
         self.assert_instance_status(instance_status::Status::Running).await?;
 
@@ -687,7 +687,12 @@ impl mod_rpc_server::ModRpc for Modtorio {
         log_rpc_request(&req);
 
         let msg = req.into_inner();
-        map_to_response(self.get_server_status(msg.server_id).await)
+        let status = match self.get_server_status(msg.server_id).await {
+            Ok(status) => Ok(status),
+            Err(e) => Err(RpcError::from(e)),
+        }?;
+        let status = status.to_rpc_server_status().await;
+        respond(status)
     }
 }
 

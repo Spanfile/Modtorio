@@ -1,11 +1,15 @@
 //! Provides the `ServerStatus` struct, used to represent a server's status in terms of the server as a whole and the
 //! in-game status.
 
+mod players;
+
 use chrono::{DateTime, Duration, Utc};
 use strum_macros::EnumString;
 
+pub use players::{Player, Players};
+
 /// Represent a server's status in terms of the server's execution and the in-game status.
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct ServerStatus {
     /// The server executable's status.
     game_status: ExecutionStatus,
@@ -13,6 +17,8 @@ pub struct ServerStatus {
     in_game_status: InGameStatus,
     /// Timestamp when the server was started.
     started_at: DateTime<Utc>,
+    /// Players on the server.
+    players: Players,
 }
 
 /// Represents a server's execution status.
@@ -59,6 +65,7 @@ impl Default for ServerStatus {
             game_status: ExecutionStatus::Shutdown,
             in_game_status: InGameStatus::Initialising,
             started_at: Utc::now(),
+            players: Players::default(),
         }
     }
 }
@@ -93,14 +100,31 @@ impl ServerStatus {
     pub fn reset_started_at(&mut self) {
         self.started_at = Utc::now()
     }
+
+    /// Returns a list of the current players.
+    pub async fn players(&self) -> Vec<Player> {
+        self.players.players().await
+    }
+
+    /// Adds a new player.
+    pub async fn add_player(&self, username: &str) -> anyhow::Result<()> {
+        self.players.add_player(username.to_owned()).await
+    }
+
+    /// Removes an existing player.
+    pub async fn remove_player(&self, username: &str) -> anyhow::Result<()> {
+        self.players.remove_player(username).await
+    }
 }
 
-impl From<ServerStatus> for rpc::ServerStatus {
-    fn from(status: ServerStatus) -> Self {
-        Self {
-            uptime: status.get_uptime().num_seconds(),
-            status: status.game_status as i32,
-            in_game_status: status.in_game_status as i32,
+impl ServerStatus {
+    /// Returns a new RPC `ServerStatus` from this object.
+    pub async fn to_rpc_server_status(&self) -> rpc::ServerStatus {
+        rpc::ServerStatus {
+            uptime: self.get_uptime().num_seconds(),
+            status: self.game_status as i32,
+            in_game_status: self.in_game_status as i32,
+            players: self.players().await.into_iter().map(|p| p.into()).collect(),
         }
     }
 }

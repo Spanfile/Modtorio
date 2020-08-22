@@ -21,11 +21,20 @@ service ModRpc {
   rpc GetServerStatus(ServerStatusRequest) returns (ServerStatus);
 }
 
+/* Common messages */
 message Empty {}
 message Version {
   uint64 major = 1;
   uint64 minor = 2;
   uint64 patch = 3;
+}
+
+message SocketAddr {
+  oneof addr {
+    fixed32 v4 = 1;
+    bytes v6 = 2;
+  }
+  fixed32 port = 3;
 }
 
 message Progress {
@@ -41,6 +50,70 @@ message Progress {
   uint32 max = 4;
 }
 
+/* Request messages  */
+message ImportRequest { string path = 1; }
+message UpdateStoreRequest { int64 server_id = 1; }
+message InstallModRequest {
+  int64 server_id = 1;
+  string mod_name = 2;
+  Version mod_version = 3;
+}
+
+message UpdateModsRequest { int64 server_id = 1; }
+message EnsureModDependenciesRequest { int64 server_id = 1; }
+message GetServerSettingsRequest { int64 server_id = 1; }
+message SetServerSettingsRequest {
+  int64 server_id = 1;
+  ServerSettings settings = 2;
+}
+
+message RunServerRequest { int64 server_id = 1; }
+message SendCommandRequest {
+  int64 server_id = 1;
+
+  message Raw { repeated string arguments = 1; }
+  message Say { string message = 1; }
+  message Whisper {
+    string player = 1;
+    string message = 2;
+  }
+  message Save { string save_name = 1; }
+  message Quit {}
+  message Ban {
+    string player = 1;
+    string reason = 2;
+  }
+  message Unban { string player = 1; }
+  message Kick {
+    string player = 1;
+    string reason = 2;
+  }
+  message Mute { string player = 1; }
+  message Unmute { string player = 1; }
+  message Promote { string player = 1; }
+  message Demote { string player = 1; }
+  message Purge { string player = 1; }
+
+  oneof command {
+    Raw raw = 2;
+    Say say = 3;
+    Save save = 4;
+    Quit quit = 5;
+    Whisper whisper = 6;
+    Ban ban = 7;
+    Unban unban = 8;
+    Kick kick = 9;
+    Mute mute = 10;
+    Unmute unmute = 11;
+    Promote promote = 12;
+    Demote demote = 13;
+    Purge purge = 14;
+  }
+}
+
+message ServerStatusRequest { int64 server_id = 1; }
+
+/* Response messages */
 message VersionInformation {
   Version version = 1;
   Version protocol_version = 2;
@@ -87,67 +160,14 @@ message ServerStatus {
     CLOSED = 8;
   };
   InGameStatus in_game_status = 3;
-}
 
-message ImportRequest { string path = 1; }
-message UpdateStoreRequest { int64 server_id = 1; }
-message InstallModRequest {
-  int64 server_id = 1;
-  string mod_name = 2;
-  Version mod_version = 3;
+  message Player {
+    string username = 1;
+    SocketAddr peer_address = 2;
+    int64 session_time = 3;
+  }
+  repeated Player players = 4;
 }
-message UpdateModsRequest { int64 server_id = 1; }
-message EnsureModDependenciesRequest { int64 server_id = 1; }
-message GetServerSettingsRequest { int64 server_id = 1; }
-message SetServerSettingsRequest {
-  int64 server_id = 1;
-  ServerSettings settings = 2;
-}
-message RunServerRequest { int64 server_id = 1; }
-
-message SendCommandRequest {
-  int64 server_id = 1;
-
-  message Raw { repeated string arguments = 1; }
-  message Say { string message = 1; }
-  message Whisper {
-    string player = 1;
-    string message = 2;
-  }
-  message Save { string save_name = 1; }
-  message Quit {}
-  message Ban {
-    string player = 1;
-    string reason = 2;
-  }
-  message Unban { string player = 1; }
-  message Kick {
-    string player = 1;
-    string reason = 2;
-  }
-  message Mute { string player = 1; }
-  message Unmute { string player = 1; }
-  message Promote { string player = 1; }
-  message Demote { string player = 1; }
-  message Purge { string player = 1; }
-
-  oneof command {
-    Raw raw = 2;
-    Say say = 3;
-    Save save = 4;
-    Quit quit = 5;
-    Whisper whisper = 6;
-    Ban ban = 7;
-    Unban unban = 8;
-    Kick kick = 9;
-    Mute mute = 10;
-    Unmute unmute = 11;
-    Promote promote = 12;
-    Demote demote = 13;
-    Purge purge = 14;
-  }
-}
-message ServerStatusRequest { int64 server_id = 1; }
 
 message ServerSettings {
   string name = 1;
@@ -187,14 +207,6 @@ message ServerSettings {
   uint64 minimum_segment_size_peer_count = 24;
   uint64 maximum_segment_size = 25;
   uint64 maximum_segment_size_peer_count = 26;
-
-  message SocketAddr {
-    oneof addr {
-      fixed32 v4 = 1;
-      bytes v6 = 2;
-    }
-    fixed32 port = 3;
-  }
   SocketAddr bind = 27;
   string save_name = 28;
 

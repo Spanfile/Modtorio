@@ -7,9 +7,9 @@ use crate::{
     store::models::GameSettings,
     util::{Limit, Range},
 };
-use rpc::{server_settings, server_settings::socket_addr};
+use rpc::socket_addr;
 use serde::{Deserialize, Serialize};
-use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
+use std::net::{Ipv4Addr, Ipv6Addr, SocketAddr, SocketAddrV4, SocketAddrV6};
 
 /// Factorio's default server listen port.
 pub const DEFAULT_LISTEN_PORT: u16 = 34197;
@@ -261,12 +261,6 @@ impl Network {
         rpc_format.maximum_segment_size = self.segment_size.size.max;
         rpc_format.minimum_segment_size_peer_count = self.segment_size.peer_count.min;
         rpc_format.maximum_segment_size_peer_count = self.segment_size.peer_count.max;
-        rpc_format.bind = Some(server_settings::SocketAddr {
-            port: self.bind_address.port() as u32,
-            addr: Some(match self.bind_address.ip() {
-                IpAddr::V4(v4_addr) => socket_addr::Addr::V4(u32::from(v4_addr)),
-                IpAddr::V6(v6_addr) => socket_addr::Addr::V6(v6_addr.octets().to_vec()),
-            }),
-        });
+        rpc_format.bind = Some(self.bind_address.into());
     }
 }
