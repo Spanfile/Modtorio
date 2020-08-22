@@ -5,7 +5,7 @@ use super::ServerSettingsGameFormat;
 use crate::{
     error::SettingsError,
     store::models::GameSettings,
-    util::{Limit, Range},
+    util::{ext::FromBytes, Limit, Range},
 };
 use rpc::socket_addr;
 use serde::{Deserialize, Serialize};
@@ -138,28 +138,16 @@ impl Network {
         //     Self::default().bind_address
         // };
         let bind_address = match store_format.bind_address_ip_version {
-            4 => {
-                let mut v4_addr = [0u8; 4];
-                for (i, byte) in store_format.bind_address.iter().take(4).enumerate() {
-                    v4_addr[i] = *byte;
-                }
-                SocketAddr::V4(SocketAddrV4::new(
-                    Ipv4Addr::from(v4_addr),
-                    store_format.bind_port as u16,
-                ))
-            }
-            6 => {
-                let mut v6_addr = [0u8; 16];
-                for (i, byte) in store_format.bind_address.iter().take(16).enumerate() {
-                    v6_addr[i] = *byte;
-                }
-                SocketAddr::V6(SocketAddrV6::new(
-                    Ipv6Addr::from(v6_addr),
-                    store_format.bind_port as u16,
-                    0,
-                    0,
-                ))
-            }
+            4 => SocketAddr::V4(SocketAddrV4::new(
+                Ipv4Addr::from_bytes(&store_format.bind_address),
+                store_format.bind_port as u16,
+            )),
+            6 => SocketAddr::V6(SocketAddrV6::new(
+                Ipv6Addr::from_bytes(&store_format.bind_address),
+                store_format.bind_port as u16,
+                0,
+                0,
+            )),
             v => return Err(SettingsError::UnexpectedValue(v.to_string()).into()),
         };
 
@@ -214,15 +202,7 @@ impl Network {
                 match addr {
                     socket_addr::Addr::V4(v4_addr) => SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::from(*v4_addr), port)),
                     socket_addr::Addr::V6(v6_bytes) => {
-                        // TODO: move this into util
-                        // the byte array from protobuf may contain any number of bytes. copy up to the first 16 bytes
-                        // into a static array to build a v6 address
-                        let mut v6_addr = [0u8; 16];
-                        for (i, byte) in v6_bytes.iter().take(16).enumerate() {
-                            v6_addr[i] = *byte;
-                        }
-
-                        SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::from(v6_addr), port, 0, 0))
+                        SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::from_bytes(v6_bytes), port, 0, 0))
                     }
                 }
             } else {
