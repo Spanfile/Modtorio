@@ -844,6 +844,7 @@ dependencies = [
  "hex",
  "lazy_static",
  "log",
+ "percent-encoding",
  "regex",
  "reqwest",
  "rpc",

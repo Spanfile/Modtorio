@@ -182,10 +182,8 @@ impl ModPortal {
         let mut temp = fs::File::from_std(tempfile()?);
         let written = response.to_writer(&mut temp).await?;
 
-        // TODO: if the URL's file name contains spaces, they'll be URL-encoded (%20). turn them back into proper
-        // characters
         let filename = response.url_file_name()?;
-        let dest_path = directory.as_ref().join(filename);
+        let dest_path = directory.as_ref().join(&filename);
         debug!(
             "'{}' downloaded to tempfile, copying to destination ({})...",
             filename,
