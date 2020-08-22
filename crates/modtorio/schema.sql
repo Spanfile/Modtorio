@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS "game" (
 DROP TABLE IF EXISTS "game_settings";
 CREATE TABLE IF NOT EXISTS "game_settings" (
 	"game" INTEGER PRIMARY KEY,
+	"file_last_mtime" TEXT NOT NULL,
 	"name" TEXT NOT NULL,
 	"description" TEXT NOT NULL,
 	/* yeah yeah it's not very normalized to store the tags as just values separated with some separator but fuck it */

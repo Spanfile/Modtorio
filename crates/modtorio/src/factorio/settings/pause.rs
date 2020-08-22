@@ -52,12 +52,10 @@ impl Pause {
         store_format.only_admins_can_pause_the_game = self.only_admins as i64;
     }
 
-    /// Returns a new `Pause` from a given `ServerSettings`.
-    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> Self {
-        Self {
-            auto: rpc_format.auto_pause,
-            only_admins: rpc_format.only_admins_can_pause_the_game,
-        }
+    /// Mutates `self` with the value from a given RPC `ServerSettings` object.
+    pub fn modify_self_with_rpc(&mut self, rpc_format: &rpc::ServerSettings) {
+        self.auto = rpc_format.auto_pause;
+        self.only_admins = rpc_format.only_admins_can_pause_the_game;
     }
 
     /// Modifies a given `ServerSettings` with this object's settings.

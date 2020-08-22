@@ -62,13 +62,11 @@ impl Information {
         store_format.tags = self.tags.clone().join(TAGS_SPLITTER);
     }
 
-    /// Returns a new `Information` from a given `ServerSettings`.
-    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> Self {
-        Self {
-            name: rpc_format.name.clone(),
-            description: rpc_format.description.clone(),
-            tags: rpc_format.tags.clone(),
-        }
+    /// Mutates `self` with the value from a given RPC `ServerSettings` object.
+    pub fn modify_self_with_rpc(&mut self, rpc_format: &rpc::ServerSettings) {
+        self.name = rpc_format.name.clone();
+        self.description = rpc_format.description.clone();
+        self.tags = rpc_format.tags.clone();
     }
 
     /// Modifies a given `ServerSettings` with this object's settings.

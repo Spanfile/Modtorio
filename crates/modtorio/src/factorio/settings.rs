@@ -10,9 +10,10 @@ mod pause;
 mod publicity;
 mod start;
 
-use crate::store::models::GameSettings;
+use crate::{store::models::GameSettings, util};
 use allow_commands::AllowCommands;
 use autosave::Autosave;
+use chrono::{DateTime, Utc};
 use game_format::ServerSettingsGameFormat;
 use information::Information;
 use network::Network;
@@ -21,6 +22,7 @@ use publicity::Publicity;
 use serde::{Deserialize, Serialize};
 use start::Start;
 pub use start::StartBehaviour;
+use std::{fs::File, io::BufReader, path::Path};
 
 /// Stores a server's settings in a structured manner.
 #[derive(Deserialize, Serialize, Debug, Default)]
@@ -39,21 +41,33 @@ pub struct ServerSettings {
     pub network: Network,
     /// Contains settings related to starting the server.
     pub start: Start,
+    /// The server settings file's last modified time.
+    pub file_last_mtime: Option<DateTime<Utc>>,
 }
 
 #[allow(dead_code)]
 impl ServerSettings {
     /// Returns a new `ServerSettings` by deserializing a given JSON string.
-    pub fn from_game_json(json: &str) -> anyhow::Result<Self> {
-        let game_format = serde_json::from_str(json)?;
-        Ok(ServerSettings::from_game_format(&game_format)?)
+    pub fn from_game_json<P>(settings_file: P) -> anyhow::Result<Self>
+    where
+        P: AsRef<Path>,
+    {
+        let file = File::open(&settings_file)?;
+        let reader = BufReader::new(file);
+        let game_format = serde_json::from_reader(reader)?;
+        let file_last_mtime = util::file::get_last_mtime(&settings_file)?;
+
+        let mut settings = Self::from_game_format(&game_format)?;
+        settings.file_last_mtime = Some(file_last_mtime);
+
+        Ok(settings)
     }
 
     /// Returns a string by serializing the `ServerSettings` object into the game's
     /// `server-settings.json` file format.
     pub fn to_game_json(&self) -> anyhow::Result<String> {
         let mut game_format = ServerSettingsGameFormat::default();
-        self.to_game_format(&mut game_format)?;
+        self.to_game_format(&mut game_format);
         Ok(serde_json::to_string(&game_format)?)
     }
 
@@ -67,19 +81,18 @@ impl ServerSettings {
             allow_commands: AllowCommands::from_game_format(game_format)?,
             network: Network::from_game_format(game_format),
             start: Start::default(),
+            file_last_mtime: None,
         })
     }
 
     /// Modifies a given `ServerSettingsGameFormat` object with this object's settings.
-    fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) -> anyhow::Result<()> {
+    fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) {
         self.information.to_game_format(game_format);
         self.publicity.to_game_format(game_format);
         self.autosave.to_game_format(game_format);
         self.pause.to_game_format(game_format);
         self.allow_commands.to_game_format(game_format);
         self.network.to_game_format(game_format);
-
-        Ok(())
     }
 
     /// Returns a new `ServerSettings` object by constructing it from a given program store `GameSettings` object.
@@ -92,11 +105,12 @@ impl ServerSettings {
             allow_commands: AllowCommands::from_store_format(store_format)?,
             network: Network::from_store_format(store_format)?,
             start: Start::from_store_format(store_format),
+            file_last_mtime: Some(store_format.file_last_mtime),
         })
     }
 
     /// Modifies a given program store `GameSettings` object with this object's settings.
-    pub fn to_store_format(&self, store_format: &mut GameSettings) -> anyhow::Result<()> {
+    pub fn to_store_format(&self, store_format: &mut GameSettings) {
         self.information.to_store_format(store_format);
         self.publicity.to_store_format(store_format);
         self.autosave.to_store_format(store_format);
@@ -104,25 +118,23 @@ impl ServerSettings {
         self.allow_commands.to_store_format(store_format);
         self.network.to_store_format(store_format);
         self.start.to_store_format(store_format);
+    }
+
+    /// Mutates `self` with the value from a given RPC `ServerSettings` object.
+    pub fn modify_self_with_rpc(&mut self, rpc_format: &rpc::ServerSettings) -> anyhow::Result<()> {
+        self.information.modify_self_with_rpc(rpc_format);
+        self.publicity.modify_self_with_rpc(rpc_format);
+        self.autosave.modify_self_with_rpc(rpc_format);
+        self.pause.modify_self_with_rpc(rpc_format);
+        self.allow_commands.modify_self_with_rpc(rpc_format)?;
+        self.network.modify_self_with_rpc(rpc_format);
+        self.start.modify_self_with_rpc(rpc_format)?;
 
         Ok(())
     }
 
-    /// Returns a new `ServerSettings` object by constructing it from a given RPC `ServerSettings` object.
-    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
-        Ok(Self {
-            information: Information::from_rpc_format(rpc_format),
-            publicity: Publicity::from_rpc_format(rpc_format),
-            autosave: Autosave::from_rpc_format(rpc_format),
-            pause: Pause::from_rpc_format(rpc_format),
-            allow_commands: AllowCommands::from_rpc_format(rpc_format)?,
-            network: Network::from_rpc_format(rpc_format),
-            start: Start::from_rpc_format(rpc_format)?,
-        })
-    }
-
     /// Modifies a given RPC `ServerSettings` object with this object's settings.
-    pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) -> anyhow::Result<()> {
+    pub fn to_rpc_format(&self, rpc_format: &mut rpc::ServerSettings) {
         self.information.to_rpc_format(rpc_format);
         self.publicity.to_rpc_format(rpc_format);
         self.autosave.to_rpc_format(rpc_format);
@@ -130,8 +142,6 @@ impl ServerSettings {
         self.allow_commands.to_rpc_format(rpc_format);
         self.network.to_rpc_format(rpc_format);
         self.start.to_rpc_format(rpc_format);
-
-        Ok(())
     }
 }
 

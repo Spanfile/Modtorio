@@ -71,18 +71,17 @@ impl Start {
         store_format.start_behaviour = self.behaviour;
     }
 
-    /// Returns a new `Start` from a given `ServerSettings`.
-    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
-        Ok(Self {
-            save_name: rpc_format.save_name.to_owned(),
-            behaviour: match rpc_format.start_behaviour {
-                0 => StartBehaviour::LoadLatest,
-                1 => StartBehaviour::LoadFile,
-                2 => StartBehaviour::LoadScenario,
-                3 => StartBehaviour::Create,
-                v => return Err(SettingsError::UnexpectedValue(v.to_string()).into()),
-            },
-        })
+    /// Mutates `self` with the value from a given RPC `ServerSettings` object.
+    pub fn modify_self_with_rpc(&mut self, rpc_format: &rpc::ServerSettings) -> anyhow::Result<()> {
+        self.save_name = rpc_format.save_name.to_owned();
+        self.behaviour = match rpc_format.start_behaviour {
+            0 => StartBehaviour::LoadLatest,
+            1 => StartBehaviour::LoadFile,
+            2 => StartBehaviour::LoadScenario,
+            3 => StartBehaviour::Create,
+            v => return Err(SettingsError::UnexpectedValue(v.to_string()).into()),
+        };
+        Ok(())
     }
 
     /// Modifies a given `ServerSettings` with this object's settings.

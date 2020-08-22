@@ -135,11 +135,13 @@ pub struct ReleaseDependency {
 
 /// A Factorio server's settings, including both settings from its `server-settings.json` file and its command line
 /// parameters.
-#[derive(Debug, Model, Default)]
+#[derive(Debug, Model)]
 pub struct GameSettings {
     /// The game's ID these settings are for.
     #[index]
     pub game: GameStoreId,
+    /// The `server-settings.json` file's last modified time.
+    pub file_last_mtime: DateTime<Utc>,
     /// The `name` setting in `server-settings.json`.
     pub name: String,
     /// The `description` setting in `server-settings.json`.
@@ -205,4 +207,46 @@ pub struct GameSettings {
     /// The start behaviour, a combination of the `--create`, `--start-server`, `--start-server-load-latest` and
     /// `--start-server-load-scenario` command line parameters.
     pub start_behaviour: StartBehaviour,
+}
+
+impl Default for GameSettings {
+    fn default() -> Self {
+        Self {
+            // TODO: WHAT THE FUCK???
+            file_last_mtime: Utc::now(),
+            game: Default::default(),
+            name: Default::default(),
+            description: Default::default(),
+            tags: Default::default(),
+            max_players: Default::default(),
+            public_visibility: Default::default(),
+            lan_visibility: Default::default(),
+            username: Default::default(),
+            password: Default::default(),
+            token: Default::default(),
+            game_password: Default::default(),
+            require_user_verification: Default::default(),
+            max_upload_in_kilobytes_per_second: Default::default(),
+            max_upload_slots: Default::default(),
+            minimum_latency_in_ticks: Default::default(),
+            ignore_player_limit_for_returning_players: Default::default(),
+            allow_commands: Default::default(),
+            autosave_interval: Default::default(),
+            autosave_slots: Default::default(),
+            afk_autokick_interval: Default::default(),
+            auto_pause: Default::default(),
+            only_admins_can_pause_the_game: Default::default(),
+            autosave_only_on_server: Default::default(),
+            non_blocking_saving: Default::default(),
+            minimum_segment_size: Default::default(),
+            minimum_segment_size_peer_count: Default::default(),
+            maximum_segment_size: Default::default(),
+            maximum_segment_size_peer_count: Default::default(),
+            bind_address_ip_version: Default::default(),
+            bind_address: Default::default(),
+            bind_port: Default::default(),
+            save_name: Default::default(),
+            start_behaviour: Default::default(),
+        }
+    }
 }

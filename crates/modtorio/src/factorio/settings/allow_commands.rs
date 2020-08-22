@@ -71,15 +71,17 @@ impl AllowCommands {
         };
     }
 
-    /// Returns a new `AllowCommands` from a given `ServerSettings`.
-    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> anyhow::Result<Self> {
+    /// Mutates `self` with the value from a given RPC `ServerSettings` object.
+    pub fn modify_self_with_rpc(&mut self, rpc_format: &rpc::ServerSettings) -> anyhow::Result<()> {
         // TODO: ugly integer match
         match rpc_format.allow_commands {
-            0 => Ok(AllowCommands::Yes),
-            1 => Ok(AllowCommands::No),
-            2 => Ok(AllowCommands::AdminsOnly),
-            v => Err(SettingsError::UnexpectedValue(v.to_string()).into()),
+            0 => *self = AllowCommands::Yes,
+            1 => *self = AllowCommands::No,
+            2 => *self = AllowCommands::AdminsOnly,
+            v => return Err(SettingsError::UnexpectedValue(v.to_string()).into()),
         }
+
+        Ok(())
     }
 
     /// Modifies a given `ServerSettings` with this object's settings.
