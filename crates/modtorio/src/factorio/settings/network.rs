@@ -115,28 +115,6 @@ impl Network {
 
     /// Returns a new `Network` from a given `GameSettings`.
     pub fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
-        // let bind_address = if let Some(bind_addr) = &store_format.bind_address {
-        //     let port = bind_addr.port as u16;
-        //     if let Some(addr) = &bind_addr.addr {
-        //         match addr {
-        //             socket_addr::Addr::V4(v4_addr) => SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::from(*v4_addr),
-        // port)),             socket_addr::Addr::V6(v6_bytes) => {
-        //                 // the byte array from protobuf may contain any number of bytes. copy up to the first 16
-        // bytes                 // into a static array to build a v6 address
-        //                 let mut v6_addr = [0u8; 16];
-        //                 for (i, byte) in v6_bytes.iter().take(16).enumerate() {
-        //                     v6_addr[i] = *byte;
-        //                 }
-
-        //                 SocketAddr::V6(SocketAddrV6::new(Ipv6Addr::from(v6_addr), port, 0, 0))
-        //             }
-        //         }
-        //     } else {
-        //         SocketAddr::V4(SocketAddrV4::new(Ipv4Addr::LOCALHOST, port))
-        //     }
-        // } else {
-        //     Self::default().bind_address
-        // };
         let bind_address = match store_format.bind_address_ip_version {
             4 => SocketAddr::V4(SocketAddrV4::new(
                 Ipv4Addr::from_bytes(&store_format.bind_address),
