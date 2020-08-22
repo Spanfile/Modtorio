@@ -470,7 +470,7 @@ impl Modtorio {
         let mut games = self.games.lock().await;
         let game = find_game(server_id, &mut games).await?;
         let mut rpc_server_settings = rpc::ServerSettings::default();
-        game.settings().to_rpc_format(&mut rpc_server_settings)?;
+        game.settings().to_rpc_format(&mut rpc_server_settings);
 
         Ok(rpc_server_settings)
     }
@@ -485,16 +485,14 @@ impl Modtorio {
 
         let mut games = self.games.lock().await;
         let game = find_game(server_id, &mut games).await?;
-        let server_settings = if let Some(settings) = settings {
+
+        if let Some(settings) = settings {
             info!("Updating server ID {}'s settings", server_id);
-            factorio::settings::ServerSettings::from_rpc_format(&settings)?
+            game.settings_mut().modify_self_with_rpc(&settings)?;
         } else {
             info!("Resetting server ID {}'s settings to default", server_id);
-            factorio::settings::ServerSettings::default()
+            *game.settings_mut() = Default::default();
         };
-
-        debug!("{:?}", server_settings);
-        *game.settings_mut() = server_settings;
 
         Ok(())
     }

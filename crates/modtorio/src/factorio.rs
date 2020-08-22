@@ -13,6 +13,7 @@ use crate::{
     util::{
         async_status::{self, AsyncProgressChannel, AsyncProgressChannelExt},
         ext::PathExt,
+        file,
     },
     Config, ModPortal,
 };
@@ -22,7 +23,6 @@ use models::GameSettings;
 use mods::{Mods, ModsBuilder};
 use settings::{ServerSettings, StartBehaviour};
 use std::{
-    fs,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -125,7 +125,7 @@ impl Factorio {
 
         let mut new_settings = GameSettings::default();
         new_settings.game = id;
-        self.settings.to_store_format(&mut new_settings)?;
+        self.settings.to_store_format(&mut new_settings);
 
         debug!("Created new settings to store: {:?}", new_settings);
         self.store.set_settings(new_settings).await?;
@@ -366,6 +366,7 @@ impl Importer {
         store: Arc<Store>,
     ) -> anyhow::Result<Factorio> {
         let mut mods_builder = ModsBuilder::root(self.root.join(MODS_PATH));
+        let settings_path = self.root.join(self.settings);
 
         self.prog_tx
             .send_status(async_status::indefinite("Reading server settings..."))
@@ -375,15 +376,31 @@ impl Importer {
             mods_builder = mods_builder.with_game_store_id(game_store_id);
 
             let settings = ServerSettings::from_store_format(&store.get_settings(game_store_id).await?)?;
-            debug!("Read settings from store: {:?}", settings);
-            // TODO: if the settings are changed on disk, reload them from there. use the file's last mtime as an
-            // indicator
-            settings
+            trace!("Read settings from store: {:?}", settings);
+
+            let file_last_mtime = file::get_last_mtime(&settings_path)?;
+            debug!(
+                "Settings file last mtime: {}. Stored last mtime: {:?}",
+                file_last_mtime, settings.file_last_mtime
+            );
+
+            if let Some(stored_last_mtime) = settings.file_last_mtime {
+                if file_last_mtime > stored_last_mtime {
+                    warn!("Settings file modified after storing. Reloading settings from file");
+                    ServerSettings::from_game_json(&settings_path)?
+                } else {
+                    settings
+                }
+            } else {
+                warn!("Stored settings did not have last mtime field. Reloading settings from file");
+                ServerSettings::from_game_json(&settings_path)?
+            }
         } else {
-            let settings = ServerSettings::from_game_json(&fs::read_to_string(self.root.join(self.settings))?)?;
-            debug!("Read settings from file: {:?}", settings);
+            let settings = ServerSettings::from_game_json(&settings_path)?;
+            trace!("Read settings from file");
             settings
         };
+        debug!("Server settings: {:?}", settings);
 
         if let Some(prog_tx) = &self.prog_tx {
             mods_builder = mods_builder.with_status_updates(prog_tx.clone());

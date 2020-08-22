@@ -177,33 +177,31 @@ impl Publicity {
         store_format.game_password = self.password.clone();
     }
 
-    /// Returns a new `Publicity` from a given `ServerSettings`.
-    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> Self {
+    /// Mutates `self` with the value from a given RPC `ServerSettings` object.
+    pub fn modify_self_with_rpc(&mut self, rpc_format: &rpc::ServerSettings) {
         let default_vis = rpc::server_settings::Visibility::default();
         let visibility = rpc_format.visibility.as_ref().unwrap_or(&default_vis);
 
-        Self {
-            public: if visibility.public {
-                Some(PublicVisibility {
-                    username: rpc_format.username.clone(),
-                    credential: if rpc_format.token.is_empty() {
-                        Credential::Password(rpc_format.password.clone())
-                    } else {
-                        Credential::Token(rpc_format.token.clone())
-                    },
-                })
-            } else {
-                None
-            },
-            lan: visibility.lan,
-            require_user_verification: rpc_format.require_user_verification,
-            player_limit: PlayerLimit {
-                max: Limit::from(rpc_format.max_players),
-                ignore_for_returning: rpc_format.ignore_player_limit_for_returning_players,
-                autokick: Limit::from(rpc_format.afk_autokick_interval),
-            },
-            password: rpc_format.game_password.clone(),
-        }
+        self.public = if visibility.public {
+            Some(PublicVisibility {
+                username: rpc_format.username.clone(),
+                credential: if rpc_format.token.is_empty() {
+                    Credential::Password(rpc_format.password.clone())
+                } else {
+                    Credential::Token(rpc_format.token.clone())
+                },
+            })
+        } else {
+            None
+        };
+        self.lan = visibility.lan;
+        self.require_user_verification = rpc_format.require_user_verification;
+        self.player_limit = PlayerLimit {
+            max: Limit::from(rpc_format.max_players),
+            ignore_for_returning: rpc_format.ignore_player_limit_for_returning_players,
+            autokick: Limit::from(rpc_format.afk_autokick_interval),
+        };
+        self.password = rpc_format.game_password.clone();
     }
 
     /// Modifies a given `ServerSettings` with this object's settings.

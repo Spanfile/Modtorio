@@ -65,14 +65,12 @@ impl Autosave {
         store_format.non_blocking_saving = self.non_blocking as i64;
     }
 
-    /// Returns a new `Autosave` from a given `ServerSettings`.
-    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> Self {
-        Self {
-            interval: rpc_format.autosave_interval,
-            slots: rpc_format.autosave_slots,
-            only_on_server: rpc_format.autosave_only_on_server,
-            non_blocking: rpc_format.non_blocking_saving,
-        }
+    /// Mutates `self` with the value from a given RPC `ServerSettings` object.
+    pub fn modify_self_with_rpc(&mut self, rpc_format: &rpc::ServerSettings) {
+        self.interval = rpc_format.autosave_interval;
+        self.slots = rpc_format.autosave_slots;
+        self.only_on_server = rpc_format.autosave_only_on_server;
+        self.non_blocking = rpc_format.non_blocking_saving;
     }
 
     /// Modifies a given `ServerSettings` with this object's settings.

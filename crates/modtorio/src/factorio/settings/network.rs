@@ -206,8 +206,8 @@ impl Network {
         }
     }
 
-    /// Returns a new `Network` from a given `ServerSettings`.
-    pub fn from_rpc_format(rpc_format: &rpc::ServerSettings) -> Self {
+    /// Mutates `self` with the value from a given RPC `ServerSettings` object.
+    pub fn modify_self_with_rpc(&mut self, rpc_format: &rpc::ServerSettings) {
         let bind_address = if let Some(bind_addr) = &rpc_format.bind {
             let port = bind_addr.port as u16;
             if let Some(addr) = &bind_addr.addr {
@@ -232,24 +232,22 @@ impl Network {
             Self::default().bind_address
         };
 
-        Self {
-            upload: Upload {
-                max: Limit::from(rpc_format.max_upload_in_kilobytes_per_second),
-                slots: Limit::from(rpc_format.max_upload_slots),
+        self.upload = Upload {
+            max: Limit::from(rpc_format.max_upload_in_kilobytes_per_second),
+            slots: Limit::from(rpc_format.max_upload_slots),
+        };
+        self.minimum_latency = rpc_format.minimum_latency_in_ticks;
+        self.segment_size = SegmentSize {
+            size: Range {
+                min: rpc_format.minimum_segment_size,
+                max: rpc_format.maximum_segment_size,
             },
-            minimum_latency: rpc_format.minimum_latency_in_ticks,
-            segment_size: SegmentSize {
-                size: Range {
-                    min: rpc_format.minimum_segment_size,
-                    max: rpc_format.maximum_segment_size,
-                },
-                peer_count: Range {
-                    min: rpc_format.minimum_segment_size_peer_count,
-                    max: rpc_format.maximum_segment_size_peer_count,
-                },
+            peer_count: Range {
+                min: rpc_format.minimum_segment_size_peer_count,
+                max: rpc_format.maximum_segment_size_peer_count,
             },
-            bind_address,
-        }
+        };
+        self.bind_address = bind_address;
     }
 
     /// Modifies a given `ServerSettings` with this object's settings.
