@@ -46,6 +46,11 @@ where
     Ok(matches)
 }
 
+/// Lossily percent decode a given URL segment into UTF-8.
+pub fn decode_url(s: &str) -> String {
+    percent_encoding::percent_decode_str(s).decode_utf8_lossy().to_string()
+}
+
 /// Represents a range of 64-bit unsigned integers.
 #[derive(Deserialize, Serialize, Debug, PartialEq)]
 pub struct Range {

@@ -1,7 +1,7 @@
 //! Provides the [`ResponseExt`](ResponseExt) trait which provides several commonly used functions
 //! on HTTP responses.
 
-use crate::error::ResponseError;
+use crate::{error::ResponseError, util::decode_url};
 use async_trait::async_trait;
 use tokio::prelude::*;
 
@@ -13,10 +13,10 @@ pub trait ResponseExt {
     where
         W: AsyncWrite + Unpin + Send;
 
-    /// Extracts the file name from the response URL. Returns
+    /// Extracts the URL-decoded file name from the response URL. Returns
     /// [`Err(ResponseError::NoFilename)`](crate::error::ResponseError::NoFilename) if the URL
     /// doesn't have a file name.
-    fn url_file_name(&self) -> anyhow::Result<&str>;
+    fn url_file_name(&self) -> anyhow::Result<String>;
 }
 
 #[async_trait]
@@ -34,11 +34,12 @@ impl ResponseExt for reqwest::Response {
         Ok(written)
     }
 
-    fn url_file_name(&self) -> anyhow::Result<&str> {
+    fn url_file_name(&self) -> anyhow::Result<String> {
         self.url()
             .path_segments()
             .and_then(std::iter::Iterator::last)
             .and_then(|name| if name.is_empty() { None } else { Some(name) })
+            .map(decode_url)
             .ok_or_else(|| ResponseError::NoFilename.into())
     }
 }
