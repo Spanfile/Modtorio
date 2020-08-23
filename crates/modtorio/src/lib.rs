@@ -46,6 +46,7 @@ use tonic::{transport::Server, Request, Response, Status};
 use util::{
     async_status,
     async_status::{AsyncProgressChannel, AsyncProgressChannelExt, AsyncProgressResult},
+    ext::StrExt,
     HumanVersion,
 };
 
@@ -289,8 +290,15 @@ impl Modtorio {
     }
 
     /// Imports a new Factorio instance from a given path to its root directory.
-    async fn import_game<P>(self, path: P, prog_tx: AsyncProgressChannel)
-    where
+    async fn import_game<P>(
+        self,
+        path: P,
+        settings: Option<String>,
+        whitelist: Option<String>,
+        adminlist: Option<String>,
+        banlist: Option<String>,
+        prog_tx: AsyncProgressChannel,
+    ) where
         P: AsRef<Path>,
     {
         if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
@@ -309,7 +317,7 @@ impl Modtorio {
 
         let path = path.as_ref().to_path_buf();
         task::spawn(async move {
-            let importer = match factorio::Importer::from_root(&path) {
+            let mut importer = match factorio::Importer::from_root(&path) {
                 Ok(i) => i,
                 Err(e) => {
                     error!("Failed to create new Factorio importer: {}", e);
@@ -317,6 +325,22 @@ impl Modtorio {
                     return;
                 }
             };
+
+            if let Some(path) = settings {
+                importer = importer.with_server_settings(path);
+            }
+
+            if let Some(path) = whitelist {
+                importer = importer.with_whitelist(path);
+            }
+
+            if let Some(path) = adminlist {
+                importer = importer.with_adminlist(path);
+            }
+
+            if let Some(path) = banlist {
+                importer = importer.with_banlist(path);
+            }
 
             let game = match importer
                 .with_status_updates(prog_tx.clone())
@@ -586,7 +610,16 @@ impl mod_rpc_server::ModRpc for Modtorio {
         let (tx, rx) = channel();
 
         let msg = req.into_inner();
-        self.clone().import_game(msg.path, tx).await;
+        self.clone()
+            .import_game(
+                msg.path,
+                msg.settings.map_to_option(),
+                msg.whitelist.map_to_option(),
+                msg.adminlist.map_to_option(),
+                msg.banlist.map_to_option(),
+                tx,
+            )
+            .await;
 
         respond(rx)
     }

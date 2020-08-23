@@ -51,7 +51,13 @@ message Progress {
 }
 
 /* Request messages  */
-message ImportRequest { string path = 1; }
+message ImportRequest {
+  string path = 1;
+  string settings = 2;
+  string whitelist = 3;
+  string adminlist = 4;
+  string banlist = 5;
+}
 message UpdateStoreRequest { int64 server_id = 1; }
 message InstallModRequest {
   int64 server_id = 1;

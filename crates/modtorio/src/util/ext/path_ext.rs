@@ -17,8 +17,11 @@ pub trait PathExt {
     ///  * the path contains invalid Unicode (`PathError::InvalidUnicode`))
     fn get_file_stem(&self) -> anyhow::Result<String>;
     /// Borrows the path as an `&str`. Returns `PathError::InvalidUnicode` error if the path
-    /// contains invalid Unicode
+    /// contains invalid Unicode.
     fn get_str(&self) -> anyhow::Result<&str>;
+    /// Copies the path as a `String`. Returns `PathError::InvalidUnicode` error if the path
+    /// contains invalid Unicode.
+    fn get_string(&self) -> anyhow::Result<String>;
 }
 
 impl<P> PathExt for P
@@ -47,5 +50,9 @@ where
 
     fn get_str(&self) -> anyhow::Result<&str> {
         Ok(self.as_ref().to_str().ok_or(PathError::InvalidUnicode)?)
+    }
+
+    fn get_string(&self) -> anyhow::Result<String> {
+        Ok(self.as_ref().to_str().ok_or(PathError::InvalidUnicode)?.to_string())
     }
 }

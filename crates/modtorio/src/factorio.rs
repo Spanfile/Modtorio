@@ -36,6 +36,12 @@ pub use status::{ExecutionStatus, InGameStatus, ServerStatus};
 
 /// The file name of the JSON file used to store a Factorio server's settings.
 const SERVER_SETTINGS_FILENAME: &str = "server-settings.json";
+/// The file name of the JSON file used to store a Factorio server's whitelisted players.
+const WHITELIST_FILENAME: &str = "server-whitelist.json";
+/// The file name of the JSON file used to store a Factorio server's banned players.
+const BANLIST_FILENAME: &str = "server-banlist.json";
+/// The file name of the JSON file used to store a Factorio server's admins.
+const ADMINLIST_FILENAME: &str = "server-adminlist.json";
 /// The path relative to the Factorio server's root directory where the server's mods are stored.
 const MODS_PATH: &str = "mods/";
 
@@ -54,6 +60,14 @@ pub struct Factorio {
     executable: Executable,
     /// The server's root directory.
     root: PathBuf,
+    /// The server's settings file's path relative to the root directory.
+    settings_file: Option<PathBuf>,
+    /// The server's player whitelist file's path relative to the root directory.
+    whitelist_file: Option<PathBuf>,
+    /// The server's banlist file's path relative to the root directory.
+    banlist_file: Option<PathBuf>,
+    /// The server's adminlist file's path relative to the root directory.
+    adminlist_file: Option<PathBuf>,
     /// The program's store ID.
     store_id: Arc<Mutex<Option<GameStoreId>>>,
     /// Reference to the program store.
@@ -73,8 +87,14 @@ pub struct Factorio {
 pub struct Importer {
     /// The server's root directory.
     root: PathBuf,
-    /// The server's `server-settings.json` file's location.
+    /// The server's settings file's location relative to the root directory.
     settings: PathBuf,
+    /// The server's whitelist file's location relative to the root directory.
+    whitelist: PathBuf,
+    /// The server's banlist file's location relative to the root directory.
+    banlist: PathBuf,
+    /// The server's adminlist file's location relative to the root directory.
+    adminlist: PathBuf,
     /// The server executable's location.
     executable: PathBuf,
     /// The program's store ID.
@@ -89,18 +109,24 @@ impl Factorio {
         self.store.begin_transaction()?;
 
         let mut store_id = self.store_id.lock().await;
+        let mut new_game_model = models::Game {
+            id: 0, /* this ID is irrelevant as the actual ID will be dictated by the
+                    * database when inserting a new row, or by the cache ID later */
+            path: self.root.get_string()?,
+            settings_file: self.settings_file.as_ref().map(|p| p.get_string()).transpose()?,
+            whitelist_file: self.whitelist_file.as_ref().map(|p| p.get_string()).transpose()?,
+            banlist_file: self.banlist_file.as_ref().map(|p| p.get_string()).transpose()?,
+            adminlist_file: self.adminlist_file.as_ref().map(|p| p.get_string()).transpose()?,
+        };
+
         let id = if let Some(c) = *store_id {
             info!("Updating existing game ID {} store", c);
             prog_tx
                 .send_status(async_status::indefinite("Updating existing stored game..."))
                 .await?;
 
-            self.store
-                .update_game(models::Game {
-                    id: c,
-                    path: self.root.get_str()?.to_string(),
-                })
-                .await?;
+            new_game_model.id = c;
+            self.store.update_game(new_game_model).await?;
 
             c
         } else {
@@ -109,14 +135,7 @@ impl Factorio {
                 .send_status(async_status::indefinite("Creating new stored game..."))
                 .await?;
 
-            let new_id = self
-                .store
-                .insert_game(models::Game {
-                    id: 0, /* this ID is irrelevant as the actual ID will be dictated by the
-                            * database when inserting a new row */
-                    path: self.root.get_str()?.to_string(),
-                })
-                .await?;
+            let new_id = self.store.insert_game(new_game_model).await?;
             *store_id = Some(new_id);
             debug!("New game store ID: {}", new_id);
 
@@ -249,6 +268,7 @@ impl Factorio {
 
     /// Returns the server's status.
     pub async fn status(&self) -> ServerStatus {
+        // TODO: docs
         self.status.read().await.clone()
     }
 
@@ -306,6 +326,9 @@ impl Importer {
         Ok(Self {
             root: root.as_ref().canonicalize()?,
             settings: PathBuf::from(SERVER_SETTINGS_FILENAME),
+            whitelist: PathBuf::from(WHITELIST_FILENAME),
+            banlist: PathBuf::from(BANLIST_FILENAME),
+            adminlist: PathBuf::from(ADMINLIST_FILENAME),
             executable: root.as_ref().join(executable::DEFAULT_PATH),
             game_store_id: None,
             prog_tx: None,
@@ -315,11 +338,36 @@ impl Importer {
     /// Returns a new `Importer` with information from a stored `Game`.
     pub fn from_store(stored_game: &models::Game) -> Self {
         let root = PathBuf::from(&stored_game.path);
+
+        let settings = root.join(if let Some(path) = &stored_game.settings_file {
+            path
+        } else {
+            SERVER_SETTINGS_FILENAME
+        });
+        let whitelist = root.join(if let Some(path) = &stored_game.whitelist_file {
+            path
+        } else {
+            WHITELIST_FILENAME
+        });
+        let banlist = root.join(if let Some(path) = &stored_game.banlist_file {
+            path
+        } else {
+            BANLIST_FILENAME
+        });
+        let adminlist = root.join(if let Some(path) = &stored_game.adminlist_file {
+            path
+        } else {
+            ADMINLIST_FILENAME
+        });
+
         let executable = root.join(executable::DEFAULT_PATH);
 
         Self {
             root,
-            settings: PathBuf::from(SERVER_SETTINGS_FILENAME),
+            settings,
+            whitelist,
+            banlist,
+            adminlist,
             executable,
             game_store_id: Some(stored_game.id),
             prog_tx: None,
@@ -334,6 +382,43 @@ impl Importer {
     {
         Self {
             settings: settings.as_ref().to_path_buf(),
+            ..self
+        }
+    }
+
+    /// Specify a custom file to read the server's whitelisted users from. The path is relative to the server's root
+    /// path.
+    #[allow(dead_code)]
+    pub fn with_whitelist<P>(self, whitelist: P) -> Self
+    where
+        P: AsRef<Path>,
+    {
+        Self {
+            whitelist: whitelist.as_ref().to_path_buf(),
+            ..self
+        }
+    }
+
+    /// Specify a custom file to read the server's banned players from. The path is relative to the server's root path.
+    #[allow(dead_code)]
+    pub fn with_banlist<P>(self, banlist: P) -> Self
+    where
+        P: AsRef<Path>,
+    {
+        Self {
+            banlist: banlist.as_ref().to_path_buf(),
+            ..self
+        }
+    }
+
+    /// Specify a custom file to read the server's admins from. The path is relative to the server's root path.
+    #[allow(dead_code)]
+    pub fn with_adminlist<P>(self, adminlist: P) -> Self
+    where
+        P: AsRef<Path>,
+    {
+        Self {
+            adminlist: adminlist.as_ref().to_path_buf(),
             ..self
         }
     }
@@ -366,7 +451,16 @@ impl Importer {
         store: Arc<Store>,
     ) -> anyhow::Result<Factorio> {
         let mut mods_builder = ModsBuilder::root(self.root.join(MODS_PATH));
-        let settings_path = self.root.join(self.settings);
+
+        let settings_path = self.root.join(&self.settings);
+        let _whitelist_path = self.root.join(&self.whitelist);
+        let _banlist_path = self.root.join(&self.banlist);
+        let _adminlist_path = self.root.join(&self.adminlist);
+
+        debug!("Settings file: {}", settings_path.display());
+        debug!("Whitelist file: {}", _whitelist_path.display());
+        debug!("Banlist file: {}", _banlist_path.display());
+        debug!("Adminlist file: {}", _adminlist_path.display());
 
         self.prog_tx
             .send_status(async_status::indefinite("Reading server settings..."))
@@ -421,6 +515,26 @@ impl Importer {
             mods,
             executable,
             root: self.root,
+            settings_file: if self.settings.to_string_lossy() == SERVER_SETTINGS_FILENAME {
+                None
+            } else {
+                Some(self.settings)
+            },
+            whitelist_file: if self.whitelist.to_string_lossy() == WHITELIST_FILENAME {
+                None
+            } else {
+                Some(self.whitelist)
+            },
+            banlist_file: if self.banlist.to_string_lossy() == BANLIST_FILENAME {
+                None
+            } else {
+                Some(self.banlist)
+            },
+            adminlist_file: if self.adminlist.to_string_lossy() == ADMINLIST_FILENAME {
+                None
+            } else {
+                Some(self.adminlist)
+            },
             store_id: Arc::new(Mutex::new(self.game_store_id)),
             store,
             status: Arc::new(RwLock::new(ServerStatus::default())),
