@@ -84,7 +84,7 @@ impl Mods {
 
             let factorio_mod = mod_name.clone();
             let mod_version = fact_mod.own_version().await?;
-            let mod_zip = fact_mod.zip_path().await?.get_str()?.to_owned();
+            let mod_zip = fact_mod.zip_path().await?.get_string()?;
             let zip_last_mtime = fact_mod.get_zip_last_mtime().await?;
 
             let store_game_mod = models::GameMod {

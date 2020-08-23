@@ -24,6 +24,14 @@ pub struct Game {
     pub id: GameStoreId,
     /// The game's root directory's path.
     pub path: String,
+    /// The server's settings file's location. If `None`, the default path is assumed.
+    pub settings_file: Option<String>,
+    /// The server's whitelist file's location. If `None`, the default path is assumed.
+    pub whitelist_file: Option<String>,
+    /// The server's banlist file's location. If `None`, the default path is assumed.
+    pub banlist_file: Option<String>,
+    /// The server's adminlist file's location. If `None`, the default path is assumed.
+    pub adminlist_file: Option<String>,
 }
 
 /// An instance of a Factorio mod.

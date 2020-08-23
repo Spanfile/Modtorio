@@ -23,7 +23,11 @@ DROP TABLE IF EXISTS "game";
 CREATE TABLE IF NOT EXISTS "game" (
 	/* without AUTOINCREMENT, an integer primary key is aliased to SQLite's internal ROWID which functions better as a primary key and than autoincremented one */
 	"id" INTEGER PRIMARY KEY,
-	"path" TEXT NOT NULL
+	"path" TEXT NOT NULL,
+	"settings_file" TEXT,
+	"whitelist_file" TEXT,
+	"banlist_file" TEXT,
+	"adminlist_file" TEXT
 );
 
 DROP TABLE IF EXISTS "game_settings";
