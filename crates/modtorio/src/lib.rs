@@ -97,49 +97,12 @@ impl Modtorio {
             status: Arc::new(Mutex::new(instance_status::Status::Starting)),
         };
 
+        // run the stored game importing and game autostarting in the background to allow running the RPC listeners as
+        // soon as possible
         let i = instance.clone();
         task::spawn(async move {
-            info!("Loading previous games...");
-            let stored_games = match i.store.get_games().await {
-                Ok(games) => games,
-                Err(e) => {
-                    error!("Failed to get stored games: {}", e);
-                    return;
-                }
-            };
-            let mut games = Vec::new();
-            debug!("Got stored games: {:?}", stored_games);
-
-            for stored_game in &stored_games {
-                info!(
-                    "Importing stored game ID {} from path {}...",
-                    stored_game.id, stored_game.path
-                );
-
-                let game = match factorio::Importer::from_store(stored_game)
-                    .import(Arc::clone(&i.config), Arc::clone(&i.portal), Arc::clone(&i.store))
-                    .await
-                {
-                    Ok(game) => game,
-                    Err(e) => {
-                        error!("Failed to import stored game ID {}: {}", stored_game.id, e);
-                        continue;
-                    }
-                };
-
-                info!(
-                    "Stored game ID {} imported from {}. {} mods",
-                    stored_game.id,
-                    stored_game.path,
-                    game.mods().count()
-                );
-                debug!("Stored game: {:?}", stored_game);
-                games.push(game);
-            }
-
-            info!("{} previous games loaded.", games.len());
-            i.games.lock().await.extend(games);
-            *i.status.lock().await = instance_status::Status::Running;
+            i.import_stored_games().await;
+            i.autostart_servers().await;
         });
 
         Ok(instance)
@@ -166,6 +129,77 @@ impl Modtorio {
 
         self.wait_for_games_to_shutdown().await?;
         result
+    }
+
+    /// Imports all stored games.
+    async fn import_stored_games(&self) {
+        info!("Loading previous games...");
+        let stored_games = match self.store.get_games().await {
+            Ok(games) => games,
+            Err(e) => {
+                error!("Failed to get stored games: {}", e);
+                return;
+            }
+        };
+        let mut games = Vec::new();
+        debug!("Got stored games: {:?}", stored_games);
+
+        for stored_game in &stored_games {
+            info!(
+                "Importing stored game ID {} from path {}...",
+                stored_game.id, stored_game.path
+            );
+
+            let game = match factorio::Importer::from_store(stored_game)
+                .import(
+                    Arc::clone(&self.config),
+                    Arc::clone(&self.portal),
+                    Arc::clone(&self.store),
+                )
+                .await
+            {
+                Ok(game) => game,
+                Err(e) => {
+                    error!("Failed to import stored game ID {}: {}", stored_game.id, e);
+                    continue;
+                }
+            };
+
+            info!(
+                "Stored game ID {} imported from {}. {} mods",
+                stored_game.id,
+                stored_game.path,
+                game.mods().count()
+            );
+            debug!("Stored game: {:?}", stored_game);
+            games.push(game);
+        }
+
+        info!("{} previous games loaded.", games.len());
+        self.games.lock().await.extend(games);
+        *self.status.lock().await = instance_status::Status::Running;
+    }
+
+    /// Start all servers that are set to be automatically started.
+    async fn autostart_servers(&self) {
+        trace!("Autostarting servers...");
+
+        let games = self.games.lock().await;
+        for game in games.iter() {
+            if game.settings().start.auto {
+                let store_id = game.store_id().await.expect("imported game doesn't have store ID set");
+                info!("Autostarting game ID {}...", store_id);
+
+                match game.run().await {
+                    Ok(_) => {
+                        debug!("Game ID {} autostarted", store_id);
+                    }
+                    Err(e) => {
+                        error!("Game ID {} failed to autostart: {}", store_id, e);
+                    }
+                }
+            }
+        }
     }
 
     /// Runs the RPC server.

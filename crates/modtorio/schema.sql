@@ -67,6 +67,7 @@ CREATE TABLE IF NOT EXISTS "game_settings" (
 	"bind_port" INTEGER NOT NULL,
 	"save_name" TEXT NOT NULL,
 	"start_behaviour" TEXT NOT NULL,
+	"auto_start" INTEGER NOT NULL,
 	FOREIGN KEY("game") REFERENCES "game"("id")
 );
 

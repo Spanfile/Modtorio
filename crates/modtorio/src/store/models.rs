@@ -215,6 +215,8 @@ pub struct GameSettings {
     /// The start behaviour, a combination of the `--create`, `--start-server`, `--start-server-load-latest` and
     /// `--start-server-load-scenario` command line parameters.
     pub start_behaviour: StartBehaviour,
+    /// Whether to automatically start the server when the instance starts.
+    pub auto_start: bool,
 }
 
 impl Default for GameSettings {
@@ -255,6 +257,7 @@ impl Default for GameSettings {
             bind_port: Default::default(),
             save_name: Default::default(),
             start_behaviour: Default::default(),
+            auto_start: Default::default(),
         }
     }
 }
