@@ -16,7 +16,11 @@ service ModRpc {
   rpc GetServerSettings(GetServerSettingsRequest) returns (ServerSettings);
   rpc SetServerSettings(SetServerSettingsRequest) returns (Empty);
 
-  rpc RunServer(RunServerRequest) returns (Empty);
+  rpc RunServer(RunServerRequest) returns (stream Progress);
+  rpc StopServer(StopServerRequest) returns (stream Progress);
+  rpc RestartServer(RestartServerRequest) returns (stream Progress);
+  rpc ForceRestartServer(ForceRestartServerRequest) returns (stream Progress);
+  rpc KillServer(KillServerRequest) returns (stream Progress);
   rpc SendServerCommand(SendCommandRequest) returns (Empty);
   rpc GetServerStatus(ServerStatusRequest) returns (ServerStatus);
 }
@@ -74,6 +78,18 @@ message SetServerSettingsRequest {
 }
 
 message RunServerRequest { int64 server_id = 1; }
+message KillServerRequest { int64 server_id = 1; }
+message ForceRestartServerRequest { int64 server_id = 1; }
+message StopServerRequest {
+  int64 server_id = 1;
+  uint64 timeout_override = 2;
+}
+
+message RestartServerRequest {
+  int64 server_id = 1;
+  uint64 timeout_override = 2;
+}
+
 message SendCommandRequest {
   int64 server_id = 1;
 
@@ -224,4 +240,5 @@ message ServerSettings {
   }
   StartBehaviour start_behaviour = 29;
   bool auto_start = 30;
+  uint64 graceful_shutdown_timeout = 31;
 }

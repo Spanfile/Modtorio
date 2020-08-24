@@ -26,9 +26,10 @@ use std::{
     path::{Path, PathBuf},
     sync::Arc,
 };
+use time::Duration;
 use tokio::{
     sync::{mpsc, watch, Mutex, RwLock},
-    task,
+    task, time,
 };
 
 pub use command::Command;
@@ -47,6 +48,15 @@ const MODS_PATH: &str = "mods/";
 
 /// The type used to identify games in the program store.
 pub type GameStoreId = i64;
+
+#[derive(Debug)]
+/// Used to specify the reason the server is being shut down when waiting for online players to leave.
+enum ShutdownReason {
+    /// The server is shutting down.
+    Shutdown,
+    /// The server is being restarted.
+    Restart,
+}
 
 /// Represents a single Factorio server instance.
 ///
@@ -177,7 +187,7 @@ impl Factorio {
         let status = Arc::clone(&self.status);
         {
             let mut status_w = status.write().await;
-            status_w.reset_started_at();
+            status_w.reset();
             status_w.set_game_status(ExecutionStatus::Starting);
         }
 
@@ -199,6 +209,49 @@ impl Factorio {
 
             shutdown_tx.broadcast(()).expect("failed to send shutdown signal");
         });
+
+        Ok(())
+    }
+
+    /// Gracefully shuts down the running server.
+    pub async fn graceful_shutdown(&self, timeout_override: Option<u64>) -> anyhow::Result<()> {
+        self.assert_status(ExecutionStatus::Running).await?;
+
+        self.wait_for_empty(ShutdownReason::Shutdown, timeout_override).await?;
+        self.send_command(Command::Quit).await?;
+
+        Ok(())
+    }
+
+    /// Gracefully restarts the running server.
+    pub async fn graceful_restart(&self, timeout_override: Option<u64>) -> anyhow::Result<()> {
+        self.assert_status(ExecutionStatus::Running).await?;
+
+        self.wait_for_empty(ShutdownReason::Restart, timeout_override).await?;
+        self.send_command(Command::Quit).await?;
+        self.wait_for_shutdown().await;
+        self.run().await?;
+
+        Ok(())
+    }
+
+    /// Forcefully restarts the running server.
+    pub async fn force_restart(&self) -> anyhow::Result<()> {
+        self.assert_status(ExecutionStatus::Running).await?;
+
+        self.send_command(Command::Quit).await?;
+        self.wait_for_shutdown().await;
+        self.run().await?;
+
+        Ok(())
+    }
+
+    /// Forcefully kills the running server.
+    pub async fn kill(&self) -> anyhow::Result<()> {
+        self.assert_status(ExecutionStatus::Running).await?;
+
+        self.executable.abort().await;
+        self.status.write().await.set_game_status(ExecutionStatus::Shutdown);
 
         Ok(())
     }
@@ -268,7 +321,6 @@ impl Factorio {
 
     /// Returns the server's status.
     pub async fn status(&self) -> ServerStatus {
-        // TODO: docs
         self.status.read().await.clone()
     }
 
@@ -298,11 +350,11 @@ impl Factorio {
     fn get_executable_args(&self) -> Vec<String> {
         let mut args = Vec::new();
 
-        match self.settings.start.behaviour {
+        match self.settings.running.behaviour {
             StartBehaviour::LoadLatest => args.push(String::from("--start-server-load-latest")),
             StartBehaviour::LoadFile => args.extend(vec![
                 String::from("--start-server"),
-                self.settings.start.save_name.clone(),
+                self.settings.running.save_name.clone(),
             ]),
             _ => unimplemented!(), // TODO
         }
@@ -313,6 +365,42 @@ impl Factorio {
         ]);
 
         args
+    }
+
+    /// Waits for the server to be empty.
+    async fn wait_for_empty(&self, reason: ShutdownReason, timeout_override: Option<u64>) -> anyhow::Result<()> {
+        let players = self.status().await.players().await;
+        debug!(
+            "Server has {} players online when gracefully shutting down ({:?})",
+            players.len(),
+            reason,
+        );
+
+        if !players.is_empty() {
+            // TODO: wait for the players to leave
+            let timeout_secs = timeout_override.unwrap_or(self.settings.running.graceful_shutdown_timeout);
+            self.send_command(Command::Say(format!(
+                "The server will {} in {} seconds!",
+                match reason {
+                    ShutdownReason::Shutdown => "shut down",
+                    ShutdownReason::Restart => "restart",
+                },
+                timeout_secs
+            )))
+            .await?;
+            let mut timeout = time::delay_for(Duration::from_secs(timeout_secs));
+
+            loop {
+                tokio::select! {
+                    _ = &mut timeout => {
+                        debug!("Timed out waiting for players to leave");
+                        break;
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 }
 

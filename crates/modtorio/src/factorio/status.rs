@@ -96,9 +96,9 @@ impl ServerStatus {
         Utc::now() - self.started_at
     }
 
-    /// Sets the server's started timestamp to the current time.
-    pub fn reset_started_at(&mut self) {
-        self.started_at = Utc::now()
+    /// Resets the status back to default.
+    pub fn reset(&mut self) {
+        *self = Default::default();
     }
 
     /// Returns a list of the current players.

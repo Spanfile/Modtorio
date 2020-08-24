@@ -8,7 +8,7 @@ mod information;
 mod network;
 mod pause;
 mod publicity;
-mod start;
+mod running;
 
 use crate::{store::models::GameSettings, util};
 use allow_commands::AllowCommands;
@@ -19,9 +19,9 @@ use information::Information;
 use network::Network;
 use pause::Pause;
 use publicity::Publicity;
+use running::Running;
+pub use running::StartBehaviour;
 use serde::{Deserialize, Serialize};
-use start::Start;
-pub use start::StartBehaviour;
 use std::{fs::File, io::BufReader, path::Path};
 
 /// Stores a server's settings in a structured manner.
@@ -40,7 +40,7 @@ pub struct ServerSettings {
     /// Contains settings related to the server's network options and traffic use.
     pub network: Network,
     /// Contains settings related to starting the server.
-    pub start: Start,
+    pub running: Running,
     /// The server settings file's last modified time.
     pub file_last_mtime: Option<DateTime<Utc>>,
 }
@@ -80,7 +80,7 @@ impl ServerSettings {
             pause: Pause::from_game_format(game_format),
             allow_commands: AllowCommands::from_game_format(game_format)?,
             network: Network::from_game_format(game_format),
-            start: Start::default(),
+            running: Running::default(),
             file_last_mtime: None,
         })
     }
@@ -104,7 +104,7 @@ impl ServerSettings {
             pause: Pause::from_store_format(store_format),
             allow_commands: AllowCommands::from_store_format(store_format)?,
             network: Network::from_store_format(store_format)?,
-            start: Start::from_store_format(store_format),
+            running: Running::from_store_format(store_format),
             file_last_mtime: Some(store_format.file_last_mtime),
         })
     }
@@ -117,7 +117,7 @@ impl ServerSettings {
         self.pause.to_store_format(store_format);
         self.allow_commands.to_store_format(store_format);
         self.network.to_store_format(store_format);
-        self.start.to_store_format(store_format);
+        self.running.to_store_format(store_format);
     }
 
     /// Mutates `self` with the value from a given RPC `ServerSettings` object.
@@ -128,7 +128,7 @@ impl ServerSettings {
         self.pause.modify_self_with_rpc(rpc_format);
         self.allow_commands.modify_self_with_rpc(rpc_format)?;
         self.network.modify_self_with_rpc(rpc_format);
-        self.start.modify_self_with_rpc(rpc_format)?;
+        self.running.modify_self_with_rpc(rpc_format)?;
 
         Ok(())
     }
@@ -141,7 +141,7 @@ impl ServerSettings {
         self.pause.to_rpc_format(rpc_format);
         self.allow_commands.to_rpc_format(rpc_format);
         self.network.to_rpc_format(rpc_format);
-        self.start.to_rpc_format(rpc_format);
+        self.running.to_rpc_format(rpc_format);
     }
 }
 

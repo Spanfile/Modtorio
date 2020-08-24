@@ -68,6 +68,7 @@ CREATE TABLE IF NOT EXISTS "game_settings" (
 	"save_name" TEXT NOT NULL,
 	"start_behaviour" TEXT NOT NULL,
 	"auto_start" INTEGER NOT NULL,
+	"graceful_shutdown_timeout" INTEGER NOT NULL,
 	FOREIGN KEY("game") REFERENCES "game"("id")
 );
 
