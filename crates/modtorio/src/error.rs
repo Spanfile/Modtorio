@@ -205,7 +205,7 @@ pub enum ConfigError {
 pub enum RpcError {
     /// Returned when trying to interact with a non-existent game.
     #[error("No such game ID: {0}")]
-    NoSuchGame(GameStoreId),
+    NoSuchServer(GameStoreId),
     /// Returned when trying to import a Factorio server instance which is already managed by the Modtorio instance.
     #[error("A game in the root directory '{0}' is already managed by this Modtorio instance")]
     GameAlreadyExists(PathBuf),
@@ -242,7 +242,7 @@ impl From<&RpcError> for tonic::Status {
         match e {
             RpcError::Internal(int) => tonic::Status::internal(int.to_string()),
             RpcError::NoSuchMod(_)
-            | RpcError::NoSuchGame(_)
+            | RpcError::NoSuchServer(_)
             | RpcError::NoSuchCommand(_)
             | RpcError::MissingArgument => tonic::Status::invalid_argument(e.to_string()),
             RpcError::GameAlreadyExists(_) => tonic::Status::already_exists(e.to_string()),

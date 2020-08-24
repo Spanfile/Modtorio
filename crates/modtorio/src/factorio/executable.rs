@@ -4,6 +4,7 @@ mod game_event;
 mod version_information;
 
 use crate::error::ExecutableError;
+use futures::future::{AbortHandle, Abortable};
 pub use game_event::GameEvent;
 use log::*;
 use std::{
@@ -13,7 +14,7 @@ use std::{
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader},
     process::{Child, Command},
-    sync::mpsc,
+    sync::{mpsc, Mutex},
     task,
 };
 use version_information::VersionInformation;
@@ -26,6 +27,7 @@ pub const DEFAULT_PATH: &str = "bin/x64/factorio";
 pub struct Executable {
     /// The path to the executable.
     path: PathBuf,
+    child_monitor_abort_handle: Mutex<Option<AbortHandle>>,
 }
 
 /// Represesnts an event that happened with the executable.
@@ -44,7 +46,10 @@ impl Executable {
         P: AsRef<Path>,
     {
         let path = path.as_ref().to_path_buf();
-        let exec = Self { path };
+        let exec = Self {
+            path,
+            child_monitor_abort_handle: Mutex::new(None),
+        };
         match exec.detect_version().await {
             Ok(ver) => debug!(
                 "{} is a valid Factorio executable. Version information: {:?}",
@@ -100,53 +105,84 @@ impl Executable {
                     error!("Writing to event tx failed: {}", e);
                 }
             }
+
+            trace!("Child stdout processor terminating");
         });
 
+        let (abort_handle, abort_registration) = AbortHandle::new_pair();
+        *self.child_monitor_abort_handle.lock().await = Some(abort_handle);
+
         task::spawn(async move {
-            loop {
-                tokio::select! {
-                    child_result = wait_for_child(&mut child) => {
-                        trace!("Child returned {:?}", child_result);
-                        if let Err(e) = state_tx.send(ExecutableEvent::Exited(child_result)).await {
-                            error!("Writing executable state to state tx failed: {}", e);
-                        }
-                        break;
-                    }
-
-                    msg = stdin_rx.recv() => {
-                        if let Some(msg) = msg {
-                            trace!("Got input from stdin channel: {}", msg);
-                            if let Err(e) = stdin.write_all(msg.as_bytes()).await {
-                                error!("Writing to child stdin failed: {}", e);
+            match Abortable::new(
+                async {
+                    loop {
+                        tokio::select! {
+                            child_result = wait_for_child(&mut child) => {
+                                trace!("Child returned {:?}", child_result);
+                                if let Err(e) = state_tx.send(ExecutableEvent::Exited(child_result)).await {
+                                    error!("Writing executable state to state tx failed: {}", e);
+                                }
+                                break;
                             }
-                        }
-                    }
 
-                    stdout_line = stdout_reader.next_line() => {
-                        if let Some(stdout_line) = stdout_line.expect("failed to read child stdout line") {
-                            debug!("Child stdout: {}", stdout_line);
-                            if let Err(e) = stdout_proc_tx.send(stdout_line).await {
-                                error!("Writing stdout line to stdout processor tx failed: {}", e);
+                            msg = stdin_rx.recv() => {
+                                if let Some(msg) = msg {
+                                    trace!("Got input from stdin channel: {}", msg);
+                                    if let Err(e) = stdin.write_all(msg.as_bytes()).await {
+                                        error!("Writing to child stdin failed: {}", e);
+                                    }
+                                }
                             }
-                        }
-                    }
 
-                    event = event_rx.recv() => {
-                        if let Some(event) = event {
-                            trace!("Game event from executable: {:?}", event);
-
-                            if let Err(e) = state_tx.send(ExecutableEvent::GameEvent(event)).await {
-                                error!("Writing executable state to state tx failed: {}", e);
+                            stdout_line = stdout_reader.next_line() => {
+                                if let Some(stdout_line) = stdout_line.expect("failed to read child stdout line") {
+                                    debug!("Child stdout: {}", stdout_line);
+                                    if let Err(e) = stdout_proc_tx.send(stdout_line).await {
+                                        error!("Writing stdout line to stdout processor tx failed: {}", e);
+                                    }
+                                }
                             }
-                        }
-                    }
-                };
-            }
 
-            trace!("Child monitor task returning");
+                            event = event_rx.recv() => {
+                                if let Some(event) = event {
+                                    trace!("Game event from executable: {:?}", event);
+
+                                    if let Err(e) = state_tx.send(ExecutableEvent::GameEvent(event)).await {
+                                        error!("Writing executable state to state tx failed: {}", e);
+                                    }
+                                }
+                            }
+                        };
+                    }
+                },
+                abort_registration,
+            )
+            .await
+            {
+                Ok(_) => trace!("Child monitor task terminating succesfully"),
+                Err(e) => {
+                    trace!("Child monitor task terminated: aborted");
+                    match child.kill() {
+                        Ok(_) => trace!("Child executable killed succesfully"),
+                        Err(_) => error!("Failed to kill child executable: {}", e),
+                    }
+                    match child.await {
+                        Ok(status) => trace!("Child exited with status '{}' after kill", status),
+                        Err(e) => error!("Failed to read child exit status after kill: {}", e),
+                    }
+                }
+            };
         });
 
         Ok(state_rx)
+    }
+
+    /// Aborts the running executable.
+    pub async fn abort(&self) {
+        if let Some(abort_handle) = self.child_monitor_abort_handle.lock().await.as_ref() {
+            debug!("Aborting child executable");
+            abort_handle.abort();
+        }
     }
 
     /// Returns the server's version information by running the executable with the `--version` parameter.

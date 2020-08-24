@@ -36,6 +36,7 @@ use mod_portal::ModPortal;
 use rpc::{instance_status, mod_rpc_server, send_command_request};
 use std::{path::Path, sync::Arc};
 use store::Store;
+use strum_macros::Display;
 use tokio::{
     fs,
     net::UnixListener,
@@ -63,6 +64,29 @@ lazy_static! {
     };
 }
 
+/// Represents the various control actions applicable on servers.
+#[derive(Debug, Display)]
+enum ServerControlAction {
+    /// Run a server.
+    Run,
+    /// Gracefully shutdown a server.
+    Shutdown {
+        /// Override the timeout when waiting for the server to empty. A value of 0 means to not override the
+        /// configured value.
+        timeout_override: u64,
+    },
+    /// Gracefully restart a server.
+    Restart {
+        /// Override the timeout when waiting for the server to empty. A value of 0 means to not override the
+        /// configured value.
+        timeout_override: u64,
+    },
+    /// Forcefully restart a server.
+    ForceRestart,
+    /// Kill a server.
+    Kill,
+}
+
 #[derive(Clone)]
 /// A wrapper for a headless Linux Factorio server.
 pub struct Modtorio {
@@ -72,6 +96,7 @@ pub struct Modtorio {
     portal: Arc<ModPortal>,
     /// The program store.
     store: Arc<Store>,
+    // TODO: rename to 'servers'
     /// Collection of Factorio instances this Modtorio instance is managing.
     games: Arc<Mutex<Vec<Factorio>>>,
     /// Timestamp when this Modtorio instance was started.
@@ -186,7 +211,7 @@ impl Modtorio {
 
         let games = self.games.lock().await;
         for game in games.iter() {
-            if game.settings().start.auto {
+            if game.settings().running.auto {
                 let store_id = game.store_id().await.expect("imported game doesn't have store ID set");
                 info!("Autostarting game ID {}...", store_id);
 
@@ -419,7 +444,7 @@ impl Modtorio {
 
         task::spawn(async move {
             let mut games = self.games.lock().await;
-            match find_game(server_id, &mut games).await {
+            match find_server_mut(server_id, &mut games).await {
                 Ok(game) => {
                     if let Err(e) = game.update_store(Some(prog_tx.clone())).await {
                         error!("Failed to update game store: {}", e);
@@ -449,7 +474,7 @@ impl Modtorio {
 
         task::spawn(async move {
             let mut games = self.games.lock().await;
-            match find_game(server_id, &mut games).await {
+            match find_server_mut(server_id, &mut games).await {
                 Ok(game) => {
                     if let Err(e) = game
                         .mods_mut()
@@ -482,7 +507,7 @@ impl Modtorio {
 
         task::spawn(async move {
             let mut games = self.games.lock().await;
-            match find_game(server_id, &mut games).await {
+            match find_server_mut(server_id, &mut games).await {
                 Ok(game) => {
                     if let Err(e) = game.mods_mut().update(Some(prog_tx.clone())).await {
                         error!("Failed to update mods: {}", e);
@@ -506,7 +531,7 @@ impl Modtorio {
 
         task::spawn(async move {
             let mut games = self.games.lock().await;
-            match find_game(server_id, &mut games).await {
+            match find_server_mut(server_id, &mut games).await {
                 Ok(game) => {
                     if let Err(e) = game.mods_mut().ensure_dependencies(Some(prog_tx.clone())).await {
                         error!("Failed to ensure mod dependencies: {}", e);
@@ -526,7 +551,7 @@ impl Modtorio {
         self.assert_instance_status(instance_status::Status::Running).await?;
 
         let mut games = self.games.lock().await;
-        let game = find_game(server_id, &mut games).await?;
+        let game = find_server_mut(server_id, &mut games).await?;
         let mut rpc_server_settings = rpc::ServerSettings::default();
         game.settings().to_rpc_format(&mut rpc_server_settings);
 
@@ -542,7 +567,7 @@ impl Modtorio {
         self.assert_instance_status(instance_status::Status::Running).await?;
 
         let mut games = self.games.lock().await;
-        let game = find_game(server_id, &mut games).await?;
+        let game = find_server_mut(server_id, &mut games).await?;
 
         if let Some(settings) = settings {
             info!("Updating server ID {}'s settings", server_id);
@@ -555,20 +580,92 @@ impl Modtorio {
         Ok(())
     }
 
-    /// Runs a given game instance.
-    async fn run_server(&self, server_id: GameStoreId) -> anyhow::Result<()> {
-        self.assert_instance_status(instance_status::Status::Running).await?;
-
-        let mut games = self.games.lock().await;
-        let game = find_game(server_id, &mut games).await?;
-
-        if let Err(e) = game.run().await {
-            error!("Server ID {} failed to run: {}", server_id, e);
-            Err(e)
-        } else {
-            info!("Server ID {} starting", server_id);
-            Ok(())
+    /// Executes a server control action on a server.
+    async fn execute_server_control_action(
+        self,
+        action: ServerControlAction,
+        server_id: GameStoreId,
+        prog_tx: AsyncProgressChannel,
+    ) {
+        if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
+            send_error_status(&prog_tx, e).await;
+            return;
         }
+
+        task::spawn(async move {
+            let mut servers = self.games.lock().await;
+            let server = match find_server_mut(server_id, &mut servers).await {
+                Ok(game) => game,
+                Err(e) => {
+                    send_error_status(&prog_tx, e).await;
+                    return;
+                }
+            };
+
+            let result = match action {
+                ServerControlAction::Run => {
+                    info!("Running server ID {}", server_id);
+                    server.run().await
+                }
+                ServerControlAction::Kill => {
+                    info!("Killing server ID {}", server_id);
+                    server.kill().await
+                }
+                ServerControlAction::Shutdown { timeout_override } => {
+                    info!("Gracefully shutting down server ID {}", server_id);
+                    send_status(
+                        &prog_tx,
+                        async_status::indefinite("Waiting for the server to be empty..."),
+                    )
+                    .await;
+
+                    let timeout_override = if timeout_override == 0 {
+                        None
+                    } else {
+                        debug!("Using timeout override: {}", timeout_override);
+                        Some(timeout_override)
+                    };
+
+                    server.graceful_shutdown(timeout_override).await
+                }
+                ServerControlAction::Restart { timeout_override } => {
+                    info!("Gracefully restarting server ID {}", server_id);
+                    send_status(
+                        &prog_tx,
+                        async_status::indefinite("Waiting for the server to be empty..."),
+                    )
+                    .await;
+
+                    let timeout_override = if timeout_override == 0 {
+                        None
+                    } else {
+                        debug!("Using timeout override: {}", timeout_override);
+                        Some(timeout_override)
+                    };
+
+                    server.graceful_restart(timeout_override).await
+                }
+
+                ServerControlAction::ForceRestart => {
+                    info!("Forcefully restarting server ID {}", server_id);
+                    server.force_restart().await
+                }
+            };
+
+            match result {
+                Ok(_) => {
+                    info!("Server control action {} succeeded on server ID {}", action, server_id);
+                    send_status(&prog_tx, async_status::done()).await;
+                }
+                Err(e) => {
+                    error!(
+                        "Server control action {} failed on server ID {}: {}",
+                        action, server_id, e
+                    );
+                    send_error_status(&prog_tx, e).await;
+                }
+            }
+        });
     }
 
     /// Sends a command to a given game instance.
@@ -580,7 +677,7 @@ impl Modtorio {
         self.assert_instance_status(instance_status::Status::Running).await?;
 
         let mut games = self.games.lock().await;
-        let game = find_game(server_id, &mut games).await?;
+        let game = find_server_mut(server_id, &mut games).await?;
         let command = command.ok_or(RpcError::MissingArgument)?;
         game.send_command(command.into()).await?;
 
@@ -592,7 +689,7 @@ impl Modtorio {
         self.assert_instance_status(instance_status::Status::Running).await?;
 
         let mut games = self.games.lock().await;
-        let game = find_game(server_id, &mut games).await?;
+        let game = find_server_mut(server_id, &mut games).await?;
 
         Ok(game.status().await)
     }
@@ -605,6 +702,12 @@ impl mod_rpc_server::ModRpc for Modtorio {
     type InstallModStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
     type UpdateModsStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
     type EnsureModDependenciesStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
+
+    type RunServerStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
+    type KillServerStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
+    type StopServerStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
+    type RestartServerStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
+    type ForceRestartServerStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
 
     async fn get_version_information(
         &self,
@@ -731,11 +834,88 @@ impl mod_rpc_server::ModRpc for Modtorio {
         map_to_response(self.set_server_settings(msg.server_id, msg.settings).await)
     }
 
-    async fn run_server(&self, req: Request<rpc::RunServerRequest>) -> Result<Response<rpc::Empty>, Status> {
+    async fn run_server(&self, req: Request<rpc::RunServerRequest>) -> Result<Response<Self::RunServerStream>, Status> {
         log_rpc_request(&req);
+        let (tx, rx) = channel();
 
         let msg = req.into_inner();
-        map_to_response(self.run_server(msg.server_id).await)
+        self.clone()
+            .execute_server_control_action(ServerControlAction::Run, msg.server_id, tx)
+            .await;
+
+        respond(rx)
+    }
+
+    async fn kill_server(
+        &self,
+        req: Request<rpc::KillServerRequest>,
+    ) -> Result<Response<Self::KillServerStream>, Status> {
+        log_rpc_request(&req);
+        let (tx, rx) = channel();
+
+        let msg = req.into_inner();
+        self.clone()
+            .execute_server_control_action(ServerControlAction::Kill, msg.server_id, tx)
+            .await;
+
+        respond(rx)
+    }
+
+    async fn stop_server(
+        &self,
+        req: Request<rpc::StopServerRequest>,
+    ) -> Result<Response<Self::StopServerStream>, Status> {
+        log_rpc_request(&req);
+        let (tx, rx) = channel();
+
+        let msg = req.into_inner();
+        self.clone()
+            .execute_server_control_action(
+                ServerControlAction::Shutdown {
+                    timeout_override: msg.timeout_override,
+                },
+                msg.server_id,
+                tx,
+            )
+            .await;
+
+        respond(rx)
+    }
+
+    async fn restart_server(
+        &self,
+        req: Request<rpc::RestartServerRequest>,
+    ) -> Result<Response<Self::RestartServerStream>, Status> {
+        log_rpc_request(&req);
+        let (tx, rx) = channel();
+
+        let msg = req.into_inner();
+        self.clone()
+            .execute_server_control_action(
+                ServerControlAction::Restart {
+                    timeout_override: msg.timeout_override,
+                },
+                msg.server_id,
+                tx,
+            )
+            .await;
+
+        respond(rx)
+    }
+
+    async fn force_restart_server(
+        &self,
+        req: Request<rpc::ForceRestartServerRequest>,
+    ) -> Result<Response<Self::ForceRestartServerStream>, Status> {
+        log_rpc_request(&req);
+        let (tx, rx) = channel();
+
+        let msg = req.into_inner();
+        self.clone()
+            .execute_server_control_action(ServerControlAction::ForceRestart, msg.server_id, tx)
+            .await;
+
+        respond(rx)
     }
 
     async fn send_server_command(&self, req: Request<rpc::SendCommandRequest>) -> Result<Response<rpc::Empty>, Status> {
@@ -848,8 +1028,8 @@ where
 
 /// Finds and returns a mutable reference to a game based on its store ID, or returns `RpcError::NoSuchGame` if the game
 /// isn't found.
-async fn find_game(server_id: GameStoreId, games: &mut Vec<Factorio>) -> anyhow::Result<&mut Factorio> {
-    for g in games.iter_mut() {
+async fn find_server_mut(server_id: GameStoreId, servers: &mut Vec<Factorio>) -> anyhow::Result<&mut Factorio> {
+    for g in servers.iter_mut() {
         if let Some(id) = g.store_id_option().await {
             if id == server_id {
                 return Ok(g);
@@ -857,5 +1037,5 @@ async fn find_game(server_id: GameStoreId, games: &mut Vec<Factorio>) -> anyhow:
         }
     }
 
-    Err(RpcError::NoSuchGame(server_id).into())
+    Err(RpcError::NoSuchServer(server_id).into())
 }

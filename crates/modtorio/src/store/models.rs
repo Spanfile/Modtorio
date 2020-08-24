@@ -217,6 +217,8 @@ pub struct GameSettings {
     pub start_behaviour: StartBehaviour,
     /// Whether to automatically start the server when the instance starts.
     pub auto_start: bool,
+    /// The timeout to wait for players to leave when gracefully shutting down or restarting the server.
+    pub graceful_shutdown_timeout: i64,
 }
 
 impl Default for GameSettings {
@@ -224,6 +226,7 @@ impl Default for GameSettings {
         Self {
             // TODO: WHAT THE FUCK???
             file_last_mtime: Utc::now(),
+            graceful_shutdown_timeout: Default::default(),
             game: Default::default(),
             name: Default::default(),
             description: Default::default(),
