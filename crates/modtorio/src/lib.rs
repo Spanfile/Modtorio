@@ -17,15 +17,17 @@ pub mod log;
 pub mod mod_common;
 pub mod mod_portal;
 pub mod opts;
+mod rpc_handler;
 pub mod store;
 mod unix;
 pub mod util;
 
 use ::log::*;
+use anyhow::Context;
 use chrono::{DateTime, Utc};
 use common::net::NetAddress;
 use config::Config;
-use error::{ModPortalError, RpcError};
+use error::RpcError;
 use factorio::{Factorio, GameStoreId, ServerStatus};
 use futures::{
     future::{join_all, try_join_all},
@@ -33,10 +35,13 @@ use futures::{
 };
 use lazy_static::lazy_static;
 use mod_portal::ModPortal;
-use rpc::{instance_status, mod_rpc_server, send_command_request};
-use std::{path::Path, sync::Arc};
+use rpc::{instance_status, mod_rpc_server, server_control_action_request};
+use rpc_handler::RpcHandler;
+use std::{
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 use store::Store;
-use strum_macros::Display;
 use tokio::{
     fs,
     net::UnixListener,
@@ -56,35 +61,15 @@ pub const APP_PREFIX: &str = "MODTORIO_";
 /// The program's version at build-time.
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
+/// The result type used in RPC processor functions.
+type RpcResult<T> = Result<T, RpcError>;
+
 lazy_static! {
     static ref HVER_VERSION: HumanVersion = {
         VERSION
             .parse()
             .expect("failed to parse VERSION constant as HumanVersion")
     };
-}
-
-/// Represents the various control actions applicable on servers.
-#[derive(Debug, Display)]
-enum ServerControlAction {
-    /// Run a server.
-    Run,
-    /// Gracefully shutdown a server.
-    Shutdown {
-        /// Override the timeout when waiting for the server to empty. A value of 0 means to not override the
-        /// configured value.
-        timeout_override: u64,
-    },
-    /// Gracefully restart a server.
-    Restart {
-        /// Override the timeout when waiting for the server to empty. A value of 0 means to not override the
-        /// configured value.
-        timeout_override: u64,
-    },
-    /// Forcefully restart a server.
-    ForceRestart,
-    /// Kill a server.
-    Kill,
 }
 
 #[derive(Clone)]
@@ -98,7 +83,7 @@ pub struct Modtorio {
     store: Arc<Store>,
     // TODO: rename to 'servers'
     /// Collection of Factorio instances this Modtorio instance is managing.
-    games: Arc<Mutex<Vec<Factorio>>>,
+    servers: Arc<Mutex<Vec<Factorio>>>,
     /// Timestamp when this Modtorio instance was started.
     started_at: Arc<DateTime<Utc>>,
     /// The instance's status.
@@ -117,13 +102,13 @@ impl Modtorio {
             config,
             portal,
             store,
-            games: Arc::new(Mutex::new(Vec::new())),
+            servers: Arc::new(Mutex::new(Vec::new())),
             started_at: Arc::new(Utc::now()),
             status: Arc::new(Mutex::new(instance_status::Status::Starting)),
         };
 
-        // run the stored game importing and game autostarting in the background to allow running the RPC listeners as
-        // soon as possible
+        // run the stored server importing and server autostarting in the background to allow running the RPC listeners
+        // as soon as possible
         let i = instance.clone();
         task::spawn(async move {
             i.import_stored_games().await;
@@ -152,30 +137,30 @@ impl Modtorio {
             Ok(())
         };
 
-        self.wait_for_games_to_shutdown().await?;
+        self.wait_for_servers_to_shutdown().await?;
         result
     }
 
-    /// Imports all stored games.
+    /// Imports all stored servers.
     async fn import_stored_games(&self) {
-        info!("Loading previous games...");
+        info!("Loading previous servers...");
         let stored_games = match self.store.get_games().await {
-            Ok(games) => games,
+            Ok(servers) => servers,
             Err(e) => {
-                error!("Failed to get stored games: {}", e);
+                error!("Failed to get stored servers: {}", e);
                 return;
             }
         };
-        let mut games = Vec::new();
-        debug!("Got stored games: {:?}", stored_games);
+        let mut servers = Vec::new();
+        debug!("Got stored servers: {:?}", stored_games);
 
         for stored_game in &stored_games {
             info!(
-                "Importing stored game ID {} from path {}...",
+                "Importing stored server ID {} from path {}...",
                 stored_game.id, stored_game.path
             );
 
-            let game = match factorio::Importer::from_store(stored_game)
+            let server = match factorio::Importer::from_store(stored_game)
                 .import(
                     Arc::clone(&self.config),
                     Arc::clone(&self.portal),
@@ -183,25 +168,25 @@ impl Modtorio {
                 )
                 .await
             {
-                Ok(game) => game,
+                Ok(server) => server,
                 Err(e) => {
-                    error!("Failed to import stored game ID {}: {}", stored_game.id, e);
+                    error!("Failed to import stored server ID {}: {}", stored_game.id, e);
                     continue;
                 }
             };
 
             info!(
-                "Stored game ID {} imported from {}. {} mods",
+                "Stored server ID {} imported from {}. {} mods",
                 stored_game.id,
                 stored_game.path,
-                game.mods().count()
+                server.mods().count()
             );
-            debug!("Stored game: {:?}", stored_game);
-            games.push(game);
+            debug!("Stored server: {:?}", stored_game);
+            servers.push(server);
         }
 
-        info!("{} previous games loaded.", games.len());
-        self.games.lock().await.extend(games);
+        info!("{} previous servers loaded.", servers.len());
+        self.servers.lock().await.extend(servers);
         *self.status.lock().await = instance_status::Status::Running;
     }
 
@@ -209,13 +194,16 @@ impl Modtorio {
     async fn autostart_servers(&self) {
         trace!("Autostarting servers...");
 
-        let games = self.games.lock().await;
-        for game in games.iter() {
-            if game.settings().running.auto {
-                let store_id = game.store_id().await.expect("imported game doesn't have store ID set");
-                info!("Autostarting game ID {}...", store_id);
+        let servers = self.servers.lock().await;
+        for server in servers.iter() {
+            if server.settings().running.auto {
+                let store_id = server
+                    .store_id()
+                    .await
+                    .expect("imported server doesn't have store ID set");
+                info!("Autostarting server ID {}...", store_id);
 
-                match game.run().await {
+                match server.run().await {
                     Ok(_) => {
                         debug!("Game ID {} autostarted", store_id);
                     }
@@ -280,44 +268,30 @@ impl Modtorio {
         Ok(())
     }
 
-    /// Waits for all the currently managed games to be shut down.
-    async fn wait_for_games_to_shutdown(&self) -> anyhow::Result<()> {
-        let games = self.games.lock().await;
+    /// Waits for all the currently managed servers to be shut down.
+    async fn wait_for_servers_to_shutdown(&self) -> anyhow::Result<()> {
+        let servers = self.servers.lock().await;
         let mut waiters = Vec::new();
 
-        for game in games.iter() {
-            debug!("Waiting for game ID {} to shut down...", game.store_id().await?);
-            waiters.push(game.wait_for_shutdown());
+        for server in servers.iter() {
+            debug!("Waiting for server ID {} to shut down...", server.store_id().await?);
+            waiters.push(server.wait_for_shutdown());
         }
 
         join_all(waiters).await;
         Ok(())
     }
 
-    /// Asserts that the instance's current status is `wanted`.
-    async fn assert_instance_status(&self, wanted: instance_status::Status) -> anyhow::Result<()> {
-        let status = self.get_instance_status().await;
-        if status == instance_status::Status::Starting {
-            error!(
-                "RPC instance status assertion failed: wanted {:?}, actual {:?}",
-                wanted, status
-            );
-            Err(RpcError::InvalidInstanceStatus { wanted, actual: status }.into())
-        } else {
-            Ok(())
-        }
-    }
-
-    /// Returns a boolean on whether this instance manages a game identified by its root path.
-    async fn game_exists_by_path<P>(&self, path: P) -> bool
+    /// Returns a boolean on whether this instance manages a server identified by its root path.
+    async fn server_exists_by_path<P>(&self, path: P) -> bool
     where
         P: AsRef<Path>,
     {
-        self.games
+        self.servers
             .lock()
             .await
             .iter()
-            .any(|game| util::file::are_same(game.root(), path.as_ref()).expect("failed to compare file paths"))
+            .any(|server| util::file::are_same(server.root(), path.as_ref()).expect("failed to compare file paths"))
     }
 
     /// Returns this instance's uptime.
@@ -325,16 +299,16 @@ impl Modtorio {
         Utc::now() - *self.started_at
     }
 
-    /// Returns this instance's managed games in RPC format.
+    /// Returns this instance's managed servers in RPC format.
     async fn get_rpc_servers(&self) -> Vec<instance_status::Server> {
         let mut rpc_games = Vec::new();
 
-        for game in self.games.lock().await.iter() {
-            let status = game.status().await.game_status() as i32;
-            let server_id = game.store_id_option().await.unwrap_or(0);
+        for server in self.servers.lock().await.iter() {
+            let status = server.status().await.game_status() as i32;
+            let server_id = server.store_id_option().await.unwrap_or(0);
 
             rpc_games.push(instance_status::Server {
-                path: format!("{}", game.root().display()),
+                path: format!("{}", server.root().display()),
                 status,
                 server_id,
             });
@@ -348,350 +322,250 @@ impl Modtorio {
         *self.status.lock().await
     }
 
+    /// Returns this instance's status as an RPC response.
+    async fn get_rpc_instance_status(&self, _req: rpc::Empty) -> RpcResult<rpc::InstanceStatus> {
+        let uptime = self.get_uptime().await.num_seconds();
+        let servers = self.get_rpc_servers().await;
+        let instance_status = self.get_instance_status().await;
+
+        Ok(rpc::InstanceStatus {
+            uptime,
+            servers,
+            instance_status: instance_status as i32,
+        })
+    }
+
     /// Imports a new Factorio instance from a given path to its root directory.
-    async fn import_game<P>(
-        self,
-        path: P,
-        settings: Option<String>,
-        whitelist: Option<String>,
-        adminlist: Option<String>,
-        banlist: Option<String>,
-        prog_tx: AsyncProgressChannel,
-    ) where
-        P: AsRef<Path>,
-    {
-        if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
-            send_error_status(&prog_tx, e).await;
-            return;
-        }
-
-        if self.game_exists_by_path(&path).await {
-            error!(
-                "RPC tried to import already existing game from path {}",
-                path.as_ref().display()
-            );
-            send_error_status(&prog_tx, RpcError::GameAlreadyExists(path.as_ref().to_path_buf())).await;
-            return;
-        }
-
-        let path = path.as_ref().to_path_buf();
+    async fn import_game(self, msg: rpc::ImportRequest, prog_tx: AsyncProgressChannel) {
         task::spawn(async move {
-            let mut importer = match factorio::Importer::from_root(&path) {
-                Ok(i) => i,
-                Err(e) => {
-                    error!("Failed to create new Factorio importer: {}", e);
-                    send_error_status(&prog_tx, e).await;
-                    return;
+            let result: anyhow::Result<()> = async {
+                if self.server_exists_by_path(&msg.path).await {
+                    return Err(RpcError::GameAlreadyExists(PathBuf::from(&msg.path)).into());
                 }
-            };
 
-            if let Some(path) = settings {
-                importer = importer.with_server_settings(path);
-            }
+                let mut importer = factorio::Importer::from_root(&msg.path)?;
 
-            if let Some(path) = whitelist {
-                importer = importer.with_whitelist(path);
-            }
-
-            if let Some(path) = adminlist {
-                importer = importer.with_adminlist(path);
-            }
-
-            if let Some(path) = banlist {
-                importer = importer.with_banlist(path);
-            }
-
-            let game = match importer
-                .with_status_updates(prog_tx.clone())
-                .import(
-                    Arc::clone(&self.config),
-                    Arc::clone(&self.portal),
-                    Arc::clone(&self.store),
-                )
-                .await
-            {
-                Ok(game) => {
-                    info!("Imported new Factorio server instance from {}", path.display());
-                    if !send_status(&prog_tx, async_status::indefinite("Game imported")).await {
-                        return;
-                    }
-                    game
+                if let Some(path) = msg.settings.map_to_option() {
+                    importer = importer.with_server_settings(path);
                 }
-                Err(e) => {
-                    error!("Failed to import game: {}", e);
-                    send_error_status(&prog_tx, e).await;
-                    return;
+
+                if let Some(path) = msg.whitelist.map_to_option() {
+                    importer = importer.with_whitelist(path);
                 }
-            };
 
-            if let Err(e) = game.update_store(Some(prog_tx.clone())).await {
-                error!("Failed to update game store: {}", e);
-                send_error_status(&prog_tx, e).await;
-                return;
+                if let Some(path) = msg.adminlist.map_to_option() {
+                    importer = importer.with_adminlist(path);
+                }
+
+                if let Some(path) = msg.banlist.map_to_option() {
+                    importer = importer.with_banlist(path);
+                }
+
+                let server = importer
+                    .with_status_updates(prog_tx.clone())
+                    .import(
+                        Arc::clone(&self.config),
+                        Arc::clone(&self.portal),
+                        Arc::clone(&self.store),
+                    )
+                    .await?;
+
+                server.update_store(Some(prog_tx.clone())).await?;
+                self.servers.lock().await.push(server);
+                Ok(())
             }
-
-            self.games.lock().await.push(game);
-            send_status(&prog_tx, async_status::done()).await;
+            .await;
+            rpc_handle_result(result.context("Failed to import server"), &prog_tx).await;
         });
     }
 
-    /// Updates a given game instance's store.
-    async fn update_store(self, server_id: GameStoreId, prog_tx: AsyncProgressChannel) {
-        if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
-            send_error_status(&prog_tx, e).await;
-            return;
-        }
-
+    /// Updates a given server instance's store.
+    async fn update_store(self, msg: rpc::UpdateStoreRequest, prog_tx: AsyncProgressChannel) {
         task::spawn(async move {
-            let mut games = self.games.lock().await;
-            match find_server_mut(server_id, &mut games).await {
-                Ok(game) => {
-                    if let Err(e) = game.update_store(Some(prog_tx.clone())).await {
-                        error!("Failed to update game store: {}", e);
-                        send_error_status(&prog_tx, e).await;
-                        return;
-                    }
-
-                    send_status(&prog_tx, async_status::done()).await
-                }
-                Err(e) => send_error_status(&prog_tx, e).await,
-            };
+            let result: anyhow::Result<()> = async {
+                let mut servers = self.servers.lock().await;
+                let server = find_server_mut(msg.server_id, &mut servers).await?;
+                server.update_store(Some(prog_tx.clone())).await?;
+                Ok(())
+            }
+            .await;
+            rpc_handle_result(result, &prog_tx).await;
         });
     }
 
-    /// Installs a mod to a given game instance.
-    async fn install_mod(
-        self,
-        server_id: GameStoreId,
-        mod_name: String,
-        version: Option<HumanVersion>,
-        prog_tx: AsyncProgressChannel,
-    ) {
-        if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
-            send_error_status(&prog_tx, e).await;
-            return;
-        }
-
+    /// Installs a mod to a given server instance.
+    async fn install_mod(self, msg: rpc::InstallModRequest, prog_tx: AsyncProgressChannel) {
         task::spawn(async move {
-            let mut games = self.games.lock().await;
-            match find_server_mut(server_id, &mut games).await {
-                Ok(game) => {
-                    if let Err(e) = game
-                        .mods_mut()
-                        .add_from_portal(&mod_name, version, Some(prog_tx.clone()))
-                        .await
-                    {
-                        if let Some(ModPortalError::ClientError(reqwest::StatusCode::NOT_FOUND)) = e.downcast_ref() {
-                            error!("Failed to install mod '{}': not found ({})", mod_name, e);
-                            send_error_status(&prog_tx, RpcError::NoSuchMod(mod_name)).await;
-                        } else {
-                            error!("Failed to install mod '{}': {}", mod_name, e);
-                            send_error_status(&prog_tx, e).await;
-                        }
-                        return;
-                    }
+            let result: anyhow::Result<()> = async {
+                let mut servers = self.servers.lock().await;
+                let server = find_server_mut(msg.server_id, &mut servers).await?;
+                server
+                    .mods_mut()
+                    .add_from_portal(
+                        &msg.mod_name,
+                        msg.mod_version.map(HumanVersion::from),
+                        Some(prog_tx.clone()),
+                    )
+                    .await?;
 
-                    send_status(&prog_tx, async_status::done()).await
-                }
-                Err(e) => send_error_status(&prog_tx, e).await,
-            };
+                Ok(())
+            }
+            .await;
+            rpc_handle_result(result.context("Failed to install mod"), &prog_tx).await;
         });
     }
 
-    /// Updates the installed mods of a given game instance.
-    async fn update_mods(self, server_id: GameStoreId, prog_tx: AsyncProgressChannel) {
-        if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
-            send_error_status(&prog_tx, e).await;
-            return;
-        }
-
+    /// Updates the installed mods of a given server instance.
+    async fn update_mods(self, msg: rpc::UpdateModsRequest, prog_tx: AsyncProgressChannel) {
         task::spawn(async move {
-            let mut games = self.games.lock().await;
-            match find_server_mut(server_id, &mut games).await {
-                Ok(game) => {
-                    if let Err(e) = game.mods_mut().update(Some(prog_tx.clone())).await {
-                        error!("Failed to update mods: {}", e);
-                        send_error_status(&prog_tx, e).await;
-                        return;
-                    }
-
-                    send_status(&prog_tx, async_status::done()).await
-                }
-                Err(e) => send_error_status(&prog_tx, e).await,
-            };
+            let result: anyhow::Result<()> = async {
+                let mut servers = self.servers.lock().await;
+                let server = find_server_mut(msg.server_id, &mut servers).await?;
+                server.mods_mut().update(Some(prog_tx.clone())).await?;
+                Ok(())
+            }
+            .await;
+            rpc_handle_result(result.context("Failed to update mods"), &prog_tx).await;
         });
     }
 
-    /// Updates the installed mods of a given game instance.
-    async fn ensure_mod_dependencies(self, server_id: GameStoreId, prog_tx: AsyncProgressChannel) {
-        if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
-            send_error_status(&prog_tx, e).await;
-            return;
-        }
-
+    /// Updates the installed mods of a given server instance.
+    async fn ensure_mod_dependencies(self, msg: rpc::EnsureModDependenciesRequest, prog_tx: AsyncProgressChannel) {
         task::spawn(async move {
-            let mut games = self.games.lock().await;
-            match find_server_mut(server_id, &mut games).await {
-                Ok(game) => {
-                    if let Err(e) = game.mods_mut().ensure_dependencies(Some(prog_tx.clone())).await {
-                        error!("Failed to ensure mod dependencies: {}", e);
-                        send_error_status(&prog_tx, e).await;
-                        return;
-                    }
-
-                    send_status(&prog_tx, async_status::done()).await
-                }
-                Err(e) => send_error_status(&prog_tx, e).await,
-            };
+            let result: anyhow::Result<()> = async {
+                let mut servers = self.servers.lock().await;
+                let server = find_server_mut(msg.server_id, &mut servers).await?;
+                server.mods_mut().ensure_dependencies(Some(prog_tx.clone())).await?;
+                Ok(())
+            }
+            .await;
+            rpc_handle_result(result.context("Failed to ensure mod dependencies"), &prog_tx).await;
         });
     }
 
-    /// Retrieves a given game instance's server settings.
-    async fn get_server_settings(&self, server_id: GameStoreId) -> anyhow::Result<rpc::ServerSettings> {
-        self.assert_instance_status(instance_status::Status::Running).await?;
+    /// Retrieves a given server instance's server settings.
+    async fn get_server_settings(&self, msg: rpc::GetServerSettingsRequest) -> RpcResult<rpc::ServerSettings> {
+        let mut servers = self.servers.lock().await;
+        let server = find_server_mut(msg.server_id, &mut servers).await?;
 
-        let mut games = self.games.lock().await;
-        let game = find_server_mut(server_id, &mut games).await?;
         let mut rpc_server_settings = rpc::ServerSettings::default();
-        game.settings().to_rpc_format(&mut rpc_server_settings);
+        server.settings().to_rpc_format(&mut rpc_server_settings);
 
         Ok(rpc_server_settings)
     }
 
-    /// Sets a given game instance's server settings.
-    async fn set_server_settings(
-        &self,
-        server_id: GameStoreId,
-        settings: Option<rpc::ServerSettings>,
-    ) -> anyhow::Result<()> {
-        self.assert_instance_status(instance_status::Status::Running).await?;
+    /// Sets a given server instance's server settings.
+    async fn set_server_settings(&self, msg: rpc::SetServerSettingsRequest) -> RpcResult<()> {
+        let mut servers = self.servers.lock().await;
+        let server = find_server_mut(msg.server_id, &mut servers).await?;
 
-        let mut games = self.games.lock().await;
-        let game = find_server_mut(server_id, &mut games).await?;
-
-        if let Some(settings) = settings {
-            info!("Updating server ID {}'s settings", server_id);
-            game.settings_mut().modify_self_with_rpc(&settings)?;
+        if let Some(settings) = msg.settings {
+            info!("Updating server ID {}'s settings", msg.server_id);
+            server.settings_mut().modify_self_with_rpc(&settings)?;
         } else {
-            info!("Resetting server ID {}'s settings to default", server_id);
-            *game.settings_mut() = Default::default();
+            info!("Resetting server ID {}'s settings to default", msg.server_id);
+            *server.settings_mut() = Default::default();
         };
 
         Ok(())
     }
 
     /// Executes a server control action on a server.
-    async fn execute_server_control_action(
-        self,
-        action: ServerControlAction,
-        server_id: GameStoreId,
-        prog_tx: AsyncProgressChannel,
-    ) {
-        if let Err(e) = self.assert_instance_status(instance_status::Status::Running).await {
-            send_error_status(&prog_tx, e).await;
-            return;
-        }
+    async fn execute_server_control_action(self, msg: rpc::ServerControlActionRequest, prog_tx: AsyncProgressChannel) {
+        use server_control_action_request::{Action, Restart, Stop};
 
         task::spawn(async move {
-            let mut servers = self.games.lock().await;
-            let server = match find_server_mut(server_id, &mut servers).await {
-                Ok(game) => game,
-                Err(e) => {
-                    send_error_status(&prog_tx, e).await;
-                    return;
-                }
-            };
+            let result: anyhow::Result<()> = async {
+                let mut servers = self.servers.lock().await;
+                let server = find_server_mut(msg.server_id, &mut servers).await?;
 
-            let result = match action {
-                ServerControlAction::Run => {
-                    info!("Running server ID {}", server_id);
-                    server.run().await
-                }
-                ServerControlAction::Kill => {
-                    info!("Killing server ID {}", server_id);
-                    server.kill().await
-                }
-                ServerControlAction::Shutdown { timeout_override } => {
-                    info!("Gracefully shutting down server ID {}", server_id);
-                    send_status(
-                        &prog_tx,
-                        async_status::indefinite("Waiting for the server to be empty..."),
-                    )
-                    .await;
+                match msg.action {
+                    Some(Action::Start { .. }) => {
+                        info!("Starting server ID {}", msg.server_id);
+                        server.run().await?;
+                    }
+                    Some(Action::Kill { .. }) => {
+                        info!("Killing server ID {}", msg.server_id);
+                        server.kill().await?;
+                    }
+                    Some(Action::Stop(Stop { timeout_override })) => {
+                        info!("Gracefully shutting down server ID {}", msg.server_id);
+                        send_status(
+                            &prog_tx,
+                            async_status::indefinite("Waiting for the server to be empty..."),
+                        )
+                        .await;
 
-                    let timeout_override = if timeout_override == 0 {
-                        None
-                    } else {
-                        debug!("Using timeout override: {}", timeout_override);
-                        Some(timeout_override)
-                    };
+                        let timeout_override = if timeout_override == 0 {
+                            None
+                        } else {
+                            debug!("Using timeout override: {}", timeout_override);
+                            Some(timeout_override)
+                        };
 
-                    server.graceful_shutdown(timeout_override).await
-                }
-                ServerControlAction::Restart { timeout_override } => {
-                    info!("Gracefully restarting server ID {}", server_id);
-                    send_status(
-                        &prog_tx,
-                        async_status::indefinite("Waiting for the server to be empty..."),
-                    )
-                    .await;
+                        server.graceful_shutdown(timeout_override).await?;
+                    }
+                    Some(Action::Restart(Restart { timeout_override })) => {
+                        info!("Gracefully restarting server ID {}", msg.server_id);
+                        send_status(
+                            &prog_tx,
+                            async_status::indefinite("Waiting for the server to be empty..."),
+                        )
+                        .await;
 
-                    let timeout_override = if timeout_override == 0 {
-                        None
-                    } else {
-                        debug!("Using timeout override: {}", timeout_override);
-                        Some(timeout_override)
-                    };
+                        let timeout_override = if timeout_override == 0 {
+                            None
+                        } else {
+                            debug!("Using timeout override: {}", timeout_override);
+                            Some(timeout_override)
+                        };
 
-                    server.graceful_restart(timeout_override).await
+                        server.graceful_restart(timeout_override).await?;
+                    }
+                    Some(Action::ForceRestart { .. }) => {
+                        info!("Forcefully restarting server ID {}", msg.server_id);
+                        server.force_restart().await?;
+                    }
+                    None => return Err(RpcError::MissingArgument.into()),
                 }
 
-                ServerControlAction::ForceRestart => {
-                    info!("Forcefully restarting server ID {}", server_id);
-                    server.force_restart().await
-                }
-            };
-
-            match result {
-                Ok(_) => {
-                    info!("Server control action {} succeeded on server ID {}", action, server_id);
-                    send_status(&prog_tx, async_status::done()).await;
-                }
-                Err(e) => {
-                    error!(
-                        "Server control action {} failed on server ID {}: {}",
-                        action, server_id, e
-                    );
-                    send_error_status(&prog_tx, e).await;
-                }
+                Ok(())
             }
+            .await;
+            rpc_handle_result(result.context("Failed to execute server control action"), &prog_tx).await;
         });
     }
 
-    /// Sends a command to a given game instance.
-    async fn send_server_command(
-        &self,
-        server_id: GameStoreId,
-        command: Option<send_command_request::Command>,
-    ) -> anyhow::Result<()> {
-        self.assert_instance_status(instance_status::Status::Running).await?;
-
-        let mut games = self.games.lock().await;
-        let game = find_server_mut(server_id, &mut games).await?;
-        let command = command.ok_or(RpcError::MissingArgument)?;
-        game.send_command(command.into()).await?;
+    /// Sends a command to a given server instance.
+    async fn send_server_command(&self, msg: rpc::SendCommandRequest) -> RpcResult<()> {
+        let mut servers = self.servers.lock().await;
+        let server = find_server_mut(msg.server_id, &mut servers).await?;
+        let command = msg.command.ok_or(RpcError::MissingArgument)?;
+        server.send_command(command.into()).await?;
 
         Ok(())
     }
 
     /// Returns a given server's status.
-    async fn get_server_status(&self, server_id: GameStoreId) -> anyhow::Result<ServerStatus> {
-        self.assert_instance_status(instance_status::Status::Running).await?;
+    async fn get_server_status(&self, server_id: GameStoreId) -> RpcResult<ServerStatus> {
+        let mut servers = self.servers.lock().await;
+        let server = find_server_mut(server_id, &mut servers).await?;
 
-        let mut games = self.games.lock().await;
-        let game = find_server_mut(server_id, &mut games).await?;
+        Ok(server.status().await)
+    }
 
-        Ok(game.status().await)
+    /// Returns a given server's status.
+    async fn get_rpc_server_status(&self, msg: rpc::ServerStatusRequest) -> RpcResult<rpc::ServerStatus> {
+        let status = self.get_server_status(msg.server_id).await?;
+        Ok(status.to_rpc_server_status().await)
+    }
+
+    /// Returns a new `RpcHandler` with `self` and a given RPC request.
+    fn rpc_handler<'a, T>(&'a self, req: Request<T>) -> RpcHandler<'a, T>
+    where
+        T: std::fmt::Debug,
+    {
+        RpcHandler::new(self, req)
     }
 }
 
@@ -703,264 +577,122 @@ impl mod_rpc_server::ModRpc for Modtorio {
     type UpdateModsStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
     type EnsureModDependenciesStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
 
-    type RunServerStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
-    type KillServerStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
-    type StopServerStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
-    type RestartServerStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
-    type ForceRestartServerStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
+    type ServerControlActionStream = mpsc::Receiver<Result<rpc::Progress, Status>>;
 
     async fn get_version_information(
         &self,
         req: Request<rpc::Empty>,
     ) -> Result<Response<rpc::VersionInformation>, Status> {
-        log_rpc_request(&req);
-
-        respond(rpc::VersionInformation {
-            version: Some((*HVER_VERSION).into()),
-            protocol_version: Some(
-                rpc::VERSION
-                    .parse::<HumanVersion>()
-                    .expect("failed to parse RPC protocol buffer specification version as HumanVersion")
-                    .into(),
-            ),
-        })
+        self.rpc_handler(req)
+            .respond(rpc::VersionInformation {
+                version: Some((*HVER_VERSION).into()),
+                protocol_version: Some(
+                    rpc::VERSION
+                        .parse::<HumanVersion>()
+                        .expect("failed to parse RPC protocol buffer specification version as HumanVersion")
+                        .into(),
+                ),
+            })
+            .await
     }
 
     async fn get_instance_status(&self, req: Request<rpc::Empty>) -> Result<Response<rpc::InstanceStatus>, Status> {
-        log_rpc_request(&req);
-
-        let uptime = self.get_uptime().await;
-        let servers = self.get_rpc_servers().await;
-        let instance_status = self.get_instance_status().await;
-
-        respond(rpc::InstanceStatus {
-            uptime: uptime.num_seconds(),
-            servers,
-            instance_status: instance_status.into(),
-        })
+        self.rpc_handler(req).result(Self::get_rpc_instance_status).await
     }
 
-    // I tried to macro these repetitive functions into DRYness but the tonic::async_trait macro messes with them in
-    // some funky way that a macro_rules! didn't work as I'd hoped and I just couldn't bother to figure it out
     async fn import_game(&self, req: Request<rpc::ImportRequest>) -> Result<Response<Self::ImportGameStream>, Status> {
-        log_rpc_request(&req);
-        let (tx, rx) = channel();
-
-        let msg = req.into_inner();
-        self.clone()
-            .import_game(
-                msg.path,
-                msg.settings.map_to_option(),
-                msg.whitelist.map_to_option(),
-                msg.adminlist.map_to_option(),
-                msg.banlist.map_to_option(),
-                tx,
-            )
-            .await;
-
-        respond(rx)
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .stream(Self::import_game)
+            .await
     }
 
     async fn update_store(
         &self,
         req: Request<rpc::UpdateStoreRequest>,
     ) -> Result<Response<Self::UpdateStoreStream>, Status> {
-        log_rpc_request(&req);
-        let (tx, rx) = channel();
-
-        let msg = req.into_inner();
-        self.clone().update_store(msg.server_id, tx).await;
-
-        respond(rx)
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .stream(Self::update_store)
+            .await
     }
 
     async fn install_mod(
         &self,
         req: Request<rpc::InstallModRequest>,
     ) -> Result<Response<Self::InstallModStream>, Status> {
-        log_rpc_request(&req);
-        let (tx, rx) = channel();
-
-        let msg = req.into_inner();
-        let version = msg.mod_version.map(HumanVersion::from);
-        self.clone().install_mod(msg.server_id, msg.mod_name, version, tx).await;
-
-        respond(rx)
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .stream(Self::install_mod)
+            .await
     }
 
     async fn update_mods(
         &self,
         req: Request<rpc::UpdateModsRequest>,
     ) -> Result<Response<Self::UpdateModsStream>, Status> {
-        log_rpc_request(&req);
-        let (tx, rx) = channel();
-
-        let msg = req.into_inner();
-        self.clone().update_mods(msg.server_id, tx).await;
-
-        respond(rx)
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .stream(Self::update_mods)
+            .await
     }
 
     async fn ensure_mod_dependencies(
         &self,
         req: Request<rpc::EnsureModDependenciesRequest>,
     ) -> Result<Response<Self::EnsureModDependenciesStream>, Status> {
-        log_rpc_request(&req);
-        let (tx, rx) = channel();
-
-        let msg = req.into_inner();
-        self.clone().ensure_mod_dependencies(msg.server_id, tx).await;
-
-        respond(rx)
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .stream(Self::ensure_mod_dependencies)
+            .await
     }
 
     async fn get_server_settings(
         &self,
         req: Request<rpc::GetServerSettingsRequest>,
     ) -> Result<Response<rpc::ServerSettings>, Status> {
-        log_rpc_request(&req);
-
-        let msg = req.into_inner();
-        map_to_response(self.get_server_settings(msg.server_id).await)
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .result(Self::get_server_settings)
+            .await
     }
 
     async fn set_server_settings(
         &self,
         req: Request<rpc::SetServerSettingsRequest>,
     ) -> Result<Response<rpc::Empty>, Status> {
-        log_rpc_request(&req);
-
-        let msg = req.into_inner();
-        map_to_response(self.set_server_settings(msg.server_id, msg.settings).await)
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .result(Self::set_server_settings)
+            .await
     }
 
-    async fn run_server(&self, req: Request<rpc::RunServerRequest>) -> Result<Response<Self::RunServerStream>, Status> {
-        log_rpc_request(&req);
-        let (tx, rx) = channel();
-
-        let msg = req.into_inner();
-        self.clone()
-            .execute_server_control_action(ServerControlAction::Run, msg.server_id, tx)
-            .await;
-
-        respond(rx)
-    }
-
-    async fn kill_server(
+    async fn server_control_action(
         &self,
-        req: Request<rpc::KillServerRequest>,
-    ) -> Result<Response<Self::KillServerStream>, Status> {
-        log_rpc_request(&req);
-        let (tx, rx) = channel();
-
-        let msg = req.into_inner();
-        self.clone()
-            .execute_server_control_action(ServerControlAction::Kill, msg.server_id, tx)
-            .await;
-
-        respond(rx)
-    }
-
-    async fn stop_server(
-        &self,
-        req: Request<rpc::StopServerRequest>,
-    ) -> Result<Response<Self::StopServerStream>, Status> {
-        log_rpc_request(&req);
-        let (tx, rx) = channel();
-
-        let msg = req.into_inner();
-        self.clone()
-            .execute_server_control_action(
-                ServerControlAction::Shutdown {
-                    timeout_override: msg.timeout_override,
-                },
-                msg.server_id,
-                tx,
-            )
-            .await;
-
-        respond(rx)
-    }
-
-    async fn restart_server(
-        &self,
-        req: Request<rpc::RestartServerRequest>,
-    ) -> Result<Response<Self::RestartServerStream>, Status> {
-        log_rpc_request(&req);
-        let (tx, rx) = channel();
-
-        let msg = req.into_inner();
-        self.clone()
-            .execute_server_control_action(
-                ServerControlAction::Restart {
-                    timeout_override: msg.timeout_override,
-                },
-                msg.server_id,
-                tx,
-            )
-            .await;
-
-        respond(rx)
-    }
-
-    async fn force_restart_server(
-        &self,
-        req: Request<rpc::ForceRestartServerRequest>,
-    ) -> Result<Response<Self::ForceRestartServerStream>, Status> {
-        log_rpc_request(&req);
-        let (tx, rx) = channel();
-
-        let msg = req.into_inner();
-        self.clone()
-            .execute_server_control_action(ServerControlAction::ForceRestart, msg.server_id, tx)
-            .await;
-
-        respond(rx)
+        req: Request<rpc::ServerControlActionRequest>,
+    ) -> Result<Response<Self::ServerControlActionStream>, Status> {
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .stream(Self::execute_server_control_action)
+            .await
     }
 
     async fn send_server_command(&self, req: Request<rpc::SendCommandRequest>) -> Result<Response<rpc::Empty>, Status> {
-        log_rpc_request(&req);
-
-        let msg = req.into_inner();
-        map_to_response(self.send_server_command(msg.server_id, msg.command).await)
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .result(Self::send_server_command)
+            .await
     }
 
     async fn get_server_status(
         &self,
         req: Request<rpc::ServerStatusRequest>,
     ) -> Result<Response<rpc::ServerStatus>, Status> {
-        log_rpc_request(&req);
-
-        let msg = req.into_inner();
-        let status = match self.get_server_status(msg.server_id).await {
-            Ok(status) => Ok(status),
-            Err(e) => Err(RpcError::from(e)),
-        }?;
-        let status = status.to_rpc_server_status().await;
-        respond(status)
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .result(Self::get_rpc_server_status)
+            .await
     }
-}
-
-/// Creates a new bounded channel and returns the receiver and sender, the sender wrapped in an
-/// Arc<Mutex>.
-fn channel<T>() -> (mpsc::Sender<T>, mpsc::Receiver<T>) {
-    let (tx, rx) = mpsc::channel(64);
-    (tx, rx)
-}
-
-/// Logs a given RPC request.
-fn log_rpc_request<T: std::fmt::Debug>(request: &Request<T>) {
-    debug!(
-        "RPC request from {}: {:?}",
-        request
-            .remote_addr()
-            // TODO: this is a bit of stupid hack but; when using an Unix socket, the RPC server takes in a stream of
-            // incoming connections which *don't* include the peer's socket address. in which case the socket address
-            // here is None, so just call it "Unix"
-            .map_or_else(|| String::from("Unix"), |addr| addr.to_string()),
-        request.get_ref()
-    );
-    debug!("{:?}", request);
 }
 
 /// Sends a status update to a given channel, returning a boolean on whether the sending succeeded or not.
@@ -996,39 +728,9 @@ async fn wait_for_signal<T: Clone>(mut signal: watch::Receiver<T>) {
     signal.recv().await;
 }
 
-/// Creates a new RPC response with a given message, logs it and returns it wrapped in `Ok()`.
-fn respond<T: std::fmt::Debug>(message: T) -> Result<Response<T>, Status> {
-    let resp = Response::new(message);
-    debug!("{:?}", resp);
-    Ok(resp)
-}
-
-/// Creates a new RPC error respose, logs it and returns it.
-fn respond_err<T>(error: anyhow::Error) -> Result<Response<T>, Status> {
-    error!("RPC request failed: {}", error);
-
-    if let Some(rpc_error) = error.downcast_ref::<RpcError>() {
-        Err(rpc_error.into())
-    } else {
-        Err(RpcError::Internal(error).into())
-    }
-}
-
-/// Maps a given `anyhow::Result` into an RPC response.
-fn map_to_response<TResult, TResponse>(result: anyhow::Result<TResult>) -> Result<Response<TResponse>, Status>
-where
-    TResponse: std::fmt::Debug,
-    TResult: Into<TResponse>,
-{
-    match result {
-        Ok(result) => respond(result.into()),
-        Err(e) => respond_err(e),
-    }
-}
-
-/// Finds and returns a mutable reference to a game based on its store ID, or returns `RpcError::NoSuchGame` if the game
-/// isn't found.
-async fn find_server_mut(server_id: GameStoreId, servers: &mut Vec<Factorio>) -> anyhow::Result<&mut Factorio> {
+/// Finds and returns a mutable reference to a server based on its store ID, or returns `RpcError::NoSuchGame` if the
+/// server isn't found.
+async fn find_server_mut(server_id: GameStoreId, servers: &mut Vec<Factorio>) -> RpcResult<&mut Factorio> {
     for g in servers.iter_mut() {
         if let Some(id) = g.store_id_option().await {
             if id == server_id {
@@ -1037,5 +739,17 @@ async fn find_server_mut(server_id: GameStoreId, servers: &mut Vec<Factorio>) ->
         }
     }
 
-    Err(RpcError::NoSuchServer(server_id).into())
+    Err(RpcError::NoSuchServer(server_id))
+}
+
+/// Given a `Result` and an `AsyncProgressChannel`, logs and sends the result to the channel.
+async fn rpc_handle_result(result: anyhow::Result<()>, prog_tx: &AsyncProgressChannel) {
+    if let Err(e) = result {
+        // TODO: this doesn't seem to print the whole error message, only the first context
+        error!("RPC: {}", e);
+        send_error_status(prog_tx, e).await;
+    } else {
+        trace!("RPC task completed");
+        send_status(prog_tx, async_status::done()).await;
+    }
 }
