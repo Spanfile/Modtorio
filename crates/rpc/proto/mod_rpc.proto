@@ -223,4 +223,5 @@ message ServerSettings {
     CREATE = 3;
   }
   StartBehaviour start_behaviour = 29;
+  bool auto_start = 30;
 }

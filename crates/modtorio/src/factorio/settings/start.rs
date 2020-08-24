@@ -10,15 +10,15 @@ use serde::{Deserialize, Serialize};
 use std::str::FromStr;
 use strum_macros::{Display, EnumString};
 
-/// Represents the various start command line options.
-///
-/// Defaults to `AdminsOnly`.
+/// Represents the various start command line options and settings.
 #[derive(Deserialize, Serialize, Debug, PartialEq, Default)]
 pub struct Start {
     /// The save or scenario name to use.
     pub save_name: String,
     /// The start behaviour.
     pub behaviour: StartBehaviour,
+    /// Whether to automatically start the server.
+    pub auto: bool,
 }
 
 /// Represents the combination of the `--create`, `--start-server`, `--start-server-load-latest` and
@@ -62,6 +62,7 @@ impl Start {
         Self {
             save_name: store_format.save_name.to_owned(),
             behaviour: store_format.start_behaviour,
+            auto: store_format.auto_start,
         }
     }
 
@@ -69,6 +70,7 @@ impl Start {
     pub fn to_store_format(&self, store_format: &mut GameSettings) {
         store_format.save_name = self.save_name.to_owned();
         store_format.start_behaviour = self.behaviour;
+        store_format.auto_start = self.auto;
     }
 
     /// Mutates `self` with the value from a given RPC `ServerSettings` object.
@@ -81,6 +83,7 @@ impl Start {
             3 => StartBehaviour::Create,
             v => return Err(SettingsError::UnexpectedValue(v.to_string()).into()),
         };
+        self.auto = rpc_format.auto_start;
         Ok(())
     }
 
@@ -93,5 +96,6 @@ impl Start {
             StartBehaviour::LoadScenario => server_settings::StartBehaviour::LoadScenario.into(),
             StartBehaviour::Create => server_settings::StartBehaviour::Create.into(),
         };
+        rpc_format.auto_start = self.auto;
     }
 }
