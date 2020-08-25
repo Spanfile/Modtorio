@@ -415,6 +415,14 @@ impl Modtorio {
         });
     }
 
+    /// Removes a mod from a given server instance.
+    async fn remove_mod(&self, msg: rpc::RemoveModRequest) -> RpcResult<()> {
+        let mut servers = self.servers.lock().await;
+        let server = find_server_mut(msg.server_id, &mut servers).await?;
+        server.mods_mut().remove(&msg.mod_name).await?;
+        Ok(())
+    }
+
     /// Updates the installed mods of a given server instance.
     async fn update_mods(self, msg: rpc::UpdateModsRequest, prog_tx: AsyncProgressChannel) {
         task::spawn(async move {
@@ -624,6 +632,13 @@ impl mod_rpc_server::ModRpc for Modtorio {
         self.rpc_handler(req)
             .require_status(instance_status::Status::Running)
             .stream(Self::install_mod)
+            .await
+    }
+
+    async fn remove_mod(&self, req: Request<rpc::RemoveModRequest>) -> Result<Response<rpc::Empty>, Status> {
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .result(Self::remove_mod)
             .await
     }
 

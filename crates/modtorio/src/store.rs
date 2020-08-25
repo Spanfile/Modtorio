@@ -235,6 +235,15 @@ impl Store {
         })
     }
 
+    /// Delets all mods of a given `Game`, identified by its store ID.
+    pub async fn remove_mods_of_game(&self, game_store_id: GameStoreId) -> anyhow::Result<()> {
+        let conn = &self.conn;
+        sql!(conn => {
+            conn.execute_named(GameMod::delete(), &GameMod::select_params(&game_store_id))?;
+            Ok(())
+        })
+    }
+
     /// Stores all the mods of a `Game`. Will replace existing stored mods in the database.
     pub async fn set_mods_of_game(&self, mods: Vec<GameMod>) -> anyhow::Result<()> {
         let conn = &self.conn;
