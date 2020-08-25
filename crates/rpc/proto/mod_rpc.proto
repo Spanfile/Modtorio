@@ -9,6 +9,7 @@ service ModRpc {
   rpc UpdateStore(UpdateStoreRequest) returns (stream Progress);
 
   rpc InstallMod(InstallModRequest) returns (stream Progress);
+  rpc RemoveMod(RemoveModRequest) returns (Empty);
   rpc UpdateMods(UpdateModsRequest) returns (stream Progress);
   rpc EnsureModDependencies(EnsureModDependenciesRequest)
       returns (stream Progress);
@@ -63,6 +64,11 @@ message InstallModRequest {
   int64 server_id = 1;
   string mod_name = 2;
   Version mod_version = 3;
+}
+
+message RemoveModRequest {
+  int64 server_id = 1;
+  string mod_name = 2;
 }
 
 message UpdateModsRequest { int64 server_id = 1; }

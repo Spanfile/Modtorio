@@ -96,6 +96,7 @@ fn run_macro(input: DeriveInput) -> Result<TokenStream, MacroError> {
     let replace_into = replace_into_clause(&table_name, &macro_fields);
     let insert = insert_into_clause(&table_name, &macro_fields);
     let update = update_clause(&table_name, &macro_fields);
+    let delete = delete_clause(&table_name, &macro_fields);
 
     let params = params_fns(&macro_fields);
     let from_row = from_row_impl(&ident, gen, &macro_fields);
@@ -127,6 +128,11 @@ fn run_macro(input: DeriveInput) -> Result<TokenStream, MacroError> {
             /// Returns an SQL `UPDATE`-clause that updates a single row with all columns as values except those marked with `#[ignore_in_all_params]`, selecting the row based on the model's marked indices.
             pub fn update() -> &'static str {
                 #update
+            }
+
+            /// Returns an SQL `DELETE`-clause that deletes all rows based on the model's marked indices.
+            pub fn delete() -> &'static str {
+                #delete
             }
         }
 
@@ -168,6 +174,21 @@ fn select_clause(table_name: &str, fields: &[MacroField]) -> String {
     }
 
     format!("SELECT * FROM {} WHERE {}", table_name, conditions.join(" AND "))
+}
+
+fn delete_clause(table_name: &str, fields: &[MacroField]) -> String {
+    // DELETE * FROM game_mod WHERE game_mod.game = :id
+    let mut conditions = Vec::new();
+
+    for field in fields {
+        if !field.is_index {
+            continue;
+        }
+
+        conditions.push(sql_equals(&field.ident.to_string()));
+    }
+
+    format!("DELETE FROM {} WHERE {}", table_name, conditions.join(" AND "))
 }
 
 fn select_all_clause(table_name: &str) -> String {

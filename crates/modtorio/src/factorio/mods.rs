@@ -105,8 +105,7 @@ impl Mods {
             debug!("Updated store for {}", mod_name);
         }
 
-        // TODO: this method won't get rid of old stored mods that don't exist anymore, so they're left in the store
-        // which causes issues when importing a game from the store
+        self.store.remove_mods_of_game(game_id).await?;
         self.store.set_mods_of_game(new_game_mods.into_inner()).await?;
         info!("Updated game ID {}'s stored mods", game_id);
 
@@ -134,6 +133,20 @@ impl Mods {
         let new_mod = self.add_or_update_in_place(name, version).await?;
         info!("Added {}", new_mod.display().await);
         Ok(())
+    }
+
+    /// Removes a mod by its name.
+    pub async fn remove(&mut self, name: &str) -> anyhow::Result<()> {
+        match self.mods.entry(name.to_string()) {
+            Entry::Occupied(entry) => {
+                let fact_mod = entry.get();
+                debug!("Removing '{}' zip archive", fact_mod.name().await);
+                fs::remove_file(self.directory.join(fact_mod.zip_path().await?)).await?;
+                entry.remove();
+                Ok(())
+            }
+            Entry::Vacant(_) => Err(ModError::NoSuchMod(name.to_string()).into()),
+        }
     }
 
     /// Updates the portal info for all mods and downloads their most recent version if the
