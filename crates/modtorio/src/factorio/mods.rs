@@ -56,31 +56,34 @@ impl Mods {
     ) -> anyhow::Result<()> {
         debug!("Updating stored mods for game {}", game_id);
         let new_game_mods = Mutex::new(Vec::new());
-        let max_mods = self.mods.len() as u32;
 
-        for (index, fact_mod) in self.mods.values().enumerate() {
+        prog_tx
+            .send_status(async_status::indefinite("Updating mod infos..."))
+            .await?;
+
+        let mut update_batcher = UpdateBatcher::new(self.portal.as_ref());
+        for fact_mod in self.mods.values() {
+            update_batcher.add_mod(Arc::clone(fact_mod)).await;
+        }
+
+        debug!("Update batcher built, applying");
+        update_batcher.apply().await?;
+
+        prog_tx
+            .send_status(async_status::indefinite("Updating mod store..."))
+            .await?;
+
+        for fact_mod in self.mods.values() {
             let mod_name = fact_mod.name().await;
             let mod_display = fact_mod.display().await;
 
-            // TODO: batch the portal update
-
-            prog_tx
-                .send_status(async_status::definite(
-                    &format!("Updating mod store for {}...", mod_display),
-                    index as u32,
-                    max_mods,
-                ))
-                .await?;
-
             match fact_mod.update_store().await {
-                Ok(()) => debug!("Updated Factorio mod store for {}", mod_name),
+                Ok(()) => debug!("Updated mod store for {}", mod_name),
                 Err(e) => {
                     error!("Store update for {} failed: {}", mod_display, e);
                     continue;
                 }
             }
-
-            debug!("Updating game '{}' stored mod '{}'...", game_id, mod_name);
 
             let factorio_mod = mod_name.clone();
             let mod_version = fact_mod.own_version().await?;
@@ -102,7 +105,6 @@ impl Mods {
             // );
 
             new_game_mods.lock().await.push(store_game_mod);
-            debug!("Updated store for {}", mod_name);
         }
 
         self.store.remove_mods_of_game(game_id).await?;
