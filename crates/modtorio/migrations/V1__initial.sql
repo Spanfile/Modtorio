@@ -1,12 +1,10 @@
-DROP TABLE IF EXISTS "options";
-CREATE TABLE IF NOT EXISTS "options" (
+CREATE TABLE "options" (
 	"field" TEXT NOT NULL,
 	"value" TEXT,
 	PRIMARY KEY("field")
 );
 
-DROP TABLE IF EXISTS "factorio_mod";
-CREATE TABLE IF NOT EXISTS "factorio_mod" (
+CREATE TABLE "factorio_mod" (
 	"name" TEXT NOT NULL,
 	"author" TEXT NOT NULL,
 	"contact" TEXT,
@@ -19,8 +17,7 @@ CREATE TABLE IF NOT EXISTS "factorio_mod" (
 	PRIMARY KEY("name")
 );
 
-DROP TABLE IF EXISTS "game";
-CREATE TABLE IF NOT EXISTS "game" (
+CREATE TABLE "game" (
 	/* without AUTOINCREMENT, an integer primary key is aliased to SQLite's internal ROWID which functions better as a primary key and than autoincremented one */
 	"id" INTEGER PRIMARY KEY,
 	"path" TEXT NOT NULL,
@@ -30,8 +27,7 @@ CREATE TABLE IF NOT EXISTS "game" (
 	"adminlist_file" TEXT
 );
 
-DROP TABLE IF EXISTS "game_settings";
-CREATE TABLE IF NOT EXISTS "game_settings" (
+CREATE TABLE "game_settings" (
 	"game" INTEGER PRIMARY KEY,
 	"file_last_mtime" TEXT NOT NULL,
 	"name" TEXT NOT NULL,
@@ -72,8 +68,7 @@ CREATE TABLE IF NOT EXISTS "game_settings" (
 	FOREIGN KEY("game") REFERENCES "game"("id")
 );
 
-DROP TABLE IF EXISTS "game_mod";
-CREATE TABLE IF NOT EXISTS "game_mod" (
+CREATE TABLE "game_mod" (
 	"game" INTEGER NOT NULL,
 	"factorio_mod" TEXT NOT NULL,
 	"mod_version" TEXT NOT NULL,
@@ -85,8 +80,7 @@ CREATE TABLE IF NOT EXISTS "game_mod" (
 	FOREIGN KEY("game") REFERENCES "game"("id")
 );
 
-DROP TABLE IF EXISTS "release_dependency";
-CREATE TABLE IF NOT EXISTS "release_dependency" (
+CREATE TABLE "release_dependency" (
 	"release_mod_name" TEXT NOT NULL,
 	"release_version" TEXT NOT NULL,
 	"name" TEXT NOT NULL,
@@ -96,8 +90,7 @@ CREATE TABLE IF NOT EXISTS "release_dependency" (
 	FOREIGN KEY("release_mod_name","release_version") REFERENCES "mod_release"("factorio_mod","version")
 );
 
-DROP TABLE IF EXISTS "mod_release";
-CREATE TABLE IF NOT EXISTS "mod_release" (
+CREATE TABLE "mod_release" (
 	"factorio_mod" TEXT NOT NULL,
 	"version" TEXT NOT NULL,
 	"download_url" TEXT NOT NULL,

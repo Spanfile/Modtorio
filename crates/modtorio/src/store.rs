@@ -6,15 +6,17 @@ pub mod option;
 use crate::{error::StoreError, factorio::GameStoreId, util, util::ext::PathExt};
 use log::*;
 use models::{FactorioMod, Game, GameMod, GameSettings, ModRelease, ReleaseDependency};
+use refinery::embed_migrations;
 use rusqlite::{Connection, OptionalExtension, NO_PARAMS};
 use std::{
+    ops::DerefMut,
     path::Path,
     sync::{Arc, Mutex},
 };
 use tokio::task;
 use util::HumanVersion;
 
-include!(concat!(env!("OUT_DIR"), "/store_consts.rs"));
+embed_migrations!();
 
 /// The special value interpreted as using an in-memory SQLite database.
 pub(crate) const MEMORY_STORE: &str = "_memory";
@@ -33,14 +35,8 @@ pub struct Builder<P>
 where
     P: AsRef<Path>,
 {
-    /// The SQL schema to use for the SQLite database.
-    schema: String,
-    /// An optional pre-calculated checksum for the SQL schema.
-    schema_checksum: Option<String>,
     /// Location for the store database. Either a filesystem path, or in-memory.
     store_location: StoreLocation<P>,
-    /// Should the schema checksum not be stored as an option in the program store.
-    skip_storing_checksum: bool,
 }
 
 /// Specifies the location for the store database.
@@ -55,72 +51,25 @@ impl<P> Builder<P>
 where
     P: AsRef<Path>,
 {
-    /// Returns a new `Builder` with a given database location. The schema and its checksum are the
-    /// defaults which are found in the constants `SCHEMA` and `SCHEMA_CHECKSUM`.
+    /// Returns a new `Builder` with a given database location.
     pub fn from_location(store_location: StoreLocation<P>) -> Self {
-        Self {
-            schema: String::from(SCHEMA),
-            schema_checksum: Some(String::from(SCHEMA_CHECKSUM)),
-            store_location,
-            skip_storing_checksum: false,
-        }
-    }
-
-    /// Specifies a different schema. The pre-calculated schema checksum will be cleared and
-    /// recalculated when finalising the builder.
-    #[allow(dead_code)]
-    pub fn with_schema(self, schema: &str) -> Self {
-        Self {
-            schema: String::from(schema),
-            schema_checksum: None,
-            ..self
-        }
-    }
-
-    /// Specify whether to skip storing the schema checksum in the store options.
-    #[allow(dead_code)]
-    pub fn skip_storing_checksum(self, skip: bool) -> Self {
-        Self {
-            skip_storing_checksum: skip,
-            ..self
-        }
+        Self { store_location }
     }
 
     /// Finalise the builder and return a new `Store`.
     pub async fn build(self) -> anyhow::Result<Store> {
-        let schema_checksum = if let Some(checksum) = self.schema_checksum {
-            checksum
-        } else {
-            trace!("Missing schema checksum, calculating");
-            util::checksum::blake2b_string(&self.schema)
-        };
-        trace!("Store database schema checksum: {}", schema_checksum);
-
-        let (store_file_exists, conn) = match self.store_location {
+        let conn = match self.store_location {
             StoreLocation::Memory => {
                 // when opening an in-memory database, it will initially be empty, i.e. it didn't
                 // exist beforehand
-                (false, Connection::open_in_memory()?)
+                Connection::open_in_memory()?
             }
-            StoreLocation::File(path) => (path.as_ref().exists(), open_file_connection(path)?),
+            StoreLocation::File(path) => open_file_connection(path)?,
         };
         let conn = Arc::new(Mutex::new(conn));
-
         let store = Store { conn };
-        debug!("Store database exists: {}", store_file_exists);
 
-        let checksums_match = store_file_exists && checksum_matches_meta(&store, &schema_checksum).await?;
-        debug!("Schema checksums match: {}", checksums_match);
-
-        if !checksums_match {
-            // TODO: data migration when the schema changes
-            warn!("Store database schema checksum mismatch - applying new schema");
-            apply_store_schema(&store, &self.schema).await?;
-
-            if !self.skip_storing_checksum {
-                store_schema_checksum(&store, &schema_checksum).await?;
-            }
-        }
+        store.run_migrations().await?;
 
         Ok(store)
     }
@@ -155,28 +104,6 @@ where
     }
 }
 
-/// Applies a given SQL schema to a given `Store`.
-async fn apply_store_schema(store: &Store, schema: &str) -> anyhow::Result<()> {
-    trace!("Applying database schema...");
-    trace!("{}", schema);
-
-    store.apply_schema(schema).await?;
-    Ok(())
-}
-
-/// Stores a given schema checksum to the program store's `SchemaChecksum` option.
-async fn store_schema_checksum(store: &Store, checksum: &str) -> anyhow::Result<()> {
-    trace!("Storing schema checksum...");
-
-    store
-        .set_option(option::Value::new(
-            option::Field::SchemaChecksum,
-            Some(String::from(checksum)),
-        ))
-        .await?;
-    Ok(())
-}
-
 impl<P> From<P> for StoreLocation<P>
 where
     P: AsRef<Path>,
@@ -190,25 +117,6 @@ where
     }
 }
 
-/// Compares a given store schema checksum string to what a given store's metadata possibly
-/// contains. Returns a `Result<bool>` corresponding to whether the store's existing schema checksum
-/// matches the wanted one. Returns `Ok(false)` if the store doesn't contain the [schema checksum
-/// field][Field]. Returns an error if reading the database meta table fails.
-///
-/// [Field]: store_meta::Field#variant.SchemaChecksum
-async fn checksum_matches_meta(store: &Store, wanted_checksum: &str) -> anyhow::Result<bool> {
-    // TODO: the checksum won't match if the _meta table doesn't exist - return false instead of the
-    // error
-    if let Some(metavalue) = store.get_option(option::Field::SchemaChecksum).await? {
-        if let Some(existing_checksum) = metavalue.value() {
-            trace!("Got existing schema checksum: {}", existing_checksum);
-            return Ok(wanted_checksum == existing_checksum);
-        }
-    }
-
-    Ok(false)
-}
-
 /// Accepts a reference to an `Arc<Mutex<Connection>>` and a block where that reference can be used
 /// to access the database connection. The block will run a blocking thread with
 /// `task::spawn_blocking`. Returns what the given block returns.
@@ -218,7 +126,8 @@ macro_rules! sql {
         Ok({
             let _c = Arc::clone(&$conn);
             task::spawn_blocking(move || -> anyhow::Result<_> {
-                let $conn = _c.lock().unwrap();
+                #[allow(unused_mut)]
+                let mut $conn = _c.lock().unwrap();
                 $b
             })
             .await??
@@ -227,19 +136,12 @@ macro_rules! sql {
 }
 
 impl Store {
-    /// Applies a given schema to the database.
-    async fn apply_schema(&self, schema: &str) -> anyhow::Result<()> {
-        let conn = Arc::clone(&self.conn);
-        let schema = String::from(schema);
-        let result = task::spawn_blocking(move || -> anyhow::Result<()> {
-            conn.lock()
-                .unwrap()
-                .execute_batch(&format!("BEGIN TRANSACTION; {} COMMIT;", schema))?;
-            Ok(())
+    /// Runs the database migration scripts on this store and returns a report of applied migrations.
+    async fn run_migrations(&self) -> anyhow::Result<refinery::Report> {
+        let conn = &self.conn;
+        sql!(conn => {
+            Ok(migrations::runner().run(conn.deref_mut())?)
         })
-        .await?;
-
-        Ok(result?)
     }
 
     /// Begins a new transaction in the database with `BEGIN TRANSACTION;`.
@@ -464,25 +366,25 @@ impl Store {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::store;
 
-    async fn get_test_store(schema: &str) -> Store {
-        store::Builder::<String>::from_location(StoreLocation::Memory)
-            .with_schema(schema)
-            .skip_storing_checksum(true)
+    async fn get_test_store() -> Store {
+        let store = Builder::<String>::from_location(StoreLocation::Memory)
             .build()
             .await
-            .expect("failed to build test store")
+            .expect("failed to build store");
+        store
+            .set_option(option::Value::new(
+                option::Field::PortalUsername,
+                Some("value".to_string()),
+            ))
+            .await
+            .expect("failed to set option");
+        store
     }
 
     #[tokio::test]
     async fn set_option() {
-        const SCHEMA: &str = r#"CREATE TABLE "options" (
-"field"	TEXT NOT NULL,
-"value"	TEXT,
-PRIMARY KEY("field")
-);"#;
-        let store = get_test_store(SCHEMA).await;
+        let store = get_test_store().await;
 
         store.begin_transaction().expect("failed to begin transaction");
         store
@@ -497,13 +399,7 @@ PRIMARY KEY("field")
 
     #[tokio::test]
     async fn get_option() {
-        const SCHEMA: &str = r#"CREATE TABLE "options" (
-"field"	TEXT NOT NULL,
-"value"	TEXT,
-PRIMARY KEY("field")
-);
-INSERT INTO options("field", "value") VALUES("PortalUsername", "value");"#;
-        let store = get_test_store(SCHEMA).await;
+        let store = get_test_store().await;
 
         let got_value = store
             .get_option(option::Field::PortalUsername)

@@ -17,8 +17,6 @@ pub enum Field {
     PortalUsername,
     /// The token to the mod portal.
     PortalToken,
-    /// The current store database SQL schema's checksum. Used to detect changes in the SQL schema.
-    SchemaChecksum,
 }
 
 /// A store option value.
