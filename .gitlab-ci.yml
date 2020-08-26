@@ -7,5 +7,7 @@ build:
 
 test:
   stage: test
+  dependencies:
+    - build
   script:
     - cargo test
