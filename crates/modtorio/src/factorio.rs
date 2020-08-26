@@ -17,7 +17,7 @@ use crate::{
     },
     Config, ModPortal,
 };
-use executable::{Executable, ExecutableEvent, GameEvent};
+use executable::{EventType, Executable, ExecutableEvent, GameEvent};
 use log::*;
 use models::GameSettings;
 use mods::{Mods, ModsBuilder};
@@ -638,8 +638,8 @@ impl Importer {
 async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &RwLock<ServerStatus>) {
     debug!("Game ID {} got new game event: {:?}", store_id, event);
 
-    match event {
-        GameEvent::GameStateChanged { from: _, to } => {
+    match event.event_type {
+        EventType::GameStateChanged { from: _, to } => {
             let mut status_w = status.write().await;
             status_w.set_in_game_status(to);
 
@@ -656,26 +656,79 @@ async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &Rw
                         status_w.set_game_status(ExecutionStatus::ShuttingDown);
                     }
                 }
-                in_game_status => {
-                    trace!("Unhandled in-game status: {:?}", in_game_status);
+                _ => {
+                    debug!("Unhandled in-game status: {:?}", to);
                 }
             }
         }
-        GameEvent::RefusingConnection { peer, username, reason } => {
-            info!(
-                "Game ID {} refusing connection for '{}' (addr {}): {}",
-                store_id, username, peer, reason
-            );
-        }
-        GameEvent::PeerJoined { username } => match status.write().await.add_player(&username).await {
+        EventType::RefusingConnection { peer, username, reason } => info!(
+            "Game ID {} refusing connection for '{}' (addr {}): {}",
+            store_id, username, peer, reason
+        ),
+        EventType::PeerJoined { username } => match status.write().await.add_player(&username).await {
             Ok(_) => info!("Game ID {}: {} joined the game", store_id, username),
             Err(e) => error!("Failed to add new player in game ID {}: {}", store_id, e),
         },
-        GameEvent::PeerLeft { username } => match status.write().await.remove_player(&username).await {
+        EventType::PeerLeft { username } => match status.write().await.remove_player(&username).await {
             Ok(_) => info!("Game ID {}: {} left the game", store_id, username),
             Err(e) => error!("Failed to remove player from game ID {}: {}", store_id, e),
         },
-        _ => {}
+        EventType::SavingMap { filename } => {
+            info!("Game ID {} saving the map to {}", store_id, filename);
+
+            let mut status_w = status.write().await;
+            status_w.set_in_game_status(InGameStatus::InGameSavingMap);
+        }
+        EventType::SavingFinished => {
+            info!("Game ID {} finished saving the map", store_id);
+
+            let mut status_w = status.write().await;
+            status_w.set_in_game_status(InGameStatus::InGame);
+        }
+        EventType::PlayerBanned {
+            player,
+            banned_by,
+            reason,
+        } => match status.write().await.remove_player(&player).await {
+            Ok(_) => info!(
+                "Game ID {}: player {} was banned by {} for the reason: {}",
+                store_id, player, banned_by, reason
+            ),
+            Err(e) => error!(
+                "Failed to remove banned player {} (by: {}, reason: {}) from game ID {}: {}",
+                player, banned_by, reason, store_id, e
+            ),
+        },
+        EventType::PlayerUnbanned { player, unbanned_by } => info!(
+            "Game ID {}: player {} was unbanned by {}",
+            store_id, player, unbanned_by
+        ),
+        EventType::PlayerKicked {
+            player,
+            kicked_by,
+            reason,
+        } => match status.write().await.remove_player(&player).await {
+            Ok(_) => info!(
+                "Game ID {}: player {} was kicked by {} for the reason: {}",
+                store_id, player, kicked_by, reason
+            ),
+            Err(e) => error!(
+                "Failed to remove kicked player {} (by: {}, reason: {}) from game ID {}: {}",
+                player, kicked_by, reason, store_id, e
+            ),
+        },
+        EventType::PlayerPromoted { player, promoted_by } => info!(
+            "Game ID {}: player {} was promoted to admin by {}",
+            store_id, player, promoted_by
+        ),
+        EventType::PlayerDemoted { player, demoted_by } => info!(
+            "Game ID {}: player {} was demoted from admin by {}",
+            store_id, player, demoted_by
+        ),
+        EventType::Chat { player, message } => info!("Game ID {}: {}: {}", store_id, player, message),
+        _ => {
+            debug!("Unhandled GameEvent: {:?}", event);
+        }
     }
 }
 
