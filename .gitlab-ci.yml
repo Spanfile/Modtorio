@@ -1,10 +1,5 @@
 image: rustlang/rust:nightly
 
-before_script:
-  - apt update
-  - apt install libsqlite3-dev
-  - cargo --version
-
 build:
   script:
     - cargo build
