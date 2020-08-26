@@ -1,13 +1,6 @@
-image: rustlang/rust:nightly
+image: "rustlang/rust:nightly"
 
-build:
-  stage: build
+test:cargo:
   script:
-    - cargo build
-
-test:
-  stage: test
-  dependencies:
-    - build
-  script:
-    - cargo test
+    - rustc --version && cargo --version
+    - cargo test --workspace --verbose
