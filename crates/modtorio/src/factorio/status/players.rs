@@ -58,7 +58,7 @@ impl From<Player> for rpc::server_status::Player {
     fn from(p: Player) -> Self {
         Self {
             username: p.username,
-            peer_address: None,
+            peer_address: p.peer_address.map(rpc::SocketAddr::from),
             session_time: (Utc::now() - p.join_time).num_seconds(),
         }
     }

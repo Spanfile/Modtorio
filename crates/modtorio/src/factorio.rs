@@ -665,11 +665,11 @@ async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &Rw
             "Game ID {} refusing connection for '{}' (addr {}): {}",
             store_id, username, peer, reason
         ),
-        EventType::PeerJoined { username } => match status.write().await.add_player(&username).await {
+        EventType::PlayerJoined { username } => match status.write().await.add_player(&username).await {
             Ok(_) => info!("Game ID {}: {} joined the game", store_id, username),
             Err(e) => error!("Failed to add new player in game ID {}: {}", store_id, e),
         },
-        EventType::PeerLeft { username } => match status.write().await.remove_player(&username).await {
+        EventType::PlayerLeft { username } => match status.write().await.remove_player(&username).await {
             Ok(_) => info!("Game ID {}: {} left the game", store_id, username),
             Err(e) => error!("Failed to remove player from game ID {}: {}", store_id, e),
         },

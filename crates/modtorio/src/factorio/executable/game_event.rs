@@ -44,13 +44,13 @@ pub enum EventType {
         /// The peer's current state.
         new_state: String,
     },
-    /// A peer joined the game.
-    PeerJoined {
+    /// A player joined the game.
+    PlayerJoined {
         /// The peer's username
         username: String,
     },
-    /// A peer left the game.
-    PeerLeft {
+    /// A player left the game.
+    PlayerLeft {
         /// The peer's username
         username: String,
     },
@@ -117,8 +117,8 @@ lazy_static! {
         game_state_changed,
         refusing_connection,
         peer_state_change,
-        peer_joined,
-        peer_left,
+        player_joined,
+        player_left,
         saving_map,
         saving_finished,
         player_banned,
@@ -219,30 +219,30 @@ fn peer_state_change(s: &str) -> Option<EventType> {
     })
 }
 
-/// Parses the peer join message into `EventType::PeerJoined`.
-fn peer_joined(s: &str) -> Option<EventType> {
+/// Parses the player join message into `EventType::PlayerJoined`.
+fn player_joined(s: &str) -> Option<EventType> {
     lazy_static! {
         static ref RE: Regex =
-            Regex::new(r#"\[JOIN\] (\S+) joined the game"#).expect("failed to create peer join regex");
+            Regex::new(r#"\[JOIN\] (\S+) joined the game"#).expect("failed to create player join regex");
     }
 
     let captures = RE.captures(s)?;
     let username = captures.get(1)?.as_str().to_owned();
 
-    Some(EventType::PeerJoined { username })
+    Some(EventType::PlayerJoined { username })
 }
 
-/// Parses the peer leave message into `EventType::PeerLeft`.
-fn peer_left(s: &str) -> Option<EventType> {
+/// Parses the player leave message into `EventType::PlayerLeft`.
+fn player_left(s: &str) -> Option<EventType> {
     lazy_static! {
         static ref RE: Regex =
-            Regex::new(r#"\[LEAVE\] (\S+) left the game"#).expect("failed to create peer leave regex");
+            Regex::new(r#"\[LEAVE\] (\S+) left the game"#).expect("failed to create player leave regex");
     }
 
     let captures = RE.captures(s)?;
     let username = captures.get(1)?.as_str().to_owned();
 
-    Some(EventType::PeerLeft { username })
+    Some(EventType::PlayerLeft { username })
 }
 
 /// Parses the map saving message into `EventType::SavingMap`.
