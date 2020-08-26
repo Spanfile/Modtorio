@@ -4,8 +4,9 @@ mod game_event;
 mod version_information;
 
 use crate::error::ExecutableError;
+use chrono::{DateTime, Utc};
 use futures::future::{AbortHandle, Abortable};
-pub use game_event::GameEvent;
+pub use game_event::{EventType, GameEvent};
 use log::*;
 use std::{
     path::{Path, PathBuf},
@@ -87,13 +88,13 @@ impl Executable {
         let mut stdout_reader = BufReader::new(stdout).lines();
 
         let (mut state_tx, state_rx) = mpsc::channel(64);
-        let (mut stdout_proc_tx, mut stdout_proc_rx) = mpsc::channel::<String>(64);
-        let (mut event_tx, mut event_rx) = mpsc::channel(64);
+        let (mut stdout_proc_tx, mut stdout_proc_rx) = mpsc::channel::<(DateTime<Utc>, String)>(64);
 
+        let mut stdout_proc_state_tx = state_tx.clone();
         task::spawn(async move {
-            while let Some(stdout_line) = stdout_proc_rx.recv().await {
+            while let Some((timestamp, stdout_line)) = stdout_proc_rx.recv().await {
                 trace!("Processing stdout line: {}", stdout_line);
-                let event = match stdout_line.parse::<GameEvent>() {
+                let event = match GameEvent::new(timestamp, &stdout_line) {
                     Ok(event) => event,
                     Err(e) => {
                         trace!("Couldn't parse GameEvent: {}", e);
@@ -101,8 +102,8 @@ impl Executable {
                     }
                 };
 
-                if let Err(e) = event_tx.send(event).await {
-                    error!("Writing to event tx failed: {}", e);
+                if let Err(e) = stdout_proc_state_tx.send(ExecutableEvent::GameEvent(event)).await {
+                    error!("Writing executable state to state tx failed: {}", e);
                 }
             }
 
@@ -137,18 +138,8 @@ impl Executable {
                             stdout_line = stdout_reader.next_line() => {
                                 if let Some(stdout_line) = stdout_line.expect("failed to read child stdout line") {
                                     debug!("Child stdout: {}", stdout_line);
-                                    if let Err(e) = stdout_proc_tx.send(stdout_line).await {
+                                    if let Err(e) = stdout_proc_tx.send((Utc::now(), stdout_line)).await {
                                         error!("Writing stdout line to stdout processor tx failed: {}", e);
-                                    }
-                                }
-                            }
-
-                            event = event_rx.recv() => {
-                                if let Some(event) = event {
-                                    trace!("Game event from executable: {:?}", event);
-
-                                    if let Err(e) = state_tx.send(ExecutableEvent::GameEvent(event)).await {
-                                        error!("Writing executable state to state tx failed: {}", e);
                                     }
                                 }
                             }
