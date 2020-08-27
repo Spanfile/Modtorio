@@ -395,7 +395,7 @@ impl Modtorio {
             let result: anyhow::Result<()> = async {
                 let mut servers = self.servers.lock().await;
                 let server = find_server_mut(msg.server_id, &mut servers).await?;
-                server.update_store(false, Some(prog_tx.clone())).await?;
+                server.update_store(msg.skip_info_update, Some(prog_tx.clone())).await?;
                 Ok(())
             }
             .await;
