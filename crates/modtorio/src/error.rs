@@ -315,9 +315,12 @@ pub enum ServerError {
     /// Returned when trying to add a new player with the same username as an already existing player.
     #[error("A player with the username '{0}' already exists in the server")]
     PlayerAlreadyExists(String),
-    /// Returned when trying to access a player when no such player with the given username exists.
-    #[error("No player with the username '{0}' exists")]
+    /// Returned when trying to access a player when no such player with the given username or peer ID exists.
+    #[error("No player with the username or peer ID '{0}' exists")]
     NoSuchPlayer(String),
+    /// Returned when updating a joining player and the last modified index does not point to a player.
+    #[error("No last modified player (last modified index: {0}, player count: {1}). This is likely an internal bug.")]
+    NoLastModifiedPlayer(usize, usize),
 }
 
 /// Represents the parser error for `GameEvent`.

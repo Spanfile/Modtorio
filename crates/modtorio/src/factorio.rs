@@ -369,7 +369,7 @@ impl Factorio {
 
     /// Waits for the server to be empty.
     async fn wait_for_empty(&self, reason: ShutdownReason, timeout_override: Option<u64>) -> anyhow::Result<()> {
-        let players = self.status().await.players().await;
+        let players = self.status().await.players.get().await;
         debug!(
             "Server has {} players online when gracefully shutting down ({:?})",
             players.len(),
@@ -636,7 +636,7 @@ impl Importer {
 /// Processes a given `GameEvent` for a certain game (identified by `store_id`) and modifies a given `ServerStatus`
 /// accordingly.
 async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &RwLock<ServerStatus>) {
-    debug!("Game ID {} got new game event: {:?}", store_id, event);
+    trace!("Server ID {} got new game event: {:?}", store_id, event);
 
     match event.event_type {
         EventType::GameStateChanged { from: _, to } => {
@@ -646,13 +646,13 @@ async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &Rw
             match to {
                 InGameStatus::InGame => {
                     if status_w.game_status() == ExecutionStatus::Starting {
-                        info!("Game ID {} started and is now running", store_id);
+                        info!("Server ID {}: started and is now running", store_id);
                         status_w.set_game_status(ExecutionStatus::Running);
                     }
                 }
                 InGameStatus::DisconnectingScheduled => {
                     if status_w.game_status() == ExecutionStatus::Running {
-                        info!("Game ID {} shutting down", store_id);
+                        info!("Server ID {}: shutting down", store_id);
                         status_w.set_game_status(ExecutionStatus::ShuttingDown);
                     }
                 }
@@ -661,37 +661,78 @@ async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &Rw
                 }
             }
         }
-        EventType::RefusingConnection { peer, username, reason } => info!(
-            "Game ID {} refusing connection for '{}' (addr {}): {}",
-            store_id, username, peer, reason
+        EventType::RefusingConnection {
+            address,
+            username,
+            reason,
+        } => info!(
+            "Server ID {}: refused connection for '{}' (addr {}): {}",
+            store_id, username, address, reason
         ),
-        EventType::PeerJoined { username } => match status.write().await.add_player(&username).await {
-            Ok(_) => info!("Game ID {}: {} joined the game", store_id, username),
-            Err(e) => error!("Failed to add new player in game ID {}: {}", store_id, e),
+        EventType::ConnectionAccepted { address } => {
+            match status.write().await.players.connection_accepted(&address).await {
+                Ok(_) => info!("Server ID {}: accepted connection from {}", store_id, address),
+                Err(e) => error!(
+                    "Server ID {}: accepted connection from {} but updating status failed: {}",
+                    store_id, address, e
+                ),
+            }
+        }
+        EventType::NewPeer { id } => match status.write().await.players.new_peer(&id).await {
+            Ok(_) => debug!("Server ID {}: got new peer {}", store_id, id),
+            Err(e) => error!(
+                "Server ID {}: got new peer {} but updating status failed: {}",
+                store_id, id, e
+            ),
         },
-        EventType::PeerLeft { username } => match status.write().await.remove_player(&username).await {
-            Ok(_) => info!("Game ID {}: {} left the game", store_id, username),
+        EventType::PeerStateChanged {
+            peer_id,
+            old_state,
+            new_state,
+        } => {
+            match status
+                .write()
+                .await
+                .players
+                .peer_state_change(&peer_id, &new_state)
+                .await
+            {
+                Ok(_) => debug!(
+                    "Server ID {}: peer {} state changed from {} to {}",
+                    store_id, peer_id, old_state, new_state
+                ),
+                Err(e) => error!(
+                    "Server ID {}: peer {} state changed from {} to {} but updating status failed: {}",
+                    store_id, peer_id, old_state, new_state, e
+                ),
+            }
+        }
+        EventType::PlayerJoined { username } => match status.write().await.players.joined(&username).await {
+            Ok(_) => info!("Server ID {}: {} joined the game", store_id, username),
+            Err(e) => error!(
+                "Server ID {}: {} joined the game but updating status failed: {}",
+                store_id, username, e
+            ),
+        },
+        EventType::PlayerLeft { username } => match status.write().await.players.remove(&username).await {
+            Ok(_) => info!("Server ID {}: {} left the game", store_id, username),
             Err(e) => error!("Failed to remove player from game ID {}: {}", store_id, e),
         },
         EventType::SavingMap { filename } => {
-            info!("Game ID {} saving the map to {}", store_id, filename);
-
-            let mut status_w = status.write().await;
-            status_w.set_in_game_status(InGameStatus::InGameSavingMap);
+            info!("Server ID {}: saving the map to {}", store_id, filename);
+            status.write().await.set_in_game_status(InGameStatus::InGameSavingMap);
         }
         EventType::SavingFinished => {
-            info!("Game ID {} finished saving the map", store_id);
-
-            let mut status_w = status.write().await;
-            status_w.set_in_game_status(InGameStatus::InGame);
+            info!("Server ID {}: finished saving the map", store_id);
+            status.write().await.set_in_game_status(InGameStatus::InGame);
         }
         EventType::PlayerBanned {
             player,
             banned_by,
             reason,
-        } => match status.write().await.remove_player(&player).await {
+        } => match status.write().await.players.remove(&player).await {
             Ok(_) => info!(
-                "Game ID {}: player {} was banned by {} for the reason: {}",
+                "Server ID {}: player {} was banned by {} for the reason: {}",
                 store_id, player, banned_by, reason
             ),
             Err(e) => error!(
@@ -700,16 +741,16 @@ async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &Rw
             ),
         },
         EventType::PlayerUnbanned { player, unbanned_by } => info!(
-            "Game ID {}: player {} was unbanned by {}",
+            "Server ID {}: player {} was unbanned by {}",
             store_id, player, unbanned_by
         ),
         EventType::PlayerKicked {
             player,
             kicked_by,
             reason,
-        } => match status.write().await.remove_player(&player).await {
+        } => match status.write().await.players.remove(&player).await {
             Ok(_) => info!(
-                "Game ID {}: player {} was kicked by {} for the reason: {}",
+                "Server ID {}: player {} was kicked by {} for the reason: {}",
                 store_id, player, kicked_by, reason
             ),
             Err(e) => error!(
@@ -718,14 +759,14 @@ async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &Rw
             ),
         },
         EventType::PlayerPromoted { player, promoted_by } => info!(
-            "Game ID {}: player {} was promoted to admin by {}",
+            "Server ID {}: player {} was promoted to admin by {}",
             store_id, player, promoted_by
         ),
         EventType::PlayerDemoted { player, demoted_by } => info!(
-            "Game ID {}: player {} was demoted from admin by {}",
+            "Server ID {}: player {} was demoted from admin by {}",
             store_id, player, demoted_by
         ),
-        EventType::Chat { player, message } => info!("Game ID {}: {}: {}", store_id, player, message),
+        EventType::Chat { player, message } => info!("Server ID {} chat: {}: {}", store_id, player, message),
         _ => {
             debug!("Unhandled GameEvent: {:?}", event);
         }
@@ -735,13 +776,13 @@ async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &Rw
 /// Processes a given executable exit event for a certain game (identified by `store_id`) and modifies a given
 /// `ServerStatus` accordingly.
 async fn process_exited_event(store_id: GameStoreId, exit_result: anyhow::Result<()>, status: &RwLock<ServerStatus>) {
-    debug!("Game ID {} executable exited with {:?}", store_id, exit_result);
+    debug!("Server ID {} executable exited with {:?}", store_id, exit_result);
 
     if let Err(e) = exit_result {
-        error!("Game ID {} executable exited with error: {:?}", store_id, e);
+        error!("Server ID {} executable exited with error: {:?}", store_id, e);
         status.write().await.set_game_status(ExecutionStatus::Crashed);
     } else {
-        info!("Game ID {} exited succesfully", store_id);
+        info!("Server ID {} exited succesfully", store_id);
         status.write().await.set_game_status(ExecutionStatus::Shutdown);
     }
 }
