@@ -138,6 +138,7 @@ impl Modtorio {
         };
 
         self.wait_for_servers_to_shutdown().await?;
+        self.update_all_server_stores().await?;
         result
     }
 
@@ -213,6 +214,15 @@ impl Modtorio {
                 }
             }
         }
+    }
+
+    /// Updates the program store for all the managed servers.
+    async fn update_all_server_stores(&self) -> anyhow::Result<()> {
+        let servers = self.servers.lock().await;
+        for server in servers.iter() {
+            server.update_store(true, None).await?;
+        }
+        Ok(())
     }
 
     /// Runs the RPC server.
@@ -370,7 +380,7 @@ impl Modtorio {
                     )
                     .await?;
 
-                server.update_store(Some(prog_tx.clone())).await?;
+                server.update_store(false, Some(prog_tx.clone())).await?;
                 self.servers.lock().await.push(server);
                 Ok(())
             }
@@ -385,7 +395,7 @@ impl Modtorio {
             let result: anyhow::Result<()> = async {
                 let mut servers = self.servers.lock().await;
                 let server = find_server_mut(msg.server_id, &mut servers).await?;
-                server.update_store(Some(prog_tx.clone())).await?;
+                server.update_store(msg.skip_info_update, Some(prog_tx.clone())).await?;
                 Ok(())
             }
             .await;

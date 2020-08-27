@@ -59,7 +59,10 @@ message ImportRequest {
   string adminlist = 4;
   string banlist = 5;
 }
-message UpdateStoreRequest { int64 server_id = 1; }
+message UpdateStoreRequest {
+  int64 server_id = 1;
+  bool skip_info_update = 2;
+}
 message InstallModRequest {
   int64 server_id = 1;
   string mod_name = 2;
