@@ -8,16 +8,24 @@ use std::{thread, time::Instant};
 /// Sets up the logging facade.
 pub fn setup_logging(config: &Config) -> anyhow::Result<()> {
     let start = Instant::now();
+
     Dispatch::new()
         .format(move |out, msg, record| {
+            let mut target = record.target().to_string();
+            if target.starts_with("modtorio") {
+                target = String::new();
+            } else {
+                target = format!("[{}] ", target);
+            }
+
             out.finish(format_args!(
-                "{: >11.3} {: >5} [{:0>3?}] [{}] {}",
+                "{: >11.3} {: >5} [{:0>3?}] {}{}",
                 // "[{} UTC] [{}] {}",
                 // chrono::Utc::now().format(time_format),
                 start.elapsed().as_secs_f32(),
                 record.level(),
                 thread::current().id().as_u64(),
-                record.target(),
+                target,
                 msg
             ))
         })
