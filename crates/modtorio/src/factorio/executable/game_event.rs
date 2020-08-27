@@ -160,7 +160,7 @@ impl FromStr for EventType {
         for parser in PARSERS.iter() {
             if let Some(event) = parser(s) {
                 let duration = chrono::Utc::now() - start_time;
-                debug!("Parsing GameEvent took {}ms", duration.num_milliseconds());
+                trace!("Parsing GameEvent took {}ms", duration.num_milliseconds());
                 return Ok(event);
             }
         }

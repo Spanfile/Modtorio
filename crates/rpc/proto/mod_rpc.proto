@@ -193,7 +193,22 @@ message ServerStatus {
   message Player {
     string username = 1;
     SocketAddr peer_address = 2;
-    int64 session_time = 3;
+
+    enum PlayerStatus {
+      DISCONNECTED = 0;
+      READY = 1;
+      CONNECTED_WAITING_FOR_MAP = 2;
+      CONNECTED_DOWNLOADING_MAP = 3;
+      CONNECTED_LOADING_MAP = 4;
+      TRYING_TO_CATCH_UP = 5;
+      WAITING_FOR_COMMAND_TO_START_SENDING_TICK_CLOSURES = 6;
+      IN_GAME = 7;
+      DISCONNECT_SCHEDULED = 8;
+    }
+    PlayerStatus status = 3;
+    string connection_time = 4;
+    string join_time = 5;
+    string leave_time = 6;
   }
   repeated Player players = 4;
 }

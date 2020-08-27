@@ -18,7 +18,7 @@ pub struct ServerStatus {
     /// Timestamp when the server was started.
     started_at: DateTime<Utc>,
     /// Players on the server.
-    players: Players,
+    pub players: Players,
 }
 
 /// Represents a server's execution status.
@@ -100,21 +100,6 @@ impl ServerStatus {
     pub fn reset(&mut self) {
         *self = Default::default();
     }
-
-    /// Returns a list of the current players.
-    pub async fn players(&self) -> Vec<Player> {
-        self.players.players().await
-    }
-
-    /// Adds a new player.
-    pub async fn add_player(&self, username: &str) -> anyhow::Result<()> {
-        self.players.add_player(username.to_owned()).await
-    }
-
-    /// Removes an existing player.
-    pub async fn remove_player(&self, username: &str) -> anyhow::Result<()> {
-        self.players.remove_player(username).await
-    }
 }
 
 impl ServerStatus {
@@ -124,7 +109,7 @@ impl ServerStatus {
             uptime: self.get_uptime().num_seconds(),
             status: self.game_status as i32,
             in_game_status: self.in_game_status as i32,
-            players: self.players().await.into_iter().map(|p| p.into()).collect(),
+            players: self.players.get().await.into_iter().map(|p| p.into()).collect(),
         }
     }
 }
