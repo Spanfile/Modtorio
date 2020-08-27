@@ -83,7 +83,9 @@ impl Builder {
     /// environment variables from a `.env` file in the current working directory.
     fn get_env_config() -> anyhow::Result<EnvConfig> {
         if cfg!(debug_assertions) {
-            dotenv::dotenv()?;
+            if let Err(e) = dotenv::dotenv() {
+                println!("Could not apply dev environment .env: {}", e);
+            }
         }
 
         Ok(EnvConfig::new()?)
