@@ -32,7 +32,7 @@ pub struct Player {
     peer_id: Option<i32>,
     /// The player's peer address, if any.
     peer_address: Option<SocketAddr>,
-    /// Timestamp when the player first connected to the server.
+    /// Timestamp when the player last connected to the server.
     connection_time: DateTime<Utc>,
     /// Timestamp when the player joined the server.
     join_time: Option<DateTime<Utc>>,
@@ -63,6 +63,8 @@ pub enum PeerState {
     InGame,
     /// The peer is disconnecting.
     DisconnectScheduled,
+    /// The peer's last connection was refused.
+    ConnectionRefused,
 }
 
 impl Players {
@@ -71,7 +73,8 @@ impl Players {
         self.players.lock().await.iter().cloned().collect()
     }
 
-    /// Adds a new player with a given socket address.
+    /// Adds a new player with a given socket address in the `Ready`-state. Sets the last modified player index, thus
+    /// creating state for a new connecting player.
     pub async fn connection_accepted(&self, address: &str) -> anyhow::Result<()> {
         let new_player = Player {
             peer_address: Some(address.parse()?),
@@ -89,6 +92,32 @@ impl Players {
         Ok(())
     }
 
+    /// Adds a new player with a given socket address and username in the `ConnectionRefused`-state.
+    pub async fn connection_refused(&self, address: &str, username: &str) -> anyhow::Result<()> {
+        let address = address.parse()?;
+        let mut players = self.players.lock().await;
+        if let Some(existing_player) = players.iter_mut().find(|p| p.username.as_deref() == Some(username)) {
+            existing_player.peer_address = Some(address);
+            existing_player.connection_time = Utc::now();
+            existing_player.state = PeerState::ConnectionRefused;
+        } else {
+            let new_player = Player {
+                peer_address: Some(address),
+                connection_time: Utc::now(),
+                state: PeerState::ConnectionRefused,
+                username: Some(username.to_string()),
+                peer_id: None,
+                join_time: None,
+                leave_time: None,
+            };
+
+            // the last modified index isn't updated here since it's only used for actually connecting players
+            players.push(new_player);
+        }
+
+        Ok(())
+    }
+
     /// Sets the last modified player's peer ID.
     pub async fn new_peer(&self, id: &str) -> anyhow::Result<()> {
         let last_modified_index = self.last_modified.load(Ordering::Relaxed);
@@ -102,7 +131,7 @@ impl Players {
         Ok(())
     }
 
-    /// sjakljdföklgjh
+    /// Sets a player's state based on their peer ID.
     pub async fn peer_state_change(&self, id: &str, state: &str) -> anyhow::Result<()> {
         let mut players = self.players.lock().await;
         let id = id.parse()?;
@@ -122,7 +151,7 @@ impl Players {
         Ok(())
     }
 
-    /// asdaqsdasdasd
+    /// Finalises a joining player either by creating a new player or updating a previous one.
     pub async fn joined(&self, username: &str) -> anyhow::Result<()> {
         let mut last_modified_player = {
             let last_modified_index = self.last_modified.load(Ordering::Relaxed);
@@ -137,7 +166,9 @@ impl Players {
 
         let mut players = self.players.lock().await;
         if let Some(already_existing_player) = players.iter_mut().find(|p| p.username.as_deref() == Some(username)) {
-            if already_existing_player.state != PeerState::Disconnected {
+            if already_existing_player.state != PeerState::Disconnected
+                && already_existing_player.state != PeerState::ConnectionRefused
+            {
                 return Err(ServerError::PlayerAlreadyExists(username.to_string()).into());
             }
 
@@ -189,6 +220,7 @@ impl From<PeerState> for rpc::server_status::player::PlayerStatus {
             PeerState::WaitingForCommandToStartSendingTickClosures => Self::WaitingForCommandToStartSendingTickClosures,
             PeerState::InGame => Self::InGame,
             PeerState::DisconnectScheduled => Self::DisconnectScheduled,
+            PeerState::ConnectionRefused => Self::ConnectionRefused,
         }
     }
 }

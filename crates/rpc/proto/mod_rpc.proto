@@ -204,6 +204,7 @@ message ServerStatus {
       WAITING_FOR_COMMAND_TO_START_SENDING_TICK_CLOSURES = 6;
       IN_GAME = 7;
       DISCONNECT_SCHEDULED = 8;
+      CONNECTION_REFUSED = 9;
     }
     PlayerStatus status = 3;
     string connection_time = 4;
