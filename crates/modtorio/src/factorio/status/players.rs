@@ -63,8 +63,6 @@ pub enum PeerState {
     InGame,
     /// The peer is disconnecting.
     DisconnectScheduled,
-    /// The peer's last connection was refused.
-    ConnectionRefused,
 }
 
 impl Players {
@@ -88,32 +86,6 @@ impl Players {
         let mut players = self.players.lock().await;
         players.push(new_player);
         self.last_modified.store(players.len() - 1, Ordering::Relaxed);
-
-        Ok(())
-    }
-
-    /// Adds a new player with a given socket address and username in the `ConnectionRefused`-state.
-    pub async fn connection_refused(&self, address: &str, username: &str) -> anyhow::Result<()> {
-        let address = address.parse()?;
-        let mut players = self.players.lock().await;
-        if let Some(existing_player) = players.iter_mut().find(|p| p.username.as_deref() == Some(username)) {
-            existing_player.peer_address = Some(address);
-            existing_player.connection_time = Utc::now();
-            existing_player.state = PeerState::ConnectionRefused;
-        } else {
-            let new_player = Player {
-                peer_address: Some(address),
-                connection_time: Utc::now(),
-                state: PeerState::ConnectionRefused,
-                username: Some(username.to_string()),
-                peer_id: None,
-                join_time: None,
-                leave_time: None,
-            };
-
-            // the last modified index isn't updated here since it's only used for actually connecting players
-            players.push(new_player);
-        }
 
         Ok(())
     }
@@ -166,9 +138,7 @@ impl Players {
 
         let mut players = self.players.lock().await;
         if let Some(already_existing_player) = players.iter_mut().find(|p| p.username.as_deref() == Some(username)) {
-            if already_existing_player.state != PeerState::Disconnected
-                && already_existing_player.state != PeerState::ConnectionRefused
-            {
+            if already_existing_player.state != PeerState::Disconnected {
                 return Err(ServerError::PlayerAlreadyExists(username.to_string()).into());
             }
 
@@ -220,7 +190,6 @@ impl From<PeerState> for rpc::server_status::player::PlayerStatus {
             PeerState::WaitingForCommandToStartSendingTickClosures => Self::WaitingForCommandToStartSendingTickClosures,
             PeerState::InGame => Self::InGame,
             PeerState::DisconnectScheduled => Self::DisconnectScheduled,
-            PeerState::ConnectionRefused => Self::ConnectionRefused,
         }
     }
 }

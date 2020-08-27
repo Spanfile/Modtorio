@@ -665,24 +665,10 @@ async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &Rw
             address,
             username,
             reason,
-        } => {
-            match status
-                .write()
-                .await
-                .players
-                .connection_refused(&address, &username)
-                .await
-            {
-                Ok(_) => info!(
-                    "Server ID {}: refused connection for '{}' (addr {}): {}",
-                    store_id, username, address, reason
-                ),
-                Err(e) => error!(
-                    "Server ID {}: refused connection for '{}' (addr {}): {}, but updating status failed: {}",
-                    store_id, username, address, reason, e
-                ),
-            }
-        }
+        } => info!(
+            "Server ID {}: refused connection for '{}' (addr {}): {}",
+            store_id, username, address, reason
+        ),
         EventType::ConnectionAccepted { address } => {
             match status.write().await.players.connection_accepted(&address).await {
                 Ok(_) => info!("Server ID {}: accepted connection from {}", store_id, address),
