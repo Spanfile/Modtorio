@@ -52,22 +52,24 @@ impl Mods {
     pub async fn update_store(
         &self,
         game_id: GameStoreId,
+        skip_info_update: bool,
         prog_tx: Option<AsyncProgressChannel>,
     ) -> anyhow::Result<()> {
         debug!("Updating stored mods for game {}", game_id);
         let new_game_mods = Mutex::new(Vec::new());
 
-        prog_tx
-            .send_status(async_status::indefinite("Updating mod infos..."))
-            .await?;
+        if !skip_info_update {
+            prog_tx
+                .send_status(async_status::indefinite("Updating mod infos..."))
+                .await?;
+            let mut update_batcher = UpdateBatcher::new(self.portal.as_ref());
+            for fact_mod in self.mods.values() {
+                update_batcher.add_mod(Arc::clone(fact_mod)).await;
+            }
 
-        let mut update_batcher = UpdateBatcher::new(self.portal.as_ref());
-        for fact_mod in self.mods.values() {
-            update_batcher.add_mod(Arc::clone(fact_mod)).await;
+            debug!("Update batcher built, applying");
+            update_batcher.apply().await?;
         }
-
-        debug!("Update batcher built, applying");
-        update_batcher.apply().await?;
 
         prog_tx
             .send_status(async_status::indefinite("Updating mod store..."))
@@ -77,7 +79,7 @@ impl Mods {
             let mod_name = fact_mod.name().await;
             let mod_display = fact_mod.display().await;
 
-            match fact_mod.update_store().await {
+            match fact_mod.update_store(skip_info_update).await {
                 Ok(()) => debug!("Updated mod store for {}", mod_name),
                 Err(e) => {
                     error!("Store update for {} failed: {}", mod_display, e);
