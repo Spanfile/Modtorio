@@ -115,7 +115,11 @@ pub struct Importer {
 
 impl Factorio {
     /// Updates all information about the instance in the program store.
-    pub async fn update_store(&self, prog_tx: Option<AsyncProgressChannel>) -> anyhow::Result<()> {
+    pub async fn update_store(
+        &self,
+        skip_info_update: bool,
+        prog_tx: Option<AsyncProgressChannel>,
+    ) -> anyhow::Result<()> {
         self.store.begin_transaction()?;
 
         let mut store_id = self.store_id.lock().await;
@@ -159,7 +163,7 @@ impl Factorio {
         debug!("Created new settings to store: {:?}", new_settings);
         self.store.set_settings(new_settings).await?;
 
-        self.mods.update_store(id, prog_tx).await?;
+        self.mods.update_store(id, skip_info_update, prog_tx).await?;
         self.store.commit_transaction()?;
 
         info!("Game ID {} store updated", id);

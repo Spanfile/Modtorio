@@ -231,10 +231,10 @@ impl Mod {
 
 impl Mod {
     /// Updates the mod's store
-    pub async fn update_store(&self) -> anyhow::Result<()> {
+    pub async fn update_store(&self, skip_info_update: bool) -> anyhow::Result<()> {
         trace!("Updating store for '{}'", self.name().await);
 
-        if !self.is_portal_populated().await {
+        if !skip_info_update && !self.is_portal_populated().await {
             debug!(
                 "Info not populated from portal before updating store for '{}', populating...",
                 self.name().await
