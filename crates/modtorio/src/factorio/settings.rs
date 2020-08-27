@@ -22,7 +22,11 @@ use publicity::Publicity;
 use running::Running;
 pub use running::StartBehaviour;
 use serde::{Deserialize, Serialize};
-use std::{fs::File, io::BufReader, path::Path};
+use std::{
+    fs::File,
+    io::{BufReader, Read},
+    path::Path,
+};
 
 /// Stores a server's settings in a structured manner.
 #[derive(Deserialize, Serialize, Debug, Default)]
@@ -47,20 +51,29 @@ pub struct ServerSettings {
 
 #[allow(dead_code)]
 impl ServerSettings {
-    /// Returns a new `ServerSettings` by deserializing a given JSON string.
-    pub fn from_game_json<P>(settings_file: P) -> anyhow::Result<Self>
+    /// Returns a new `ServerSettings` from a file path. The settings' `file_last_mtime` will be that of the given
+    /// path's.
+    pub fn from_file_path<P>(path: P) -> anyhow::Result<Self>
     where
         P: AsRef<Path>,
     {
-        let file = File::open(&settings_file)?;
-        let reader = BufReader::new(file);
-        let game_format = serde_json::from_reader(reader)?;
-        let file_last_mtime = util::file::get_last_mtime(&settings_file)?;
-
-        let mut settings = Self::from_game_format(&game_format)?;
-        settings.file_last_mtime = Some(file_last_mtime);
+        let file = File::open(&path)?;
+        let last_mtime = util::file::get_last_mtime(&path)?;
+        let mut settings = Self::from_reader(file)?;
+        settings.file_last_mtime = Some(last_mtime);
 
         Ok(settings)
+    }
+
+    /// Returns a new `ServerSettings` from any readable JSON stream.
+    pub fn from_reader<R>(reader: R) -> anyhow::Result<Self>
+    where
+        R: Read,
+    {
+        let reader = BufReader::new(reader);
+        let game_format = serde_json::from_reader(reader)?;
+
+        Ok(Self::from_game_format(&game_format)?)
     }
 
     /// Returns a string by serializing the `ServerSettings` object into the game's
@@ -149,47 +162,50 @@ impl ServerSettings {
 mod tests {
     use super::*;
     use crate::util::{Limit, Range};
+    use std::io::Cursor;
 
     // TODO: test for all the formats
 
     #[test]
     fn from_game_format() -> anyhow::Result<()> {
-        let obj = ServerSettings::from_game_json(
+        let json = String::from(
             r#"{
-  "name": "test",
-  "description": "test",
-  "tags": [
-    "1",
-    "2"
-  ],
-  "max_players": 0,
-  "visibility": {
-    "public": true,
-    "lan": true
-  },
-  "username": "test",
-  "password": "test",
-  "token": "test",
-  "game_password": "test",
-  "require_user_verification": true,
-  "max_upload_in_kilobytes_per_second": 0,
-  "max_upload_slots": 5,
-  "minimum_latency_in_ticks": 0,
-  "ignore_player_limit_for_returning_players": false,
-  "allow_commands": "admins-only",
-  "autosave_interval": 5,
-  "autosave_slots": 10,
-  "afk_autokick_interval": 0,
-  "auto_pause": true,
-  "only_admins_can_pause_the_game": true,
-  "autosave_only_on_server": true,
-  "non_blocking_saving": true,
-  "minimum_segment_size": 25,
-  "minimum_segment_size_peer_count": 20,
-  "maximum_segment_size": 100,
-  "maximum_segment_size_peer_count": 10
-}"#,
-        )?;
+            "name": "test",
+            "description": "test",
+            "tags": [
+              "1",
+              "2"
+            ],
+            "max_players": 0,
+            "visibility": {
+              "public": true,
+              "lan": true
+            },
+            "username": "test",
+            "password": "test",
+            "token": "test",
+            "game_password": "test",
+            "require_user_verification": true,
+            "max_upload_in_kilobytes_per_second": 0,
+            "max_upload_slots": 5,
+            "minimum_latency_in_ticks": 0,
+            "ignore_player_limit_for_returning_players": false,
+            "allow_commands": "admins-only",
+            "autosave_interval": 5,
+            "autosave_slots": 10,
+            "afk_autokick_interval": 0,
+            "auto_pause": true,
+            "only_admins_can_pause_the_game": true,
+            "autosave_only_on_server": true,
+            "non_blocking_saving": true,
+            "minimum_segment_size": 25,
+            "minimum_segment_size_peer_count": 20,
+            "maximum_segment_size": 100,
+            "maximum_segment_size_peer_count": 10
+          }"#,
+        );
+        let cursor = Cursor::new(json);
+        let obj = ServerSettings::from_reader(cursor)?;
 
         assert_eq!(
             obj.information,

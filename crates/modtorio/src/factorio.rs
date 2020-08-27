@@ -569,16 +569,16 @@ impl Importer {
             if let Some(stored_last_mtime) = settings.file_last_mtime {
                 if file_last_mtime > stored_last_mtime {
                     warn!("Settings file modified after storing. Reloading settings from file");
-                    ServerSettings::from_game_json(&settings_path)?
+                    ServerSettings::from_file_path(&settings_path)?
                 } else {
                     settings
                 }
             } else {
                 warn!("Stored settings did not have last mtime field. Reloading settings from file");
-                ServerSettings::from_game_json(&settings_path)?
+                ServerSettings::from_file_path(&settings_path)?
             }
         } else {
-            let settings = ServerSettings::from_game_json(&settings_path)?;
+            let settings = ServerSettings::from_file_path(&settings_path)?;
             trace!("Read settings from file");
             settings
         };
