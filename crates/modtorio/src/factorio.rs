@@ -636,7 +636,7 @@ impl Importer {
 /// Processes a given `GameEvent` for a certain game (identified by `store_id`) and modifies a given `ServerStatus`
 /// accordingly.
 async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &RwLock<ServerStatus>) {
-    debug!("Game ID {} got new game event: {:?}", store_id, event);
+    trace!("Game ID {} got new game event: {:?}", store_id, event);
 
     match event.event_type {
         EventType::GameStateChanged { from: _, to } => {
@@ -661,10 +661,16 @@ async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &Rw
                 }
             }
         }
-        EventType::RefusingConnection { peer, username, reason } => info!(
+        EventType::RefusingConnection {
+            address,
+            username,
+            reason,
+        } => info!(
             "Game ID {} refusing connection for '{}' (addr {}): {}",
-            store_id, username, peer, reason
+            store_id, username, address, reason
         ),
+        EventType::ConnectionAccepted { address } => info!("Game ID {} accepted connection from {}", store_id, address),
+        EventType::NewPeer { id } => debug!("Game ID {} got new peer {}", store_id, id),
         EventType::PlayerJoined { username } => match status.write().await.add_player(&username).await {
             Ok(_) => info!("Game ID {}: {} joined the game", store_id, username),
             Err(e) => error!("Failed to add new player in game ID {}: {}", store_id, e),

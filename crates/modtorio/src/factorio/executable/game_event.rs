@@ -26,14 +26,24 @@ pub enum EventType {
         /// The current state.
         to: InGameStatus,
     },
-    /// A peer's connection was refused.
+    /// A player's connection was refused.
     RefusingConnection {
         /// The peer's address-port-pair.
-        peer: String,
+        address: String,
         /// The peer's username.
         username: String,
         /// Reason the connection was refused.
         reason: String,
+    },
+    /// A player's connection was accepted.
+    ConnectionAccepted {
+        /// The peer's address-port pair.
+        address: String,
+    },
+    /// A new peer was added.
+    NewPeer {
+        /// The peer's ID
+        id: String,
     },
     /// A peer's state changed.
     PeerStateChanged {
@@ -116,6 +126,8 @@ lazy_static! {
         factorio_initialised,
         game_state_changed,
         refusing_connection,
+        connection_accepted,
+        new_peer,
         peer_state_change,
         player_joined,
         player_left,
@@ -183,7 +195,7 @@ fn game_state_changed(s: &str) -> Option<EventType> {
     Some(EventType::GameStateChanged { from, to })
 }
 
-/// Parses the peer connection refused message into `EventType::RefusingConnection`.
+/// Parses the connection refused message into `EventType::RefusingConnection`.
 fn refusing_connection(s: &str) -> Option<EventType> {
     lazy_static! {
         static ref RE: Regex =
@@ -192,11 +204,40 @@ fn refusing_connection(s: &str) -> Option<EventType> {
     }
 
     let captures = RE.captures(s)?;
-    let peer = captures.get(1)?.as_str().to_owned();
+    let address = captures.get(1)?.as_str().to_owned();
     let username = captures.get(2)?.as_str().to_owned();
     let reason = captures.get(3)?.as_str().to_owned();
 
-    Some(EventType::RefusingConnection { peer, username, reason })
+    Some(EventType::RefusingConnection {
+        address,
+        username,
+        reason,
+    })
+}
+
+/// Parses the connection accepted message into `EventType::ConnectionAccepted`.
+fn connection_accepted(s: &str) -> Option<EventType> {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r#"Replying to connectionRequest for address\(IP ADDR:\(\{(\S+)\}\)\)\."#)
+            .expect("failed to create connection accepted regex");
+    }
+
+    let captures = RE.captures(s)?;
+    let address = captures.get(1)?.as_str().to_owned();
+
+    Some(EventType::ConnectionAccepted { address })
+}
+
+/// Parses the new peer message into `EventType::RefusingConnection`.
+fn new_peer(s: &str) -> Option<EventType> {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r#"adding peer\((\w+)\)"#).expect("failed to create new peer regex");
+    }
+
+    let captures = RE.captures(s)?;
+    let id = captures.get(1)?.as_str().to_owned();
+
+    Some(EventType::NewPeer { id })
 }
 
 /// Parses the peer state change message into `EventType::PeerStateChanged`.
