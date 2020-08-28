@@ -84,6 +84,17 @@ impl ServerSettings {
         Ok(serde_json::to_string(&game_format)?)
     }
 
+    /// Merges the settings from the server's JSON-setting file from another given `ServerSettings` object.
+    pub fn merge_game_settings(&mut self, other: Self) {
+        self.information.merge_game_settings(other.information);
+        self.publicity.merge_game_settings(other.publicity);
+        self.autosave.merge_game_settings(other.autosave);
+        self.pause.merge_game_settings(other.pause);
+        self.allow_commands.merge_game_settings(other.allow_commands);
+        self.network.merge_game_settings(other.network);
+        // the Running settings don't contain any game settings so there's no need to merge them
+    }
+
     /// Returns a new `ServerSettings` object by constructing it from a given `ServerSettingsGameFormat` object.
     fn from_game_format(game_format: &ServerSettingsGameFormat) -> anyhow::Result<Self> {
         Ok(Self {

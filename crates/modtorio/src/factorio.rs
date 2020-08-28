@@ -561,7 +561,7 @@ impl Importer {
             // TODO: ugly side effect
             mods_builder = mods_builder.with_game_store_id(game_store_id);
 
-            let settings = ServerSettings::from_store_format(&store.get_settings(game_store_id).await?)?;
+            let mut settings = ServerSettings::from_store_format(&store.get_settings(game_store_id).await?)?;
             trace!("Read settings from store: {:?}", settings);
 
             let file_last_mtime = file::get_last_mtime(&settings_path)?;
@@ -572,15 +572,21 @@ impl Importer {
 
             if let Some(stored_last_mtime) = settings.file_last_mtime {
                 if file_last_mtime > stored_last_mtime {
-                    warn!("Settings file modified after storing. Reloading settings from file");
-                    ServerSettings::from_file_path(&settings_path)?
-                } else {
-                    settings
+                    warn!(
+                        "Settings file modified after storing. Reloading settings from file and merging with store \
+                         settings"
+                    );
+                    settings.merge_game_settings(ServerSettings::from_file_path(&settings_path)?);
                 }
             } else {
-                warn!("Stored settings did not have last mtime field. Reloading settings from file");
-                ServerSettings::from_file_path(&settings_path)?
+                warn!(
+                    "Stored settings did not have last mtime field. Reloading settings from file and merging with \
+                     store settings"
+                );
+                settings.merge_game_settings(ServerSettings::from_file_path(&settings_path)?);
             }
+
+            settings
         } else {
             let settings = ServerSettings::from_file_path(&settings_path)?;
             trace!("Read settings from file");

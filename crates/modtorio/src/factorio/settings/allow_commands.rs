@@ -43,6 +43,11 @@ impl AllowCommands {
         }
     }
 
+    /// Merges the settings from the server's JSON-setting file from another given `ServerSettings` object.
+    pub fn merge_game_settings(&mut self, other: Self) {
+        *self = other
+    }
+
     /// Modifies a given `ServerSettingsGameFormat` with this object's settings.
     pub fn to_game_format(&self, game_format: &mut ServerSettingsGameFormat) {
         game_format.allow_commands = match self {
