@@ -45,6 +45,11 @@ pub enum EventType {
         /// The peer's ID
         id: String,
     },
+    /// A peer was removed.
+    PeerRemoved {
+        /// The peer's ID.
+        id: String,
+    },
     /// A peer's state changed.
     PeerStateChanged {
         /// The peer's ID.
@@ -128,6 +133,7 @@ lazy_static! {
         refusing_connection,
         connection_accepted,
         new_peer,
+        peer_removed,
         peer_state_change,
         player_joined,
         player_left,
@@ -238,6 +244,18 @@ fn new_peer(s: &str) -> Option<EventType> {
     let id = captures.get(1)?.as_str().to_owned();
 
     Some(EventType::NewPeer { id })
+}
+
+/// Parses the removing peer message into `EventType::PeerRemoved`.
+fn peer_removed(s: &str) -> Option<EventType> {
+    lazy_static! {
+        static ref RE: Regex = Regex::new(r#"removing peer\((\w+)\)"#).expect("failed to create peer remove regex");
+    }
+
+    let captures = RE.captures(s)?;
+    let id = captures.get(1)?.as_str().to_owned();
+
+    Some(EventType::PeerRemoved { id })
 }
 
 /// Parses the peer state change message into `EventType::PeerStateChanged`.

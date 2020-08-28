@@ -164,17 +164,21 @@ impl Players {
         Ok(())
     }
 
-    /// Removes a player identified by their username.
-    pub async fn remove(&self, username: &str) -> anyhow::Result<()> {
+    /// Removes a player identified by their peer ID.
+    pub async fn remove_peer(&self, id: &str) -> anyhow::Result<String> {
+        let id = id.parse()?;
         let mut players = self.players.lock().await;
-        let mut player = match players.iter_mut().find(|p| p.username.as_deref() == Some(username)) {
+        let mut player = match players.iter_mut().find(|p| p.peer_id == Some(id)) {
             Some(p) => p,
-            None => return Err(ServerError::NoSuchPlayer(username.to_string()).into()),
+            None => return Err(ServerError::NoSuchPlayer(id.to_string()).into()),
         };
 
         player.state = PeerState::Disconnected;
         player.leave_time = Some(Utc::now());
-        Ok(())
+        Ok(player
+            .username
+            .as_ref()
+            .map_or_else(|| String::from("unkown"), |p| p.to_owned()))
     }
 }
 

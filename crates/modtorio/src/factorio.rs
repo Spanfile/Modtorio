@@ -689,6 +689,13 @@ async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &Rw
                 store_id, id, e
             ),
         },
+        EventType::PeerRemoved { id } => match status.write().await.players.remove_peer(&id).await {
+            Ok(username) => info!("Server ID {}: {} disconnected (peer ID {})", store_id, username, id),
+            Err(e) => error!(
+                "Server ID {}: removed peer {} but updating status failed: {}",
+                store_id, id, e
+            ),
+        },
         EventType::PeerStateChanged {
             peer_id,
             old_state,
@@ -711,17 +718,6 @@ async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &Rw
                 ),
             }
         }
-        EventType::PlayerJoined { username } => match status.write().await.players.joined(&username).await {
-            Ok(_) => info!("Server ID {}: {} joined the game", store_id, username),
-            Err(e) => error!(
-                "Server ID {}: {} joined the game but updating status failed: {}",
-                store_id, username, e
-            ),
-        },
-        EventType::PlayerLeft { username } => match status.write().await.players.remove(&username).await {
-            Ok(_) => info!("Server ID {}: {} left the game", store_id, username),
-            Err(e) => error!("Failed to remove player from game ID {}: {}", store_id, e),
-        },
         EventType::SavingMap { filename } => {
             info!("Server ID {}: saving the map to {}", store_id, filename);
             status.write().await.set_in_game_status(InGameStatus::InGameSavingMap);
@@ -730,20 +726,24 @@ async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &Rw
             info!("Server ID {}: finished saving the map", store_id);
             status.write().await.set_in_game_status(InGameStatus::InGame);
         }
+        EventType::PlayerJoined { username } => match status.write().await.players.joined(&username).await {
+            Ok(_) => info!("Server ID {}: {} joined the game", store_id, username),
+            Err(e) => error!(
+                "Server ID {}: {} joined the game but updating status failed: {}",
+                store_id, username, e
+            ),
+        },
+        // when players leave, either by disconnecting, being kicked or banned, the game always reports their peer being
+        // removed, which is how the player is also removed from the status tracker
+        EventType::PlayerLeft { username } => debug!("Server ID {}: {} left the game", store_id, username),
         EventType::PlayerBanned {
             player,
             banned_by,
             reason,
-        } => match status.write().await.players.remove(&player).await {
-            Ok(_) => info!(
-                "Server ID {}: player {} was banned by {} for the reason: {}",
-                store_id, player, banned_by, reason
-            ),
-            Err(e) => error!(
-                "Failed to remove banned player {} (by: {}, reason: {}) from game ID {}: {}",
-                player, banned_by, reason, store_id, e
-            ),
-        },
+        } => info!(
+            "Server ID {}: player {} was banned by {} for the reason: {}",
+            store_id, player, banned_by, reason
+        ),
         EventType::PlayerUnbanned { player, unbanned_by } => info!(
             "Server ID {}: player {} was unbanned by {}",
             store_id, player, unbanned_by
@@ -752,16 +752,10 @@ async fn process_game_event(store_id: GameStoreId, event: GameEvent, status: &Rw
             player,
             kicked_by,
             reason,
-        } => match status.write().await.players.remove(&player).await {
-            Ok(_) => info!(
-                "Server ID {}: player {} was kicked by {} for the reason: {}",
-                store_id, player, kicked_by, reason
-            ),
-            Err(e) => error!(
-                "Failed to remove kicked player {} (by: {}, reason: {}) from game ID {}: {}",
-                player, kicked_by, reason, store_id, e
-            ),
-        },
+        } => info!(
+            "Server ID {}: player {} was kicked by {} for the reason: {}",
+            store_id, player, kicked_by, reason
+        ),
         EventType::PlayerPromoted { player, promoted_by } => info!(
             "Server ID {}: player {} was promoted to admin by {}",
             store_id, player, promoted_by
