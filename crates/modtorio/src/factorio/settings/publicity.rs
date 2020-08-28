@@ -131,6 +131,11 @@ impl Publicity {
         game_format.game_password = self.password.clone();
     }
 
+    /// Merges the settings from the server's JSON-setting file from another given `ServerSettings` object.
+    pub fn merge_game_settings(&mut self, other: Self) {
+        *self = other
+    }
+
     /// Returns a new `Publicity` from a given `GameSettings`.
     pub fn from_store_format(store_format: &GameSettings) -> Self {
         Self {

@@ -113,6 +113,14 @@ impl Network {
         game_format.maximum_segment_size_peer_count = self.segment_size.peer_count.max;
     }
 
+    /// Merges the settings from the server's JSON-setting file from another given `ServerSettings` object.
+    pub fn merge_game_settings(&mut self, other: Self) {
+        *self = Self {
+            bind_address: self.bind_address,
+            ..other
+        }
+    }
+
     /// Returns a new `Network` from a given `GameSettings`.
     pub fn from_store_format(store_format: &GameSettings) -> anyhow::Result<Self> {
         let bind_address = match store_format.bind_address_ip_version {
