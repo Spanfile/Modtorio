@@ -5,7 +5,7 @@ use chrono::{DateTime, Utc};
 use lazy_static::lazy_static;
 use log::*;
 use regex::Regex;
-use std::str::FromStr;
+use std::{str::FromStr, time::Instant};
 
 /// Represents a single event that happened in-game in a server.
 #[derive(Debug)]
@@ -124,27 +124,39 @@ pub enum EventType {
     },
 }
 
-/// Type of the string parser functions.
-type ParserFn = fn(&str) -> Option<EventType>;
+/// Defines functions to match and parse server stdout lines into `EventType`s.
+trait EventParser
+where
+    Self: Sync,
+{
+    /// Returns whether a given line matches this parser. This should be a fast operation that doesn't yet parse any
+    /// information out of the line, only checks whether the line should be able to be parsed or not.
+    fn is_match(&self, s: &str) -> bool;
+    /// Parses a given line into an `EventType`. It is assumed that if `is_match` returned `true`, this function will
+    /// succeed. If the parsing fails, it is considered a bug in the parser (e.g. the server returned an unexpected
+    /// format the parser isn't accounting for).
+    fn parse(&self, s: &str) -> Option<EventType>;
+}
+
 lazy_static! {
-    static ref PARSERS: Vec<ParserFn> = vec![
-        factorio_initialised,
-        game_state_changed,
-        refusing_connection,
-        connection_accepted,
-        new_peer,
-        peer_removed,
-        peer_state_change,
-        player_joined,
-        player_left,
-        saving_map,
-        saving_finished,
-        player_banned,
-        player_unbanned,
-        player_kicked,
-        player_promoted,
-        player_demoted,
-        chat,
+    static ref PARSERS: Vec<Box<dyn EventParser>> = vec![
+        Box::new(FactorioInitialised {}),
+        Box::new(GameStateChanged {}),
+        Box::new(RefusingConnection {}),
+        Box::new(ConnectionAccepted {}),
+        Box::new(NewPeer {}),
+        Box::new(PeerRemoved {}),
+        Box::new(PeerStateChanged {}),
+        Box::new(PlayerJoined {}),
+        Box::new(PlayerLeft {}),
+        Box::new(SavingMap {}),
+        Box::new(SavingFinished {}),
+        Box::new(PlayerBanned {}),
+        Box::new(PlayerUnbanned {}),
+        Box::new(PlayerKicked {}),
+        Box::new(PlayerPromoted {}),
+        Box::new(PlayerDemoted {}),
+        Box::new(Chat {}),
     ];
 }
 
@@ -162,258 +174,374 @@ impl FromStr for EventType {
     type Err = GameEventError;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let start_time = chrono::Utc::now();
+        let start_time = Instant::now();
         for parser in PARSERS.iter() {
-            if let Some(event) = parser(s) {
-                let duration = chrono::Utc::now() - start_time;
-                trace!("Parsing GameEvent took {}ms", duration.num_milliseconds());
+            if parser.is_match(s) {
+                let event = parser
+                    .parse(s)
+                    .ok_or_else(|| GameEventError::FailedToParse(s.to_string()))?;
+                trace!("Parsing GameEvent took {}ms", start_time.elapsed().as_millis());
                 return Ok(event);
             }
         }
 
-        Err(GameEventError::FailedToParse(s.to_owned()))
+        Err(GameEventError::NoParser(s.to_owned()))
     }
 }
 
 /// Parses the "Factorio initialised" message into `EventType::GameStateChanged`.
-fn factorio_initialised(s: &str) -> Option<EventType> {
-    if s.ends_with("Factorio initialised") {
+struct FactorioInitialised {}
+impl EventParser for FactorioInitialised {
+    fn is_match(&self, s: &str) -> bool {
+        s.ends_with("Factorio initialised")
+    }
+
+    fn parse(&self, _: &str) -> Option<EventType> {
         Some(EventType::GameStateChanged {
             from: InGameStatus::Initialising,
             to: InGameStatus::Ready,
         })
-    } else {
-        None
     }
 }
 
 /// Parses the game's state change message into `EventType::GameStateChanged`.
-fn game_state_changed(s: &str) -> Option<EventType> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r#"changing state from\((\w*)\) to\((\w*)\)"#)
-            .expect("failed to create game state change regex");
+struct GameStateChanged {}
+impl EventParser for GameStateChanged {
+    fn is_match(&self, s: &str) -> bool {
+        s.contains("changing state from")
     }
 
-    let captures = RE.captures(s)?;
-    let from = InGameStatus::from_str(captures.get(1)?.as_str()).ok()?;
-    let to = InGameStatus::from_str(captures.get(2)?.as_str()).ok()?;
+    fn parse(&self, s: &str) -> Option<EventType> {
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r#"changing state from\((\w*)\) to\((\w*)\)"#)
+                .expect("failed to create game state change regex");
+        }
 
-    Some(EventType::GameStateChanged { from, to })
+        let captures = RE.captures(s)?;
+        let from = InGameStatus::from_str(captures.get(1)?.as_str()).ok()?;
+        let to = InGameStatus::from_str(captures.get(2)?.as_str()).ok()?;
+
+        Some(EventType::GameStateChanged { from, to })
+    }
 }
 
 /// Parses the connection refused message into `EventType::RefusingConnection`.
-fn refusing_connection(s: &str) -> Option<EventType> {
-    lazy_static! {
-        static ref RE: Regex =
-            Regex::new(r#"Refusing connection for address \(IP ADDR:\(\{(\S+)\}\)\), username \((\S+)\)\. (\S+)"#)
-                .expect("failed to create connection refused regex");
+struct RefusingConnection {}
+impl EventParser for RefusingConnection {
+    fn is_match(&self, s: &str) -> bool {
+        s.contains("Refusing connection for address")
     }
 
-    let captures = RE.captures(s)?;
-    let address = captures.get(1)?.as_str().to_owned();
-    let username = captures.get(2)?.as_str().to_owned();
-    let reason = captures.get(3)?.as_str().to_owned();
+    fn parse(&self, s: &str) -> Option<EventType> {
+        lazy_static! {
+            static ref RE: Regex =
+                Regex::new(r#"Refusing connection for address \(IP ADDR:\(\{(\S+)\}\)\), username \((\S+)\)\. (\S+)"#)
+                    .expect("failed to create connection refused regex");
+        }
 
-    Some(EventType::RefusingConnection {
-        address,
-        username,
-        reason,
-    })
+        let captures = RE.captures(s)?;
+        let address = captures.get(1)?.as_str().to_owned();
+        let username = captures.get(2)?.as_str().to_owned();
+        let reason = captures.get(3)?.as_str().to_owned();
+
+        Some(EventType::RefusingConnection {
+            address,
+            username,
+            reason,
+        })
+    }
 }
 
 /// Parses the connection accepted message into `EventType::ConnectionAccepted`.
-fn connection_accepted(s: &str) -> Option<EventType> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r#"Replying to connectionRequest for address\(IP ADDR:\(\{(\S+)\}\)\)\."#)
-            .expect("failed to create connection accepted regex");
+struct ConnectionAccepted {}
+impl EventParser for ConnectionAccepted {
+    fn is_match(&self, s: &str) -> bool {
+        s.contains("Replying to connectionRequest for address")
     }
 
-    let captures = RE.captures(s)?;
-    let address = captures.get(1)?.as_str().to_owned();
+    fn parse(&self, s: &str) -> Option<EventType> {
+        lazy_static! {
+            static ref RE: Regex =
+                Regex::new(r#"Replying to connectionRequest for address\(IP ADDR:\(\{(\S+)\}\)\)\."#)
+                    .expect("failed to create connection accepted regex");
+        }
 
-    Some(EventType::ConnectionAccepted { address })
+        let captures = RE.captures(s)?;
+        let address = captures.get(1)?.as_str().to_owned();
+
+        Some(EventType::ConnectionAccepted { address })
+    }
 }
 
 /// Parses the new peer message into `EventType::RefusingConnection`.
-fn new_peer(s: &str) -> Option<EventType> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r#"adding peer\((\w+)\)"#).expect("failed to create new peer regex");
+struct NewPeer {}
+impl EventParser for NewPeer {
+    fn is_match(&self, s: &str) -> bool {
+        s.contains("adding peer")
     }
 
-    let captures = RE.captures(s)?;
-    let id = captures.get(1)?.as_str().to_owned();
+    fn parse(&self, s: &str) -> Option<EventType> {
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r#"adding peer\((\w+)\)"#).expect("failed to create new peer regex");
+        }
 
-    Some(EventType::NewPeer { id })
+        let captures = RE.captures(s)?;
+        let id = captures.get(1)?.as_str().to_owned();
+
+        Some(EventType::NewPeer { id })
+    }
 }
 
 /// Parses the removing peer message into `EventType::PeerRemoved`.
-fn peer_removed(s: &str) -> Option<EventType> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r#"removing peer\((\w+)\)"#).expect("failed to create peer remove regex");
+struct PeerRemoved {}
+impl EventParser for PeerRemoved {
+    fn is_match(&self, s: &str) -> bool {
+        s.contains("removing peer")
     }
 
-    let captures = RE.captures(s)?;
-    let id = captures.get(1)?.as_str().to_owned();
+    fn parse(&self, s: &str) -> Option<EventType> {
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r#"removing peer\((\w+)\)"#).expect("failed to create peer remove regex");
+        }
 
-    Some(EventType::PeerRemoved { id })
+        let captures = RE.captures(s)?;
+        let id = captures.get(1)?.as_str().to_owned();
+
+        Some(EventType::PeerRemoved { id })
+    }
 }
 
 /// Parses the peer state change message into `EventType::PeerStateChanged`.
-fn peer_state_change(s: &str) -> Option<EventType> {
-    lazy_static! {
-        static ref RE: Regex =
-            Regex::new(r#"received stateChanged peerID\((\S+)\) oldState\((\S+)\) newState\((\S+)\)"#)
-                .expect("failed to create peer state change regex");
+struct PeerStateChanged {}
+impl EventParser for PeerStateChanged {
+    fn is_match(&self, s: &str) -> bool {
+        s.contains("received stateChanged peerID")
     }
 
-    let captures = RE.captures(s)?;
-    let peer_id = captures.get(1)?.as_str().to_owned();
-    let old_state = captures.get(2)?.as_str().to_owned();
-    let new_state = captures.get(3)?.as_str().to_owned();
+    fn parse(&self, s: &str) -> Option<EventType> {
+        lazy_static! {
+            static ref RE: Regex =
+                Regex::new(r#"received stateChanged peerID\((\S+)\) oldState\((\S+)\) newState\((\S+)\)"#)
+                    .expect("failed to create peer state change regex");
+        }
 
-    Some(EventType::PeerStateChanged {
-        peer_id,
-        old_state,
-        new_state,
-    })
+        let captures = RE.captures(s)?;
+        let peer_id = captures.get(1)?.as_str().to_owned();
+        let old_state = captures.get(2)?.as_str().to_owned();
+        let new_state = captures.get(3)?.as_str().to_owned();
+
+        Some(EventType::PeerStateChanged {
+            peer_id,
+            old_state,
+            new_state,
+        })
+    }
 }
 
 /// Parses the player join message into `EventType::PlayerJoined`.
-fn player_joined(s: &str) -> Option<EventType> {
-    lazy_static! {
-        static ref RE: Regex =
-            Regex::new(r#"\[JOIN\] (\S+) joined the game"#).expect("failed to create player join regex");
+struct PlayerJoined {}
+impl EventParser for PlayerJoined {
+    fn is_match(&self, s: &str) -> bool {
+        s.contains("[JOIN]")
     }
 
-    let captures = RE.captures(s)?;
-    let username = captures.get(1)?.as_str().to_owned();
+    fn parse(&self, s: &str) -> Option<EventType> {
+        lazy_static! {
+            static ref RE: Regex =
+                Regex::new(r#"\[JOIN\] (\S+) joined the game"#).expect("failed to create player join regex");
+        }
 
-    Some(EventType::PlayerJoined { username })
+        let captures = RE.captures(s)?;
+        let username = captures.get(1)?.as_str().to_owned();
+
+        Some(EventType::PlayerJoined { username })
+    }
 }
 
 /// Parses the player leave message into `EventType::PlayerLeft`.
-fn player_left(s: &str) -> Option<EventType> {
-    lazy_static! {
-        static ref RE: Regex =
-            Regex::new(r#"\[LEAVE\] (\S+) left the game"#).expect("failed to create player leave regex");
+struct PlayerLeft {}
+impl EventParser for PlayerLeft {
+    fn is_match(&self, s: &str) -> bool {
+        s.contains("[LEAVE]")
     }
 
-    let captures = RE.captures(s)?;
-    let username = captures.get(1)?.as_str().to_owned();
+    fn parse(&self, s: &str) -> Option<EventType> {
+        lazy_static! {
+            static ref RE: Regex =
+                Regex::new(r#"\[LEAVE\] (\S+) left the game"#).expect("failed to create player leave regex");
+        }
 
-    Some(EventType::PlayerLeft { username })
+        let captures = RE.captures(s)?;
+        let username = captures.get(1)?.as_str().to_owned();
+
+        Some(EventType::PlayerLeft { username })
+    }
 }
 
 /// Parses the map saving message into `EventType::SavingMap`.
-fn saving_map(s: &str) -> Option<EventType> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r#"Saving (?:game|map) as (.+)"#).expect("failed to create saving map regex");
+struct SavingMap {}
+impl EventParser for SavingMap {
+    fn is_match(&self, s: &str) -> bool {
+        s.contains("Saving game") || s.contains("Saving map")
     }
 
-    let captures = RE.captures(s)?;
-    let filename = captures.get(1)?.as_str().to_owned();
+    fn parse(&self, s: &str) -> Option<EventType> {
+        lazy_static! {
+            static ref RE: Regex =
+                Regex::new(r#"Saving (?:game|map) as (.+)"#).expect("failed to create saving map regex");
+        }
 
-    Some(EventType::SavingMap { filename })
+        let captures = RE.captures(s)?;
+        let filename = captures.get(1)?.as_str().to_owned();
+
+        Some(EventType::SavingMap { filename })
+    }
 }
 
 /// Parses the map saving finished message into `EventType::SavingFinished`.
-fn saving_finished(s: &str) -> Option<EventType> {
-    if s.ends_with("Saving finished") {
+struct SavingFinished {}
+impl EventParser for SavingFinished {
+    fn is_match(&self, s: &str) -> bool {
+        s.ends_with("Saving finished")
+    }
+
+    fn parse(&self, _: &str) -> Option<EventType> {
         Some(EventType::SavingFinished)
-    } else {
-        None
     }
 }
 
 /// Parses the player ban message into `EventType::PlayerBanned`.
-fn player_banned(s: &str) -> Option<EventType> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r#"\[BAN\] (.+?) (?:\(not on map\) )?was banned by (.+?)\. Reason: (.+)\."#)
-            .expect("failed to create player banned regex");
+struct PlayerBanned {}
+impl EventParser for PlayerBanned {
+    fn is_match(&self, s: &str) -> bool {
+        s.contains("[BAN]")
     }
 
-    let captures = RE.captures(s)?;
-    let player = captures.get(1)?.as_str().to_owned();
-    let banned_by = captures.get(2)?.as_str().to_owned();
-    let reason = captures.get(3)?.as_str().to_owned();
+    fn parse(&self, s: &str) -> Option<EventType> {
+        lazy_static! {
+            static ref RE: Regex =
+                Regex::new(r#"\[BAN\] (.+?) (?:\(not on map\) )?was banned by (.+?)\. Reason: (.+)\."#)
+                    .expect("failed to create player banned regex");
+        }
 
-    Some(EventType::PlayerBanned {
-        player,
-        banned_by,
-        reason,
-    })
+        let captures = RE.captures(s)?;
+        let player = captures.get(1)?.as_str().to_owned();
+        let banned_by = captures.get(2)?.as_str().to_owned();
+        let reason = captures.get(3)?.as_str().to_owned();
+
+        Some(EventType::PlayerBanned {
+            player,
+            banned_by,
+            reason,
+        })
+    }
 }
 
 /// Parses the player unban message into `EventType::PlayerUnbanned`.
-fn player_unbanned(s: &str) -> Option<EventType> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r#"\[UNBANNED\] (.+?) was unbanned by (.+?)\."#)
-            .expect("failed to create player unbanned regex");
+struct PlayerUnbanned {}
+impl EventParser for PlayerUnbanned {
+    fn is_match(&self, s: &str) -> bool {
+        s.contains("[UNBANNED]")
     }
 
-    let captures = RE.captures(s)?;
-    let player = captures.get(1)?.as_str().to_owned();
-    let unbanned_by = captures.get(2)?.as_str().to_owned();
+    fn parse(&self, s: &str) -> Option<EventType> {
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r#"\[UNBANNED\] (.+?) was unbanned by (.+?)\."#)
+                .expect("failed to create player unbanned regex");
+        }
 
-    Some(EventType::PlayerUnbanned { player, unbanned_by })
+        let captures = RE.captures(s)?;
+        let player = captures.get(1)?.as_str().to_owned();
+        let unbanned_by = captures.get(2)?.as_str().to_owned();
+
+        Some(EventType::PlayerUnbanned { player, unbanned_by })
+    }
 }
 
 /// Parses the player kick message into `EventType::PlayerKicked`.
-fn player_kicked(s: &str) -> Option<EventType> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r#"\[KICK\] (.+?) was kicked by (.+?)\. Reason: (.+)\."#)
-            .expect("failed to create player kicked regex");
+struct PlayerKicked {}
+impl EventParser for PlayerKicked {
+    fn is_match(&self, s: &str) -> bool {
+        s.contains("[KICK]")
     }
 
-    let captures = RE.captures(s)?;
-    let player = captures.get(1)?.as_str().to_owned();
-    let kicked_by = captures.get(2)?.as_str().to_owned();
-    let reason = captures.get(3)?.as_str().to_owned();
+    fn parse(&self, s: &str) -> Option<EventType> {
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r#"\[KICK\] (.+?) was kicked by (.+?)\. Reason: (.+)\."#)
+                .expect("failed to create player kicked regex");
+        }
 
-    Some(EventType::PlayerKicked {
-        player,
-        kicked_by,
-        reason,
-    })
+        let captures = RE.captures(s)?;
+        let player = captures.get(1)?.as_str().to_owned();
+        let kicked_by = captures.get(2)?.as_str().to_owned();
+        let reason = captures.get(3)?.as_str().to_owned();
+
+        Some(EventType::PlayerKicked {
+            player,
+            kicked_by,
+            reason,
+        })
+    }
 }
 
 /// Parses the player promote message into `EventType::PlayerPromoted`.
-fn player_promoted(s: &str) -> Option<EventType> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r#"\[PROMOTE\] (.+?) was promoted to admin by (.+?)\."#)
-            .expect("failed to create player promoted regex");
+struct PlayerPromoted {}
+impl EventParser for PlayerPromoted {
+    fn is_match(&self, s: &str) -> bool {
+        s.contains("[PROMOTE]")
     }
 
-    let captures = RE.captures(s)?;
-    let player = captures.get(1)?.as_str().to_owned();
-    let promoted_by = captures.get(2)?.as_str().to_owned();
+    fn parse(&self, s: &str) -> Option<EventType> {
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r#"\[PROMOTE\] (.+?) was promoted to admin by (.+?)\."#)
+                .expect("failed to create player promoted regex");
+        }
 
-    Some(EventType::PlayerPromoted { player, promoted_by })
+        let captures = RE.captures(s)?;
+        let player = captures.get(1)?.as_str().to_owned();
+        let promoted_by = captures.get(2)?.as_str().to_owned();
+
+        Some(EventType::PlayerPromoted { player, promoted_by })
+    }
 }
 
 /// Parses the player demote message into `EventType::PlayerDemoted`.
-fn player_demoted(s: &str) -> Option<EventType> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r#"\[DEMOTE\] (.+?) was demoted from admin by (.+?)\."#)
-            .expect("failed to create player demoted regex");
+struct PlayerDemoted {}
+impl EventParser for PlayerDemoted {
+    fn is_match(&self, s: &str) -> bool {
+        s.contains("[DEMOTE]")
     }
 
-    let captures = RE.captures(s)?;
-    let player = captures.get(1)?.as_str().to_owned();
-    let demoted_by = captures.get(2)?.as_str().to_owned();
+    fn parse(&self, s: &str) -> Option<EventType> {
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r#"\[DEMOTE\] (.+?) was demoted from admin by (.+?)\."#)
+                .expect("failed to create player demoted regex");
+        }
 
-    Some(EventType::PlayerDemoted { player, demoted_by })
+        let captures = RE.captures(s)?;
+        let player = captures.get(1)?.as_str().to_owned();
+        let demoted_by = captures.get(2)?.as_str().to_owned();
+
+        Some(EventType::PlayerDemoted { player, demoted_by })
+    }
 }
 
 /// Parses the chat message into `EventType::Chat`.
-fn chat(s: &str) -> Option<EventType> {
-    lazy_static! {
-        static ref RE: Regex = Regex::new(r#"\[CHAT\] (.+): (.+)"#).expect("failed to create chat regex");
+struct Chat {}
+impl EventParser for Chat {
+    fn is_match(&self, s: &str) -> bool {
+        s.contains("[CHAT]")
     }
 
-    let captures = RE.captures(s)?;
-    let player = captures.get(1)?.as_str().to_owned();
-    let message = captures.get(2)?.as_str().to_owned();
+    fn parse(&self, s: &str) -> Option<EventType> {
+        lazy_static! {
+            static ref RE: Regex = Regex::new(r#"\[CHAT\] (.+): (.+)"#).expect("failed to create chat regex");
+        }
 
-    Some(EventType::Chat { player, message })
+        let captures = RE.captures(s)?;
+        let player = captures.get(1)?.as_str().to_owned();
+        let message = captures.get(2)?.as_str().to_owned();
+
+        Some(EventType::Chat { player, message })
+    }
 }

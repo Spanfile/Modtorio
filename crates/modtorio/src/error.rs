@@ -326,6 +326,9 @@ pub enum ServerError {
 /// Represents the parser error for `GameEvent`.
 #[derive(Debug, Error)]
 pub enum GameEventError {
+    /// Returned when a given string didn't match any `GameEvent` parser.
+    #[error("The line '{0}' doesn't have a matching parser implemented")]
+    NoParser(String),
     /// Returned when a given string failed to be parsed into a `GameEvent`.
     #[error("The line '{0}' failed to be parsed into a GameEvent")]
     FailedToParse(String),
