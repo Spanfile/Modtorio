@@ -10,6 +10,8 @@ service ModRpc {
 
   rpc InstallMod(InstallModRequest) returns (stream Progress);
   rpc RemoveMod(RemoveModRequest) returns (Empty);
+  rpc EnableMod(EnableModRequest) returns (Empty);
+  rpc DisableMod(DisableModRequest) returns (Empty);
   rpc UpdateMods(UpdateModsRequest) returns (stream Progress);
   rpc EnsureModDependencies(EnsureModDependenciesRequest)
       returns (stream Progress);
@@ -59,10 +61,12 @@ message ImportRequest {
   string adminlist = 4;
   string banlist = 5;
 }
+
 message UpdateStoreRequest {
   int64 server_id = 1;
   bool skip_info_update = 2;
 }
+
 message InstallModRequest {
   int64 server_id = 1;
   string mod_name = 2;
@@ -70,6 +74,16 @@ message InstallModRequest {
 }
 
 message RemoveModRequest {
+  int64 server_id = 1;
+  string mod_name = 2;
+}
+
+message EnableModRequest {
+  int64 server_id = 1;
+  string mod_name = 2;
+}
+
+message DisableModRequest {
   int64 server_id = 1;
   string mod_name = 2;
 }

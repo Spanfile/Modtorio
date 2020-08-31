@@ -153,6 +153,32 @@ impl Mods {
         }
     }
 
+    /// Enables a mod by its name.
+    pub async fn enable(&mut self, name: &str) -> anyhow::Result<()> {
+        match self.mods.entry(name.to_string()) {
+            Entry::Occupied(entry) => {
+                let fact_mod = entry.get();
+                debug!("Enabling mod '{}'", fact_mod.name().await);
+                fact_mod.enable().await?;
+                Ok(())
+            }
+            Entry::Vacant(_) => Err(ModError::NoSuchMod(name.to_string()).into()),
+        }
+    }
+
+    /// Disables a mod by its name.
+    pub async fn disable(&mut self, name: &str) -> anyhow::Result<()> {
+        match self.mods.entry(name.to_string()) {
+            Entry::Occupied(entry) => {
+                let fact_mod = entry.get();
+                debug!("Disabling mod '{}'", fact_mod.name().await);
+                fact_mod.disable().await?;
+                Ok(())
+            }
+            Entry::Vacant(_) => Err(ModError::NoSuchMod(name.to_string()).into()),
+        }
+    }
+
     /// Updates the portal info for all mods and downloads their most recent version if the
     /// currently installed version is older.
     #[allow(dead_code)]
