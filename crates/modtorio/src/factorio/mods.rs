@@ -1,6 +1,7 @@
 //! Provides the [`Mods`](Mods) object used to interact with the mods installed in a Factorio
 //! server.
 
+mod mod_list;
 mod mods_builder;
 mod update_batcher;
 
@@ -14,6 +15,7 @@ use crate::{
 };
 use async_status::{AsyncProgressChannel, AsyncProgressChannelExt};
 use log::*;
+use mod_list::ModList;
 pub use mods_builder::ModsBuilder;
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -151,6 +153,38 @@ impl Mods {
             }
             Entry::Vacant(_) => Err(ModError::NoSuchMod(name.to_string()).into()),
         }
+    }
+
+    /// Returns whether a mod is enabled or not.
+    pub fn get_mod_enabled(&self, name: &str) -> anyhow::Result<bool> {
+        if self.mods.contains_key(name) {
+            let mod_list = ModList::from_mods_directory(&self.directory)?;
+            Ok(mod_list.get_mod_enabled(name))
+        } else {
+            Err(ModError::NoSuchMod(name.to_string()).into())
+        }
+    }
+
+    /// Enables a mod by its name.
+    pub fn set_mod_enabled(&self, name: &str, enabled: bool) -> anyhow::Result<()> {
+        if self.mods.contains_key(name) {
+            debug!("Setting mod '{}' enabled: {}", name, enabled);
+
+            let mut mod_list = ModList::from_mods_directory(&self.directory)?;
+            mod_list.set_mod_enabled(name, enabled)?;
+            mod_list.save()?;
+
+            Ok(())
+        } else {
+            Err(ModError::NoSuchMod(name.to_string()).into())
+        }
+    }
+
+    /// Returns a `HashMap<String, bool>` for all the mods and their enabled status. This collection is loaded directly
+    /// from the `mod-list.json` file, so it may not contain all managed mods, or it may contain non-managed mods.
+    pub fn get_mods_enabled_status(&self) -> anyhow::Result<HashMap<String, bool>> {
+        let mod_list = ModList::from_mods_directory(&self.directory)?;
+        Ok(mod_list.get_mods_enabled_status())
     }
 
     /// Updates the portal info for all mods and downloads their most recent version if the
