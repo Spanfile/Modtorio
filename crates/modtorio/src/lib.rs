@@ -433,6 +433,46 @@ impl Modtorio {
         Ok(())
     }
 
+    /// Enables a mod for a given server instance.
+    async fn enable_mod(&self, msg: rpc::EnableModRequest) -> RpcResult<()> {
+        let mut servers = self.servers.lock().await;
+        let server = find_server_mut(msg.server_id, &mut servers).await?;
+        server.mods().set_mod_enabled(&msg.mod_name, true)?;
+        Ok(())
+    }
+
+    /// Disables a mod for a given server instance.
+    async fn disable_mod(&self, msg: rpc::DisableModRequest) -> RpcResult<()> {
+        let mut servers = self.servers.lock().await;
+        let server = find_server_mut(msg.server_id, &mut servers).await?;
+        server.mods().set_mod_enabled(&msg.mod_name, false)?;
+        Ok(())
+    }
+
+    /// Returns whether a mod is enabled or not.
+    async fn get_mod_enabled(&self, msg: rpc::GetModEnabledRequest) -> RpcResult<rpc::ModEnabled> {
+        let mut servers = self.servers.lock().await;
+        let server = find_server_mut(msg.server_id, &mut servers).await?;
+        let enabled = server.mods().get_mod_enabled(&msg.mod_name)?;
+        Ok(rpc::ModEnabled { enabled })
+    }
+
+    /// Returns the enabled status for all mods.
+    async fn get_mods_enabled_status(
+        &self,
+        msg: rpc::GetModsEnabledStatusRequest,
+    ) -> RpcResult<rpc::ModsEnabledStatus> {
+        let mut servers = self.servers.lock().await;
+        let server = find_server_mut(msg.server_id, &mut servers).await?;
+        let mods = server.mods().get_mods_enabled_status()?;
+        Ok(rpc::ModsEnabledStatus {
+            mods: mods
+                .into_iter()
+                .map(|(name, enabled)| rpc::mods_enabled_status::ModEnabled { name, enabled })
+                .collect(),
+        })
+    }
+
     /// Updates the installed mods of a given server instance.
     async fn update_mods(self, msg: rpc::UpdateModsRequest, prog_tx: AsyncProgressChannel) {
         task::spawn(async move {
@@ -649,6 +689,40 @@ impl mod_rpc_server::ModRpc for Modtorio {
         self.rpc_handler(req)
             .require_status(instance_status::Status::Running)
             .result(Self::remove_mod)
+            .await
+    }
+
+    async fn enable_mod(&self, req: Request<rpc::EnableModRequest>) -> Result<Response<rpc::Empty>, Status> {
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .result(Self::enable_mod)
+            .await
+    }
+
+    async fn disable_mod(&self, req: Request<rpc::DisableModRequest>) -> Result<Response<rpc::Empty>, Status> {
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .result(Self::disable_mod)
+            .await
+    }
+
+    async fn get_mod_enabled(
+        &self,
+        req: Request<rpc::GetModEnabledRequest>,
+    ) -> Result<Response<rpc::ModEnabled>, Status> {
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .result(Self::get_mod_enabled)
+            .await
+    }
+
+    async fn get_mods_enabled_status(
+        &self,
+        req: Request<rpc::GetModsEnabledStatusRequest>,
+    ) -> Result<Response<rpc::ModsEnabledStatus>, Status> {
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .result(Self::get_mods_enabled_status)
             .await
     }
 

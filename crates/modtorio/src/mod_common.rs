@@ -432,10 +432,7 @@ impl Mod {
             Ok(DownloadResult::New)
         }
     }
-}
 
-#[allow(dead_code)]
-impl Mod {
     /// Populates the mod's info from a given mod zip archive.
     async fn populate_info_from_zip(&self, path: PathBuf) -> anyhow::Result<()> {
         *self.zip_path.write().await = Some(path.clone());

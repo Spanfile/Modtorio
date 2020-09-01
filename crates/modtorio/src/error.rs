@@ -133,6 +133,9 @@ pub enum ModError {
         /// The name in the info object.
         given: String,
     },
+    /// Returned when trying to disable the `base` mod.
+    #[error("Cannot disable the 'base' mod.")]
+    CannotDisableBaseMod,
 }
 
 /// Represents all types of errors that can occur when parsing dependency strings.
