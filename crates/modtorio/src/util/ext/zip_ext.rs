@@ -2,34 +2,47 @@
 //! archives
 
 use super::PathExt;
-use crate::error::ZipError;
 use std::{
     io::{Read, Seek},
     path::Path,
 };
-use zip::{read::ZipFile, ZipArchive};
+use zip::ZipArchive;
 
 /// Collection of common functions used with zip archives
 pub trait ZipExt {
     /// Find a file with a certain file name from anywhere in the zip archive. Returns
     /// `ZipError::NoFile` if a file with the given file name isn't found.
-    fn find_file(&mut self, name: &str) -> anyhow::Result<ZipFile<'_>>;
+    fn find_files(&mut self, names: &[&str]) -> anyhow::Result<Vec<(String, Vec<u8>)>>;
 }
 
 impl<F> ZipExt for ZipArchive<F>
 where
     F: Read + Seek,
 {
-    fn find_file(&mut self, name: &str) -> anyhow::Result<ZipFile<'_>> {
-        let mut found_path: Option<String> = None;
-        for filepath in self.file_names() {
-            if Path::new(filepath).get_file_name()? == name {
-                found_path = Some(filepath.to_owned());
-                break;
+    // (file.name().to_string(), file.bytes().filter_map(Result::ok).collect())
+    fn find_files(&mut self, names: &[&str]) -> anyhow::Result<Vec<(String, Vec<u8>)>> {
+        let names = names.to_owned();
+        let mut found_files = Vec::new();
+        'file_loop: for i in 0..self.len() {
+            // opening a file `by_index()` means reading its header from the zip reader, which is safe to assume here is
+            // a fast operation
+            let file = self.by_index(i)?;
+            let file_name = Path::new(file.name()).get_file_name()?;
+
+            for name in &names {
+                if file_name == *name {
+                    found_files.push((file_name.to_string(), file.bytes().filter_map(Result::ok).collect()));
+
+                    if found_files.len() == names.len() {
+                        // all the files have been found
+                        break 'file_loop;
+                    } else {
+                        break;
+                    }
+                }
             }
         }
 
-        let found_path = found_path.ok_or_else(|| ZipError::NoFile(name.to_owned()))?;
-        Ok(self.by_name(&found_path)?)
+        Ok(found_files)
     }
 }
