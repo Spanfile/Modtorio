@@ -1,5 +1,6 @@
 //! Provides the `ModList` object which is used to manage a server's `mod-list.json` file in its mods directory.
 
+use crate::error::ModError;
 use log::*;
 use serde::{Deserialize, Serialize};
 use std::{
@@ -11,6 +12,8 @@ use std::{
 
 /// The filename of the server's mod list.
 const MOD_LIST_JSON_FILE: &str = "mod-list.json";
+/// The name of the base mod.
+const BASE_MOD: &str = "base";
 
 /// Represents the server's `mod-list.json` file, used to enable/disable mods.
 #[derive(Debug, Deserialize, Serialize)]
@@ -72,11 +75,20 @@ impl ModList {
     }
 
     /// Sets a mod's enabled status.
-    pub fn set_mod_enabled(&mut self, name: &str, enabled: bool) {
+    pub fn set_mod_enabled(&mut self, name: &str, enabled: bool) -> Result<(), ModError> {
+        if name == BASE_MOD {
+            if enabled {
+                // the base mod is always enabled
+                return Ok(());
+            } else {
+                return Err(ModError::CannotDisableBaseMod);
+            }
+        }
+
         for list_mod in self.mods.iter_mut() {
             if list_mod.name == name {
                 list_mod.enabled = enabled;
-                return;
+                return Ok(());
             }
         }
 
@@ -85,7 +97,9 @@ impl ModList {
         self.mods.push(ModListMod {
             name: name.to_string(),
             enabled,
-        })
+        });
+
+        Ok(())
     }
 
     /// Returns a `HashMap<String, bool>` for all the mods and their enabled status.

@@ -171,7 +171,7 @@ impl Mods {
             debug!("Setting mod '{}' enabled: {}", name, enabled);
 
             let mut mod_list = ModList::from_mods_directory(&self.directory)?;
-            mod_list.set_mod_enabled(name, enabled);
+            mod_list.set_mod_enabled(name, enabled)?;
             mod_list.save()?;
 
             Ok(())
