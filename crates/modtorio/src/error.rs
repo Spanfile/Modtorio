@@ -133,9 +133,6 @@ pub enum ModError {
         /// The name in the info object.
         given: String,
     },
-    /// The mod's enabled status is invalid.
-    #[error("Invalid mod enable status: {0}")]
-    InvalidModEnableStatus(bool),
 }
 
 /// Represents all types of errors that can occur when parsing dependency strings.

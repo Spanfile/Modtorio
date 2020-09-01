@@ -437,7 +437,7 @@ impl Modtorio {
     async fn enable_mod(&self, msg: rpc::EnableModRequest) -> RpcResult<()> {
         let mut servers = self.servers.lock().await;
         let server = find_server_mut(msg.server_id, &mut servers).await?;
-        server.mods_mut().enable(&msg.mod_name).await?;
+        server.mods_mut().set_mod_enabled(&msg.mod_name, true).await?;
         Ok(())
     }
 
@@ -445,7 +445,7 @@ impl Modtorio {
     async fn disable_mod(&self, msg: rpc::DisableModRequest) -> RpcResult<()> {
         let mut servers = self.servers.lock().await;
         let server = find_server_mut(msg.server_id, &mut servers).await?;
-        server.mods_mut().disable(&msg.mod_name).await?;
+        server.mods_mut().set_mod_enabled(&msg.mod_name, false).await?;
         Ok(())
     }
 

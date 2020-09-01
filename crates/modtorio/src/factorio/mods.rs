@@ -1,6 +1,7 @@
 //! Provides the [`Mods`](Mods) object used to interact with the mods installed in a Factorio
 //! server.
 
+mod mod_list;
 mod mods_builder;
 mod update_batcher;
 
@@ -14,6 +15,7 @@ use crate::{
 };
 use async_status::{AsyncProgressChannel, AsyncProgressChannelExt};
 use log::*;
+use mod_list::ModList;
 pub use mods_builder::ModsBuilder;
 use std::{
     collections::{hash_map::Entry, HashMap},
@@ -154,25 +156,16 @@ impl Mods {
     }
 
     /// Enables a mod by its name.
-    pub async fn enable(&mut self, name: &str) -> anyhow::Result<()> {
+    pub async fn set_mod_enabled(&mut self, name: &str, enabled: bool) -> anyhow::Result<()> {
         match self.mods.entry(name.to_string()) {
             Entry::Occupied(entry) => {
                 let fact_mod = entry.get();
-                debug!("Enabling mod '{}'", fact_mod.name().await);
-                fact_mod.enable().await?;
-                Ok(())
-            }
-            Entry::Vacant(_) => Err(ModError::NoSuchMod(name.to_string()).into()),
-        }
-    }
+                debug!("Setting mod '{}' enabled: {}", fact_mod.name().await, enabled);
 
-    /// Disables a mod by its name.
-    pub async fn disable(&mut self, name: &str) -> anyhow::Result<()> {
-        match self.mods.entry(name.to_string()) {
-            Entry::Occupied(entry) => {
-                let fact_mod = entry.get();
-                debug!("Disabling mod '{}'", fact_mod.name().await);
-                fact_mod.disable().await?;
+                let mut mod_list = ModList::from_mods_directory(&self.directory)?;
+                mod_list.set_mod_enabled(name, enabled);
+                mod_list.save()?;
+
                 Ok(())
             }
             Entry::Vacant(_) => Err(ModError::NoSuchMod(name.to_string()).into()),

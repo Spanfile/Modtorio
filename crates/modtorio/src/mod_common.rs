@@ -433,30 +433,6 @@ impl Mod {
         }
     }
 
-    /// Returns whether the mod is enabled or not. A disabled mod is identified by its zip archive filename ending in
-    /// `.disabled`.
-    pub async fn is_enabled(&self) -> anyhow::Result<bool> {
-        Ok(!self.zip_path().await?.get_file_name()?.ends_with(".disabled"))
-    }
-
-    /// Enables the mod by moving its zip archive into its original file.
-    pub async fn enable(&self) -> anyhow::Result<()> {
-        if self.is_enabled().await? {
-            return Err(ModError::InvalidModEnableStatus(true).into());
-        }
-
-        unimplemented!()
-    }
-
-    /// Disables the mod by moving its zip archive to the file `<archive name>.disabled`.
-    pub async fn disable(&self) -> anyhow::Result<()> {
-        if !self.is_enabled().await? {
-            return Err(ModError::InvalidModEnableStatus(false).into());
-        }
-
-        unimplemented!()
-    }
-
     /// Populates the mod's info from a given mod zip archive.
     async fn populate_info_from_zip(&self, path: PathBuf) -> anyhow::Result<()> {
         *self.zip_path.write().await = Some(path.clone());
