@@ -1,6 +1,9 @@
+//! Provides the `ModList` object which is used to manage a server's `mod-list.json` file in its mods directory.
+
 use log::*;
 use serde::{Deserialize, Serialize};
 use std::{
+    collections::HashMap,
     fs::File,
     io::BufReader,
     path::{Path, PathBuf},
@@ -83,5 +86,10 @@ impl ModList {
             name: name.to_string(),
             enabled,
         })
+    }
+
+    /// Returns a `HashMap<String, bool>` for all the mods and their enabled status.
+    pub fn get_mods_enabled_status(&self) -> HashMap<String, bool> {
+        self.mods.iter().map(|m| (m.name.to_string(), m.enabled)).collect()
     }
 }

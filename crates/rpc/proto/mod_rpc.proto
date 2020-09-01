@@ -13,6 +13,8 @@ service ModRpc {
   rpc EnableMod(EnableModRequest) returns (Empty);
   rpc DisableMod(DisableModRequest) returns (Empty);
   rpc GetModEnabled(GetModEnabledRequest) returns (ModEnabled);
+  rpc GetModsEnabledStatus(GetModsEnabledStatusRequest)
+      returns (ModsEnabledStatus);
   rpc UpdateMods(UpdateModsRequest) returns (stream Progress);
   rpc EnsureModDependencies(EnsureModDependenciesRequest)
       returns (stream Progress);
@@ -94,6 +96,7 @@ message GetModEnabledRequest {
   string mod_name = 2;
 }
 
+message GetModsEnabledStatusRequest { int64 server_id = 1; }
 message UpdateModsRequest { int64 server_id = 1; }
 message EnsureModDependenciesRequest { int64 server_id = 1; }
 message GetServerSettingsRequest { int64 server_id = 1; }
@@ -289,3 +292,10 @@ message ServerSettings {
 }
 
 message ModEnabled { bool enabled = 1; }
+message ModsEnabledStatus {
+  message ModEnabled {
+    string name = 1;
+    bool enabled = 2;
+  }
+  repeated ModEnabled mods = 1;
+}

@@ -156,7 +156,7 @@ impl Mods {
     }
 
     /// Returns whether a mod is enabled or not.
-    pub async fn get_mod_enabled(&self, name: &str) -> anyhow::Result<bool> {
+    pub fn get_mod_enabled(&self, name: &str) -> anyhow::Result<bool> {
         if self.mods.contains_key(name) {
             let mod_list = ModList::from_mods_directory(&self.directory)?;
             Ok(mod_list.get_mod_enabled(name))
@@ -166,7 +166,7 @@ impl Mods {
     }
 
     /// Enables a mod by its name.
-    pub async fn set_mod_enabled(&self, name: &str, enabled: bool) -> anyhow::Result<()> {
+    pub fn set_mod_enabled(&self, name: &str, enabled: bool) -> anyhow::Result<()> {
         if self.mods.contains_key(name) {
             debug!("Setting mod '{}' enabled: {}", name, enabled);
 
@@ -178,6 +178,13 @@ impl Mods {
         } else {
             Err(ModError::NoSuchMod(name.to_string()).into())
         }
+    }
+
+    /// Returns a `HashMap<String, bool>` for all the mods and their enabled status. This collection is loaded directly
+    /// from the `mod-list.json` file, so it may not contain all managed mods, or it may contain non-managed mods.
+    pub fn get_mods_enabled_status(&self) -> anyhow::Result<HashMap<String, bool>> {
+        let mod_list = ModList::from_mods_directory(&self.directory)?;
+        Ok(mod_list.get_mods_enabled_status())
     }
 
     /// Updates the portal info for all mods and downloads their most recent version if the
