@@ -146,17 +146,16 @@ fn default_dependencies() -> Vec<Dependency> {
 
 // TODO: generalise this
 /// Reads a single file anywhere from a given zip archive based on its filename.
-async fn read_object_from_zip<P, T>(path: P, name: &'static str) -> anyhow::Result<T>
+async fn read_objects_from_zip<P>(path: P, names: &'static [&'static str]) -> anyhow::Result<Vec<(String, Vec<u8>)>>
 where
     P: 'static + AsRef<Path> + Send, // TODO: these sorts of requirements are a bit icky
-    T: 'static + serde::de::DeserializeOwned + Send,
 {
-    task::spawn_blocking(move || -> anyhow::Result<T> {
+    task::spawn_blocking(move || -> anyhow::Result<Vec<(String, Vec<u8>)>> {
         let zipfile = std::fs::File::open(path)?;
         let mut archive = zip::ZipArchive::new(zipfile)?;
+        let files = archive.find_files(names)?;
 
-        let obj = serde_json::from_reader(archive.find_file(name)?)?;
-        Ok(obj)
+        Ok(files)
     })
     .await?
 }
@@ -167,9 +166,18 @@ impl Info {
     where
         P: 'static + AsRef<Path> + Send,
     {
-        let info = read_object_from_zip(path, "info.json").await?;
-        // TODO: read changelog
-        Ok(Self::from_zip_info(info, String::new()))
+        let mut info = None;
+        let mut changelog = String::new();
+
+        for (name, bytes) in read_objects_from_zip(path, &["info.json", "changelog.txt"]).await? {
+            match name.as_ref() {
+                "info.json" => info = Some(serde_json::from_slice(&bytes)?),
+                "changelog.txt" => changelog = String::from_utf8_lossy(&bytes).to_string(),
+                _ => panic!("read_object_from_zip returned unexpected filename: {}", name),
+            }
+        }
+
+        Ok(Self::from_zip_info(info.ok_or(ModError::InvalidArchive)?, changelog))
     }
 
     /// Fetches and builds an info object from the mod portal based on a given mod's name.
@@ -294,7 +302,19 @@ impl Info {
     where
         P: 'static + AsRef<Path> + Send,
     {
-        let info: ZipInfo = read_object_from_zip(path, "info.json").await?;
+        let mut info = None;
+        let mut changelog = None;
+
+        for (name, bytes) in read_objects_from_zip(path, &["info.json", "changelog.txt"]).await? {
+            match name.as_ref() {
+                "info.json" => info = Some(serde_json::from_slice(&bytes)?),
+                "changelog.txt" => changelog = Some(String::from_utf8_lossy(&bytes).to_string()),
+                _ => panic!("read_object_from_zip returned unexpected filename: {}", name),
+            }
+        }
+
+        let info: ZipInfo = info.ok_or(ModError::InvalidArchive)?;
+
         ensure!(
             info.name == self.name,
             ModError::ZipNameMismatch {
@@ -307,6 +327,7 @@ impl Info {
             own: info.version,
             factorio: info.factorio_version,
         });
+        self.display.changelog = changelog;
         self.author.contact = info.contact;
         self.dependencies = Some(info.dependencies);
 

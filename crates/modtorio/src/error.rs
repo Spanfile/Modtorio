@@ -136,6 +136,9 @@ pub enum ModError {
     /// Returned when trying to disable the `base` mod.
     #[error("Cannot disable the 'base' mod.")]
     CannotDisableBaseMod,
+    /// Returned when trying to load an invalid mod zip archive (mainly, it doesn't contain an `info.json` file).
+    #[error("The mod zip archive is invalid")]
+    InvalidArchive,
 }
 
 /// Represents all types of errors that can occur when parsing dependency strings.
