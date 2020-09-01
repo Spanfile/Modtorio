@@ -155,20 +155,28 @@ impl Mods {
         }
     }
 
+    /// Returns whether a mod is enabled or not.
+    pub async fn get_mod_enabled(&self, name: &str) -> anyhow::Result<bool> {
+        if self.mods.contains_key(name) {
+            let mod_list = ModList::from_mods_directory(&self.directory)?;
+            Ok(mod_list.get_mod_enabled(name))
+        } else {
+            Err(ModError::NoSuchMod(name.to_string()).into())
+        }
+    }
+
     /// Enables a mod by its name.
-    pub async fn set_mod_enabled(&mut self, name: &str, enabled: bool) -> anyhow::Result<()> {
-        match self.mods.entry(name.to_string()) {
-            Entry::Occupied(entry) => {
-                let fact_mod = entry.get();
-                debug!("Setting mod '{}' enabled: {}", fact_mod.name().await, enabled);
+    pub async fn set_mod_enabled(&self, name: &str, enabled: bool) -> anyhow::Result<()> {
+        if self.mods.contains_key(name) {
+            debug!("Setting mod '{}' enabled: {}", name, enabled);
 
-                let mut mod_list = ModList::from_mods_directory(&self.directory)?;
-                mod_list.set_mod_enabled(name, enabled);
-                mod_list.save()?;
+            let mut mod_list = ModList::from_mods_directory(&self.directory)?;
+            mod_list.set_mod_enabled(name, enabled);
+            mod_list.save()?;
 
-                Ok(())
-            }
-            Entry::Vacant(_) => Err(ModError::NoSuchMod(name.to_string()).into()),
+            Ok(())
+        } else {
+            Err(ModError::NoSuchMod(name.to_string()).into())
         }
     }
 

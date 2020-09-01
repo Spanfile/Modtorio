@@ -57,6 +57,17 @@ impl ModList {
         Ok(())
     }
 
+    /// Returns whether a given mod is enabled or not. If the mod doesn't exist, returns `false`.
+    pub fn get_mod_enabled(&self, name: &str) -> bool {
+        for list_mod in &self.mods {
+            if list_mod.name == name {
+                return list_mod.enabled;
+            }
+        }
+
+        false
+    }
+
     /// Sets a mod's enabled status.
     pub fn set_mod_enabled(&mut self, name: &str, enabled: bool) {
         for list_mod in self.mods.iter_mut() {

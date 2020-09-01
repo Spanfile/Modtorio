@@ -12,6 +12,7 @@ service ModRpc {
   rpc RemoveMod(RemoveModRequest) returns (Empty);
   rpc EnableMod(EnableModRequest) returns (Empty);
   rpc DisableMod(DisableModRequest) returns (Empty);
+  rpc GetModEnabled(GetModEnabledRequest) returns (ModEnabled);
   rpc UpdateMods(UpdateModsRequest) returns (stream Progress);
   rpc EnsureModDependencies(EnsureModDependenciesRequest)
       returns (stream Progress);
@@ -84,6 +85,11 @@ message EnableModRequest {
 }
 
 message DisableModRequest {
+  int64 server_id = 1;
+  string mod_name = 2;
+}
+
+message GetModEnabledRequest {
   int64 server_id = 1;
   string mod_name = 2;
 }
@@ -281,3 +287,5 @@ message ServerSettings {
   bool auto_start = 30;
   uint64 graceful_shutdown_timeout = 31;
 }
+
+message ModEnabled { bool enabled = 1; }
