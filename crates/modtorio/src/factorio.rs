@@ -1,6 +1,7 @@
 //! The whole point. Provides the [`Factorio`](Factorio) struct used to interact with a single
 //! instance of a Factorio server.
 
+mod banlist;
 mod command;
 pub mod executable;
 pub mod mods;
@@ -17,6 +18,7 @@ use crate::{
     },
     Config, ModPortal,
 };
+use banlist::Banlist;
 use executable::{EventType, Executable, ExecutableEvent, GameEvent};
 use log::*;
 use models::GameSettings;
@@ -56,6 +58,12 @@ enum ShutdownReason {
     Shutdown,
     /// The server is being restarted.
     Restart,
+}
+
+#[derive(Debug)]
+pub enum PlayerAction<'a> {
+    Ban(&'a str),
+    Unban,
 }
 
 /// Represents a single Factorio server instance.
@@ -181,7 +189,7 @@ impl Factorio {
         *self.exec_stdin_tx.lock().await = Some(stdin_tx);
         *self.exec_stdout_rx.lock().await = Some(stdout_rx);
 
-        let exec_args = self.get_executable_args();
+        let exec_args = self.get_executable_args()?;
         let mut state_rx = self.executable.run(stdout_tx, stdin_rx, &exec_args).await?;
 
         let (shutdown_tx, mut shutdown_rx) = watch::channel(());
@@ -278,6 +286,54 @@ impl Factorio {
         Ok(())
     }
 
+    /// Executes a player action, such as banning or unbanning. The action is applicable on both shutdown and running
+    /// servers, which affects how exactly the action is carried out.
+    pub async fn player_action(&self, player: &str, action: PlayerAction<'_>) -> anyhow::Result<()> {
+        let store_id = self.store_id().await?;
+        let status = self.status().await;
+        match (status.game_status(), action) {
+            (ExecutionStatus::Shutdown | ExecutionStatus::Crashed, PlayerAction::Ban(reason)) => {
+                info!(
+                    "Server ID {}: banning player {} offline for the reason '{}'",
+                    store_id, player, reason
+                );
+
+                let banlist_file = self.get_banlist_file();
+                let mut banlist = Banlist::from_file(banlist_file)?;
+                banlist.add(player)?;
+                banlist.save()?;
+            }
+            (ExecutionStatus::Running, PlayerAction::Ban(reason)) => {
+                info!(
+                    "Server ID {}: banning player {} online for the reason '{}'",
+                    store_id, player, reason
+                );
+
+                self.send_command(Command::Ban {
+                    player: player.to_string(),
+                    reason: reason.to_string(),
+                })
+                .await?;
+            }
+            (ExecutionStatus::Shutdown | ExecutionStatus::Crashed, PlayerAction::Unban) => {
+                info!("Server ID {}: unbanning player {} offline", store_id, player);
+
+                let banlist_file = self.get_banlist_file();
+                let mut banlist = Banlist::from_file(banlist_file)?;
+                banlist.remove(player)?;
+                banlist.save()?;
+            }
+            (ExecutionStatus::Running, PlayerAction::Unban) => {
+                info!("Server ID {}: banning player {} online", store_id, player);
+
+                self.send_command(Command::Unban(player.to_string())).await?;
+            }
+            (status, _) => return Err(ServerError::InvalidGameStatus(status).into()),
+        }
+
+        Ok(())
+    }
+
     /// Returns the instance's root directory.
     pub fn root(&self) -> &Path {
         &self.root
@@ -328,6 +384,15 @@ impl Factorio {
         self.status.read().await.clone()
     }
 
+    /// Returns the path to the current banlist in use. If no banlist is specified, the default file is assumed.
+    fn get_banlist_file(&self) -> PathBuf {
+        self.root.join(if let Some(path) = &self.banlist_file {
+            path
+        } else {
+            Path::new(BANLIST_FILENAME)
+        })
+    }
+
     /// Asserts that the server's status is `expected`, otherwise returns `ServerError::InvalidStatus`.
     async fn assert_status(&self, expected: ExecutionStatus) -> anyhow::Result<()> {
         let status = self.status().await;
@@ -351,7 +416,7 @@ impl Factorio {
     }
 
     /// Returns the proper server executable arguments to match the server's settings.
-    fn get_executable_args(&self) -> Vec<String> {
+    fn get_executable_args(&self) -> anyhow::Result<Vec<String>> {
         let mut args = Vec::new();
 
         match self.settings.running.behaviour {
@@ -368,7 +433,23 @@ impl Factorio {
             self.settings.network.bind_address.to_string(),
         ]);
 
-        args
+        if self.settings.running.use_server_whitelist {
+            args.push(String::from("--use-server-whitelist"));
+
+            if let Some(file) = self.whitelist_file.as_deref() {
+                args.extend(vec![String::from("--server-whitelist"), file.get_string()?]);
+            }
+        }
+
+        if let Some(file) = self.banlist_file.as_deref() {
+            args.extend(vec![String::from("--server-banlist"), file.get_string()?]);
+        }
+
+        if let Some(file) = self.adminlist_file.as_deref() {
+            args.extend(vec![String::from("--server-adminlist"), file.get_string()?]);
+        }
+
+        Ok(args)
     }
 
     /// Waits for the server to be empty.
@@ -431,22 +512,22 @@ impl Importer {
     pub fn from_store(stored_game: &models::Game) -> Self {
         let root = PathBuf::from(&stored_game.path);
 
-        let settings = root.join(if let Some(path) = &stored_game.settings_file {
+        let settings = PathBuf::from(if let Some(path) = &stored_game.settings_file {
             path
         } else {
             SERVER_SETTINGS_FILENAME
         });
-        let whitelist = root.join(if let Some(path) = &stored_game.whitelist_file {
+        let whitelist = PathBuf::from(if let Some(path) = &stored_game.whitelist_file {
             path
         } else {
             WHITELIST_FILENAME
         });
-        let banlist = root.join(if let Some(path) = &stored_game.banlist_file {
+        let banlist = PathBuf::from(if let Some(path) = &stored_game.banlist_file {
             path
         } else {
             BANLIST_FILENAME
         });
-        let adminlist = root.join(if let Some(path) = &stored_game.adminlist_file {
+        let adminlist = PathBuf::from(if let Some(path) = &stored_game.adminlist_file {
             path
         } else {
             ADMINLIST_FILENAME

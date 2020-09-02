@@ -68,8 +68,8 @@ where
         };
         let conn = Arc::new(Mutex::new(conn));
         let store = Store { conn };
-
-        store.run_migrations().await?;
+        let report = store.run_migrations().await?;
+        println!("{:?}", report);
 
         Ok(store)
     }

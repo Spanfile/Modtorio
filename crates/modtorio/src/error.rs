@@ -319,7 +319,7 @@ pub enum ServerError {
     #[error("The game hasn't been added to the program store yet")]
     GameNotInStore,
     /// Returned when trying to add a new player with the same username as an already existing player.
-    #[error("A player with the username '{0}' already exists in the server")]
+    #[error("A player with the username '{0}' already exists")]
     PlayerAlreadyExists(String),
     /// Returned when trying to access a player when no such player with the given username or peer ID exists.
     #[error("No player with the username or peer ID '{0}' exists")]

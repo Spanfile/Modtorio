@@ -25,6 +25,9 @@ service ModRpc {
   rpc ServerControlAction(ServerControlActionRequest) returns (stream Progress);
   rpc SendServerCommand(SendCommandRequest) returns (Empty);
   rpc GetServerStatus(ServerStatusRequest) returns (ServerStatus);
+
+  rpc BanPlayer(BanPlayerRequest) returns (Empty);
+  rpc UnbanPlayer(UnbanPlayerRequest) returns (Empty);
 }
 
 /* Common messages */
@@ -134,11 +137,6 @@ message SendCommandRequest {
   }
   message Save { string save_name = 1; }
   message Quit {}
-  message Ban {
-    string player = 1;
-    string reason = 2;
-  }
-  message Unban { string player = 1; }
   message Kick {
     string player = 1;
     string reason = 2;
@@ -155,18 +153,26 @@ message SendCommandRequest {
     Save save = 4;
     Quit quit = 5;
     Whisper whisper = 6;
-    Ban ban = 7;
-    Unban unban = 8;
-    Kick kick = 9;
-    Mute mute = 10;
-    Unmute unmute = 11;
-    Promote promote = 12;
-    Demote demote = 13;
-    Purge purge = 14;
+    Kick kick = 7;
+    Mute mute = 8;
+    Unmute unmute = 9;
+    Promote promote = 10;
+    Demote demote = 11;
+    Purge purge = 12;
   }
 }
 
 message ServerStatusRequest { int64 server_id = 1; }
+message BanPlayerRequest {
+  int64 server_id = 1;
+  string player = 2;
+  string reason = 3;
+}
+
+message UnbanPlayerRequest {
+  int64 server_id = 1;
+  string player = 2;
+}
 
 /* Response messages */
 message VersionInformation {
@@ -289,6 +295,7 @@ message ServerSettings {
   StartBehaviour start_behaviour = 29;
   bool auto_start = 30;
   uint64 graceful_shutdown_timeout = 31;
+  bool use_server_whitelist = 32;
 }
 
 message ModEnabled { bool enabled = 1; }

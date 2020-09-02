@@ -59,11 +59,11 @@ impl From<send_command_request::Command> for Command {
                 player: whisper.player,
                 message: whisper.message,
             },
-            send_command_request::Command::Ban(ban) => Self::Ban {
-                player: ban.player,
-                reason: ban.reason,
-            },
-            send_command_request::Command::Unban(unban) => Self::Unban(unban.player),
+            // send_command_request::Command::Ban(ban) => Self::Ban {
+            //     player: ban.player,
+            //     reason: ban.reason,
+            // },
+            // send_command_request::Command::Unban(unban) => Self::Unban(unban.player),
             send_command_request::Command::Kick(kick) => Self::Kick {
                 player: kick.player,
                 reason: kick.reason,

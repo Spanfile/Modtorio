@@ -219,6 +219,8 @@ pub struct GameSettings {
     pub auto_start: bool,
     /// The timeout to wait for players to leave when gracefully shutting down or restarting the server.
     pub graceful_shutdown_timeout: i64,
+    /// The `--use-server-whitelist` command line option.
+    pub use_server_whitelist: bool,
 }
 
 impl Default for GameSettings {
@@ -261,6 +263,7 @@ impl Default for GameSettings {
             save_name: Default::default(),
             start_behaviour: Default::default(),
             auto_start: Default::default(),
+            use_server_whitelist: Default::default(),
         }
     }
 }

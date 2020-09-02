@@ -22,6 +22,8 @@ pub struct Running {
     pub auto: bool,
     /// The timeout to wait for players to leave when gracefully shutting down or restarting the server.
     pub graceful_shutdown_timeout: u64,
+    /// Whether to use the server whitelist or not (the `--use-server-whitelist` command line option).
+    pub use_server_whitelist: bool,
 }
 
 /// Represents the combination of the `--create`, `--start-server`, `--start-server-load-latest` and
@@ -51,6 +53,7 @@ impl Default for Running {
             behaviour: Default::default(),
             auto: Default::default(),
             graceful_shutdown_timeout: 30,
+            use_server_whitelist: Default::default(),
         }
     }
 }
@@ -78,6 +81,7 @@ impl Running {
             behaviour: store_format.start_behaviour,
             auto: store_format.auto_start,
             graceful_shutdown_timeout: store_format.graceful_shutdown_timeout as u64,
+            use_server_whitelist: store_format.use_server_whitelist,
         }
     }
 
@@ -87,6 +91,7 @@ impl Running {
         store_format.start_behaviour = self.behaviour;
         store_format.auto_start = self.auto;
         store_format.graceful_shutdown_timeout = self.graceful_shutdown_timeout as i64;
+        store_format.use_server_whitelist = self.use_server_whitelist;
     }
 
     /// Mutates `self` with the value from a given RPC `ServerSettings` object.
@@ -101,6 +106,7 @@ impl Running {
         };
         self.auto = rpc_format.auto_start;
         self.graceful_shutdown_timeout = rpc_format.graceful_shutdown_timeout;
+        self.use_server_whitelist = rpc_format.use_server_whitelist;
         Ok(())
     }
 
@@ -115,5 +121,6 @@ impl Running {
         };
         rpc_format.auto_start = self.auto;
         rpc_format.graceful_shutdown_timeout = self.graceful_shutdown_timeout;
+        rpc_format.use_server_whitelist = self.use_server_whitelist;
     }
 }
