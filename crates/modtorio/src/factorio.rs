@@ -62,7 +62,7 @@ enum ShutdownReason {
 
 /// Defines the different actions that can be taken on players. These are the specific actions that may be executed even
 /// if the target server is offline.
-#[derive(Debug)]
+#[derive(Debug, Eq, PartialEq)]
 pub enum PlayerAction<'a> {
     /// Ban a player for a given reason.
     Ban(&'a str),
@@ -72,6 +72,10 @@ pub enum PlayerAction<'a> {
     Promote,
     /// Demote a player.
     Demote,
+    /// Adds a player to the whitelist.
+    AddToWhitelist,
+    /// Removes a player from the whitelist.
+    RemoveFromWhitelist,
 }
 
 /// Represents a single Factorio server instance.
@@ -296,9 +300,12 @@ impl Factorio {
 
     /// Executes a player action, such as banning or unbanning. The action is applicable on both shutdown and running
     /// servers, which affects how exactly the action is carried out.
-    pub async fn player_action(&self, player: &str, action: PlayerAction<'_>) -> anyhow::Result<()> {
+    // TODO: that's a pretty bad return type
+    pub async fn player_action(&self, player: &str, action: PlayerAction<'_>) -> anyhow::Result<Option<String>> {
         let store_id = self.store_id().await?;
         let status = self.status().await;
+        let mut return_msg = None;
+
         match status.game_status() {
             ExecutionStatus::Shutdown | ExecutionStatus::Crashed => {
                 info!(
@@ -306,15 +313,34 @@ impl Factorio {
                     store_id, action, player
                 );
 
+                if action == PlayerAction::AddToWhitelist
+                    || action == PlayerAction::RemoveFromWhitelist && !self.settings.running.use_server_whitelist
+                {
+                    let msg = format!(
+                        "Server ID {} isn't set to use the server's own whitelist (the `use_server_whitelist` \
+                         setting). While modifying the whitelist offline will save changes to the whitelist file, the \
+                         server will ignore the file when ran. Set the `use_server_whitelist` setting to `true` in \
+                         order to have the server use the whitelist file.",
+                        store_id
+                    );
+                    warn!("{}", msg);
+                    return_msg = Some(msg);
+                }
+
                 let playerlist_file = match action {
                     PlayerAction::Ban(_) | PlayerAction::Unban => self.get_banlist_file(),
                     PlayerAction::Promote | PlayerAction::Demote => self.get_adminlist_file(),
+                    PlayerAction::AddToWhitelist | PlayerAction::RemoveFromWhitelist => self.get_whitelist_file(),
                 };
                 let mut playerlist = Playerlist::from_file(playerlist_file)?;
 
                 match action {
-                    PlayerAction::Ban(_) | PlayerAction::Promote => playerlist.add(player)?,
-                    PlayerAction::Unban | PlayerAction::Demote => playerlist.remove(player)?,
+                    PlayerAction::Ban(_) | PlayerAction::Promote | PlayerAction::AddToWhitelist => {
+                        playerlist.add(player)?
+                    }
+                    PlayerAction::Unban | PlayerAction::Demote | PlayerAction::RemoveFromWhitelist => {
+                        playerlist.remove(player)?
+                    }
                 }
 
                 playerlist.save()?;
@@ -325,6 +351,20 @@ impl Factorio {
                     store_id, action, player
                 );
 
+                if action == PlayerAction::AddToWhitelist
+                    || action == PlayerAction::RemoveFromWhitelist && !self.settings.running.use_server_whitelist
+                {
+                    let msg = format!(
+                        "Server ID {} isn't set to use the server's own whitelist (the `use_server_whitelist` \
+                         setting). Modifying the whitelist while the server is online will apply the changes to the \
+                         current session, however the changes will not be saved to the whitelist file. Set the \
+                         `use_server_whitelist` setting to `true` in order to save the changes to the whitelist file.",
+                        store_id
+                    );
+                    warn!("{}", msg);
+                    return_msg = Some(msg);
+                }
+
                 self.send_command(match action {
                     PlayerAction::Ban(reason) => Command::Ban {
                         player: player.to_string(),
@@ -333,13 +373,15 @@ impl Factorio {
                     PlayerAction::Unban => Command::Unban(player.to_string()),
                     PlayerAction::Promote => Command::Promote(player.to_string()),
                     PlayerAction::Demote => Command::Demote(player.to_string()),
+                    PlayerAction::AddToWhitelist => Command::AddToWhitelist(player.to_string()),
+                    PlayerAction::RemoveFromWhitelist => Command::RemoveFromWhitelist(player.to_string()),
                 })
                 .await?;
             }
             status => return Err(ServerError::InvalidGameStatus(status).into()),
         }
 
-        Ok(())
+        Ok(return_msg)
     }
 
     /// Returns the instance's root directory.
@@ -407,6 +449,15 @@ impl Factorio {
             path
         } else {
             Path::new(ADMINLIST_FILENAME)
+        })
+    }
+
+    /// Returns the path to the current whitelist in use. If no whitelist is specified, the default file is assumed.
+    fn get_whitelist_file(&self) -> PathBuf {
+        self.root.join(if let Some(path) = &self.whitelist_file {
+            path
+        } else {
+            Path::new(WHITELIST_FILENAME)
         })
     }
 

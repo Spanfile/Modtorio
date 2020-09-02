@@ -26,14 +26,18 @@ service ModRpc {
   rpc SendServerCommand(SendCommandRequest) returns (Empty);
   rpc GetServerStatus(ServerStatusRequest) returns (ServerStatus);
 
-  rpc BanPlayer(BanPlayerRequest) returns (Empty);
-  rpc UnbanPlayer(UnbanPlayerRequest) returns (Empty);
-  rpc PromotePlayer(PromotePlayerRequest) returns (Empty);
-  rpc DemotePlayer(DemotePlayerRequest) returns (Empty);
+  rpc BanPlayer(BanPlayerRequest) returns (Message);
+  rpc UnbanPlayer(UnbanPlayerRequest) returns (Message);
+  rpc PromotePlayer(PromotePlayerRequest) returns (Message);
+  rpc DemotePlayer(DemotePlayerRequest) returns (Message);
+  rpc AddPlayerToWhitelist(AddPlayerToWhitelistRequest) returns (Message);
+  rpc RemovePlayerFromWhitelist(RemovePlayerFromWhitelistRequest)
+      returns (Message);
 }
 
 /* Common messages */
 message Empty {}
+message Message { string msg = 1; }
 message Version {
   uint64 major = 1;
   uint64 minor = 2;
@@ -182,6 +186,16 @@ message PromotePlayerRequest {
 }
 
 message DemotePlayerRequest {
+  int64 server_id = 1;
+  string player = 2;
+}
+
+message AddPlayerToWhitelistRequest {
+  int64 server_id = 1;
+  string player = 2;
+}
+
+message RemovePlayerFromWhitelistRequest {
   int64 server_id = 1;
   string player = 2;
 }

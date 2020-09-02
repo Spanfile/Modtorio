@@ -11,6 +11,20 @@ impl From<()> for Empty {
     }
 }
 
+impl From<String> for Message {
+    fn from(msg: String) -> Message {
+        Message { msg }
+    }
+}
+
+impl From<Option<String>> for Message {
+    fn from(msg: Option<String>) -> Message {
+        Message {
+            msg: msg.unwrap_or_default(),
+        }
+    }
+}
+
 impl From<std::net::SocketAddr> for SocketAddr {
     fn from(addr: std::net::SocketAddr) -> SocketAddr {
         SocketAddr {

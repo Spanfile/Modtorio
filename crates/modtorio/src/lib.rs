@@ -620,45 +620,58 @@ impl Modtorio {
     }
 
     /// Bans a player from a given server.
-    async fn ban_player(&self, msg: rpc::BanPlayerRequest) -> RpcResult<()> {
+    async fn ban_player(&self, msg: rpc::BanPlayerRequest) -> RpcResult<Option<String>> {
         let mut servers = self.servers.lock().await;
         let server = find_server_mut(msg.server_id, &mut servers).await?;
-        server
+        Ok(server
             .player_action(&msg.player, factorio::PlayerAction::Ban(&msg.reason))
-            .await?;
-
-        Ok(())
+            .await?)
     }
 
     /// Unbans a player from a given server.
-    async fn unban_player(&self, msg: rpc::UnbanPlayerRequest) -> RpcResult<()> {
+    async fn unban_player(&self, msg: rpc::UnbanPlayerRequest) -> RpcResult<Option<String>> {
         let mut servers = self.servers.lock().await;
         let server = find_server_mut(msg.server_id, &mut servers).await?;
-        server.player_action(&msg.player, factorio::PlayerAction::Unban).await?;
-
-        Ok(())
+        Ok(server.player_action(&msg.player, factorio::PlayerAction::Unban).await?)
     }
 
     /// Bans a player from a given server.
-    async fn promote_player(&self, msg: rpc::PromotePlayerRequest) -> RpcResult<()> {
+    async fn promote_player(&self, msg: rpc::PromotePlayerRequest) -> RpcResult<Option<String>> {
         let mut servers = self.servers.lock().await;
         let server = find_server_mut(msg.server_id, &mut servers).await?;
-        server
+        Ok(server
             .player_action(&msg.player, factorio::PlayerAction::Promote)
-            .await?;
-
-        Ok(())
+            .await?)
     }
 
     /// Unbans a player from a given server.
-    async fn demote_player(&self, msg: rpc::DemotePlayerRequest) -> RpcResult<()> {
+    async fn demote_player(&self, msg: rpc::DemotePlayerRequest) -> RpcResult<Option<String>> {
         let mut servers = self.servers.lock().await;
         let server = find_server_mut(msg.server_id, &mut servers).await?;
-        server
+        Ok(server
             .player_action(&msg.player, factorio::PlayerAction::Demote)
-            .await?;
+            .await?)
+    }
 
-        Ok(())
+    /// Adds a player to a given server's whitelist.
+    async fn add_player_to_whitelist(&self, msg: rpc::AddPlayerToWhitelistRequest) -> RpcResult<Option<String>> {
+        let mut servers = self.servers.lock().await;
+        let server = find_server_mut(msg.server_id, &mut servers).await?;
+        Ok(server
+            .player_action(&msg.player, factorio::PlayerAction::AddToWhitelist)
+            .await?)
+    }
+
+    /// Removes a player from a given server's whitelist.
+    async fn remove_player_from_whitelist(
+        &self,
+        msg: rpc::RemovePlayerFromWhitelistRequest,
+    ) -> RpcResult<Option<String>> {
+        let mut servers = self.servers.lock().await;
+        let server = find_server_mut(msg.server_id, &mut servers).await?;
+        Ok(server
+            .player_action(&msg.player, factorio::PlayerAction::RemoveFromWhitelist)
+            .await?)
     }
 
     /// Returns a new `RpcHandler` with `self` and a given RPC request.
@@ -836,31 +849,51 @@ impl mod_rpc_server::ModRpc for Modtorio {
             .await
     }
 
-    async fn ban_player(&self, req: Request<rpc::BanPlayerRequest>) -> Result<Response<rpc::Empty>, Status> {
+    async fn ban_player(&self, req: Request<rpc::BanPlayerRequest>) -> Result<Response<rpc::Message>, Status> {
         self.rpc_handler(req)
             .require_status(instance_status::Status::Running)
             .result(Self::ban_player)
             .await
     }
 
-    async fn unban_player(&self, req: Request<rpc::UnbanPlayerRequest>) -> Result<Response<rpc::Empty>, Status> {
+    async fn unban_player(&self, req: Request<rpc::UnbanPlayerRequest>) -> Result<Response<rpc::Message>, Status> {
         self.rpc_handler(req)
             .require_status(instance_status::Status::Running)
             .result(Self::unban_player)
             .await
     }
 
-    async fn promote_player(&self, req: Request<rpc::PromotePlayerRequest>) -> Result<Response<rpc::Empty>, Status> {
+    async fn promote_player(&self, req: Request<rpc::PromotePlayerRequest>) -> Result<Response<rpc::Message>, Status> {
         self.rpc_handler(req)
             .require_status(instance_status::Status::Running)
             .result(Self::promote_player)
             .await
     }
 
-    async fn demote_player(&self, req: Request<rpc::DemotePlayerRequest>) -> Result<Response<rpc::Empty>, Status> {
+    async fn demote_player(&self, req: Request<rpc::DemotePlayerRequest>) -> Result<Response<rpc::Message>, Status> {
         self.rpc_handler(req)
             .require_status(instance_status::Status::Running)
             .result(Self::demote_player)
+            .await
+    }
+
+    async fn add_player_to_whitelist(
+        &self,
+        req: Request<rpc::AddPlayerToWhitelistRequest>,
+    ) -> Result<Response<rpc::Message>, Status> {
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .result(Self::add_player_to_whitelist)
+            .await
+    }
+
+    async fn remove_player_from_whitelist(
+        &self,
+        req: Request<rpc::RemovePlayerFromWhitelistRequest>,
+    ) -> Result<Response<rpc::Message>, Status> {
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .result(Self::remove_player_from_whitelist)
             .await
     }
 }
