@@ -639,6 +639,28 @@ impl Modtorio {
         Ok(())
     }
 
+    /// Bans a player from a given server.
+    async fn promote_player(&self, msg: rpc::PromotePlayerRequest) -> RpcResult<()> {
+        let mut servers = self.servers.lock().await;
+        let server = find_server_mut(msg.server_id, &mut servers).await?;
+        server
+            .player_action(&msg.player, factorio::PlayerAction::Promote)
+            .await?;
+
+        Ok(())
+    }
+
+    /// Unbans a player from a given server.
+    async fn demote_player(&self, msg: rpc::DemotePlayerRequest) -> RpcResult<()> {
+        let mut servers = self.servers.lock().await;
+        let server = find_server_mut(msg.server_id, &mut servers).await?;
+        server
+            .player_action(&msg.player, factorio::PlayerAction::Demote)
+            .await?;
+
+        Ok(())
+    }
+
     /// Returns a new `RpcHandler` with `self` and a given RPC request.
     fn rpc_handler<'a, T>(&'a self, req: Request<T>) -> RpcHandler<'a, T>
     where
@@ -825,6 +847,20 @@ impl mod_rpc_server::ModRpc for Modtorio {
         self.rpc_handler(req)
             .require_status(instance_status::Status::Running)
             .result(Self::unban_player)
+            .await
+    }
+
+    async fn promote_player(&self, req: Request<rpc::PromotePlayerRequest>) -> Result<Response<rpc::Empty>, Status> {
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .result(Self::promote_player)
+            .await
+    }
+
+    async fn demote_player(&self, req: Request<rpc::DemotePlayerRequest>) -> Result<Response<rpc::Empty>, Status> {
+        self.rpc_handler(req)
+            .require_status(instance_status::Status::Running)
+            .result(Self::demote_player)
             .await
     }
 }

@@ -28,6 +28,8 @@ service ModRpc {
 
   rpc BanPlayer(BanPlayerRequest) returns (Empty);
   rpc UnbanPlayer(UnbanPlayerRequest) returns (Empty);
+  rpc PromotePlayer(PromotePlayerRequest) returns (Empty);
+  rpc DemotePlayer(DemotePlayerRequest) returns (Empty);
 }
 
 /* Common messages */
@@ -170,6 +172,16 @@ message BanPlayerRequest {
 }
 
 message UnbanPlayerRequest {
+  int64 server_id = 1;
+  string player = 2;
+}
+
+message PromotePlayerRequest {
+  int64 server_id = 1;
+  string player = 2;
+}
+
+message DemotePlayerRequest {
   int64 server_id = 1;
   string player = 2;
 }

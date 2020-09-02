@@ -1,10 +1,10 @@
 //! The whole point. Provides the [`Factorio`](Factorio) struct used to interact with a single
 //! instance of a Factorio server.
 
-mod banlist;
 mod command;
 pub mod executable;
 pub mod mods;
+mod playerlist;
 pub mod settings;
 mod status;
 
@@ -18,11 +18,11 @@ use crate::{
     },
     Config, ModPortal,
 };
-use banlist::Banlist;
 use executable::{EventType, Executable, ExecutableEvent, GameEvent};
 use log::*;
 use models::GameSettings;
 use mods::{Mods, ModsBuilder};
+use playerlist::Playerlist;
 use settings::{ServerSettings, StartBehaviour};
 use std::{
     path::{Path, PathBuf},
@@ -60,10 +60,18 @@ enum ShutdownReason {
     Restart,
 }
 
+/// Defines the different actions that can be taken on players. These are the specific actions that may be executed even
+/// if the target server is offline.
 #[derive(Debug)]
 pub enum PlayerAction<'a> {
+    /// Ban a player for a given reason.
     Ban(&'a str),
+    /// Unban a player.
     Unban,
+    /// Promote a player.
+    Promote,
+    /// Demote a player.
+    Demote,
 }
 
 /// Represents a single Factorio server instance.
@@ -291,44 +299,44 @@ impl Factorio {
     pub async fn player_action(&self, player: &str, action: PlayerAction<'_>) -> anyhow::Result<()> {
         let store_id = self.store_id().await?;
         let status = self.status().await;
-        match (status.game_status(), action) {
-            (ExecutionStatus::Shutdown | ExecutionStatus::Crashed, PlayerAction::Ban(reason)) => {
+        match status.game_status() {
+            ExecutionStatus::Shutdown | ExecutionStatus::Crashed => {
                 info!(
-                    "Server ID {}: banning player {} offline for the reason '{}'",
-                    store_id, player, reason
+                    "Server ID {}: executing {:?} on player {} offline",
+                    store_id, action, player
                 );
 
-                let banlist_file = self.get_banlist_file();
-                let mut banlist = Banlist::from_file(banlist_file)?;
-                banlist.add(player)?;
-                banlist.save()?;
+                let playerlist_file = match action {
+                    PlayerAction::Ban(_) | PlayerAction::Unban => self.get_banlist_file(),
+                    PlayerAction::Promote | PlayerAction::Demote => self.get_adminlist_file(),
+                };
+                let mut playerlist = Playerlist::from_file(playerlist_file)?;
+
+                match action {
+                    PlayerAction::Ban(_) | PlayerAction::Promote => playerlist.add(player)?,
+                    PlayerAction::Unban | PlayerAction::Demote => playerlist.remove(player)?,
+                }
+
+                playerlist.save()?;
             }
-            (ExecutionStatus::Running, PlayerAction::Ban(reason)) => {
+            ExecutionStatus::Running => {
                 info!(
-                    "Server ID {}: banning player {} online for the reason '{}'",
-                    store_id, player, reason
+                    "Server ID {}: executing {:?} on player {} online",
+                    store_id, action, player
                 );
 
-                self.send_command(Command::Ban {
-                    player: player.to_string(),
-                    reason: reason.to_string(),
+                self.send_command(match action {
+                    PlayerAction::Ban(reason) => Command::Ban {
+                        player: player.to_string(),
+                        reason: reason.to_string(),
+                    },
+                    PlayerAction::Unban => Command::Unban(player.to_string()),
+                    PlayerAction::Promote => Command::Promote(player.to_string()),
+                    PlayerAction::Demote => Command::Demote(player.to_string()),
                 })
                 .await?;
             }
-            (ExecutionStatus::Shutdown | ExecutionStatus::Crashed, PlayerAction::Unban) => {
-                info!("Server ID {}: unbanning player {} offline", store_id, player);
-
-                let banlist_file = self.get_banlist_file();
-                let mut banlist = Banlist::from_file(banlist_file)?;
-                banlist.remove(player)?;
-                banlist.save()?;
-            }
-            (ExecutionStatus::Running, PlayerAction::Unban) => {
-                info!("Server ID {}: banning player {} online", store_id, player);
-
-                self.send_command(Command::Unban(player.to_string())).await?;
-            }
-            (status, _) => return Err(ServerError::InvalidGameStatus(status).into()),
+            status => return Err(ServerError::InvalidGameStatus(status).into()),
         }
 
         Ok(())
@@ -390,6 +398,15 @@ impl Factorio {
             path
         } else {
             Path::new(BANLIST_FILENAME)
+        })
+    }
+
+    /// Returns the path to the current adminlist in use. If no adminlist is specified, the default file is assumed.
+    fn get_adminlist_file(&self) -> PathBuf {
+        self.root.join(if let Some(path) = &self.adminlist_file {
+            path
+        } else {
+            Path::new(ADMINLIST_FILENAME)
         })
     }
 
