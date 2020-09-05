@@ -65,9 +65,9 @@ where
     // that assumes whatever is passed in is an owned type (i.e. not already a reference). trying to pass an &str for
     // example wouldn't compile
     #[allow(clippy::needless_pass_by_value)]
-    pub fn remove<P>(&mut self, player: P) -> anyhow::Result<()>
+    pub fn remove<R>(&mut self, player: R) -> anyhow::Result<()>
     where
-        P: PartialEq<T> + std::string::ToString,
+        R: PartialEq<T> + std::string::ToString,
     {
         if self.playerlist.drain_filter(|p| &player == p).next().is_none() {
             Err(ServerError::NoSuchPlayer(player.to_string()).into())

@@ -46,8 +46,8 @@ pub enum Command {
     Demote(String),
     /// The purge command: `/purge <player>`.
     Purge(String),
-    /// The whitelist add command: `/whitelist add <player>`.
-    AddToWhitelist(String),
+    /// The whitelist add command: `/whitelist add <player> <address?>`.
+    AddToWhitelist(String, Option<String>),
     /// The whitelist remove command: `/whitelist remove <player>`.
     RemoveFromWhitelist(String),
 }
@@ -98,7 +98,9 @@ impl Command {
             Command::Promote(player) => format!("/promote {}", player),
             Command::Demote(player) => format!("/demote {}", player),
             Command::Purge(player) => format!("/purge {}", player),
-            Command::AddToWhitelist(player) => format!("/whitelist add {}", player),
+            Command::AddToWhitelist(player, address) => {
+                format!("/whitelist add {} {}", player, address.as_deref().unwrap_or_default())
+            }
             Command::RemoveFromWhitelist(player) => format!("/whitelist remove {}", player),
         };
 

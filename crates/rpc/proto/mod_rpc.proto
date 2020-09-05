@@ -194,6 +194,7 @@ message DemotePlayerRequest {
 message AddPlayerToWhitelistRequest {
   int64 server_id = 1;
   string player = 2;
+  string address = 3;
 }
 
 message RemovePlayerFromWhitelistRequest {

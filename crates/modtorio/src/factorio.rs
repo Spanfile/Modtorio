@@ -23,8 +23,10 @@ use log::*;
 use models::GameSettings;
 use mods::{Mods, ModsBuilder};
 use playerlist::Playerlist;
+use serde::{Deserialize, Serialize};
 use settings::{ServerSettings, StartBehaviour};
 use std::{
+    fmt::Display,
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -72,10 +74,57 @@ pub enum PlayerAction<'a> {
     Promote,
     /// Demote a player.
     Demote,
-    /// Adds a player to the whitelist.
-    AddToWhitelist,
+    /// Adds a player with an optional address to the whitelist.
+    AddToWhitelist(Option<String>),
     /// Removes a player from the whitelist.
     RemoveFromWhitelist,
+}
+
+/// Represents an entry in the server's whitelist.
+#[derive(Debug, Serialize, Deserialize)]
+#[serde(untagged)]
+enum WhitelistEntry {
+    /// A direct player name entry.
+    Player(String),
+    /// A pair of a player's name and their address.
+    PlayerAddressPair {
+        /// The player's username.
+        name: String,
+        /// The player's address.
+        address: String,
+    },
+}
+
+impl Display for WhitelistEntry {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Player(s) => f.write_str(s),
+            Self::PlayerAddressPair { name, address: _ } => f.write_str(name),
+        }
+    }
+}
+
+impl PartialEq for WhitelistEntry {
+    fn eq(&self, other: &Self) -> bool {
+        let own_name = match self {
+            WhitelistEntry::Player(name) => name,
+            WhitelistEntry::PlayerAddressPair { name, address: _ } => name,
+        };
+        let other_name = match other {
+            WhitelistEntry::Player(name) => name,
+            WhitelistEntry::PlayerAddressPair { name, address: _ } => name,
+        };
+        own_name == other_name
+    }
+}
+
+impl PartialEq<WhitelistEntry> for &str {
+    fn eq(&self, other: &WhitelistEntry) -> bool {
+        match other {
+            WhitelistEntry::Player(player) => self == player,
+            WhitelistEntry::PlayerAddressPair { name, address: _ } => self == name,
+        }
+    }
 }
 
 /// Represents a single Factorio server instance.
@@ -313,8 +362,8 @@ impl Factorio {
                     store_id, action, player
                 );
 
-                if action == PlayerAction::AddToWhitelist
-                    || action == PlayerAction::RemoveFromWhitelist && !self.settings.running.use_server_whitelist
+                if matches!(action, PlayerAction::AddToWhitelist(_) | PlayerAction::RemoveFromWhitelist)
+                    && !self.settings.running.use_server_whitelist
                 {
                     let msg = format!(
                         "Server ID {} isn't set to use the server's own whitelist (the `use_server_whitelist` \
@@ -327,28 +376,47 @@ impl Factorio {
                     return_msg = Some(msg);
                 }
 
-                let mut playerlist = match action {
-                    PlayerAction::Ban(_) | PlayerAction::Unban => {
-                        Playerlist::<String>::from_file(self.get_banlist_file())?
+                match action {
+                    PlayerAction::Ban(_) => {
+                        let mut banlist = Playerlist::<String>::from_file(self.get_banlist_file())?;
+                        banlist.add(player.to_string())?;
+                        banlist.save()?;
                     }
-                    PlayerAction::Promote | PlayerAction::Demote => {
-                        Playerlist::<String>::from_file(self.get_adminlist_file())?
+                    PlayerAction::Unban => {
+                        let mut banlist = Playerlist::<String>::from_file(self.get_banlist_file())?;
+                        banlist.remove(player)?;
+                        banlist.save()?;
                     }
-                    PlayerAction::AddToWhitelist | PlayerAction::RemoveFromWhitelist => {
-                        Playerlist::<String>::from_file(self.get_whitelist_file())?
+                    PlayerAction::Promote => {
+                        let mut adminlist = Playerlist::<String>::from_file(self.get_adminlist_file())?;
+                        adminlist.add(player.to_string())?;
+                        adminlist.save()?;
+                    }
+                    PlayerAction::Demote => {
+                        let mut adminlist = Playerlist::<String>::from_file(self.get_adminlist_file())?;
+                        adminlist.remove(player)?;
+                        adminlist.save()?;
+                    }
+                    PlayerAction::AddToWhitelist(address) => {
+                        let mut whitelist = Playerlist::<WhitelistEntry>::from_file(self.get_whitelist_file())?;
+
+                        whitelist.add(if let Some(address) = address {
+                            WhitelistEntry::PlayerAddressPair {
+                                name: player.to_string(),
+                                address,
+                            }
+                        } else {
+                            WhitelistEntry::Player(player.to_string())
+                        })?;
+
+                        whitelist.save()?;
+                    }
+                    PlayerAction::RemoveFromWhitelist => {
+                        let mut whitelist = Playerlist::<WhitelistEntry>::from_file(self.get_whitelist_file())?;
+                        whitelist.remove(player)?;
+                        whitelist.save()?;
                     }
                 };
-
-                match action {
-                    PlayerAction::Ban(_) | PlayerAction::Promote | PlayerAction::AddToWhitelist => {
-                        playerlist.add(player.to_string())?
-                    }
-                    PlayerAction::Unban | PlayerAction::Demote | PlayerAction::RemoveFromWhitelist => {
-                        playerlist.remove(player)?
-                    }
-                }
-
-                playerlist.save()?;
             }
             ExecutionStatus::Running => {
                 info!(
@@ -356,8 +424,8 @@ impl Factorio {
                     store_id, action, player
                 );
 
-                if action == PlayerAction::AddToWhitelist
-                    || action == PlayerAction::RemoveFromWhitelist && !self.settings.running.use_server_whitelist
+                if matches!(action, PlayerAction::AddToWhitelist(_) | PlayerAction::RemoveFromWhitelist)
+                    && !self.settings.running.use_server_whitelist
                 {
                     let msg = format!(
                         "Server ID {} isn't set to use the server's own whitelist (the `use_server_whitelist` \
@@ -379,7 +447,7 @@ impl Factorio {
                     PlayerAction::Unban => Command::Unban(player.to_string()),
                     PlayerAction::Promote => Command::Promote(player.to_string()),
                     PlayerAction::Demote => Command::Demote(player.to_string()),
-                    PlayerAction::AddToWhitelist => Command::AddToWhitelist(player.to_string()),
+                    PlayerAction::AddToWhitelist(address) => Command::AddToWhitelist(player.to_string(), address),
                     PlayerAction::RemoveFromWhitelist => Command::RemoveFromWhitelist(player.to_string()),
                 })
                 .await?;

@@ -658,7 +658,14 @@ impl Modtorio {
         let mut servers = self.servers.lock().await;
         let server = find_server_mut(msg.server_id, &mut servers).await?;
         Ok(server
-            .player_action(&msg.player, factorio::PlayerAction::AddToWhitelist)
+            .player_action(
+                &msg.player,
+                factorio::PlayerAction::AddToWhitelist(if msg.address.is_empty() {
+                    None
+                } else {
+                    Some(msg.address)
+                }),
+            )
             .await?)
     }
 
