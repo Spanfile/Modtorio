@@ -849,28 +849,37 @@ impl mod_rpc_server::ModRpc for Modtorio {
             .await
     }
 
-    async fn ban_player(&self, req: Request<rpc::BanPlayerRequest>) -> Result<Response<rpc::Message>, Status> {
+    async fn ban_player(&self, req: Request<rpc::BanPlayerRequest>) -> Result<Response<rpc::PossibleWarning>, Status> {
         self.rpc_handler(req)
             .require_status(instance_status::Status::Running)
             .result(Self::ban_player)
             .await
     }
 
-    async fn unban_player(&self, req: Request<rpc::UnbanPlayerRequest>) -> Result<Response<rpc::Message>, Status> {
+    async fn unban_player(
+        &self,
+        req: Request<rpc::UnbanPlayerRequest>,
+    ) -> Result<Response<rpc::PossibleWarning>, Status> {
         self.rpc_handler(req)
             .require_status(instance_status::Status::Running)
             .result(Self::unban_player)
             .await
     }
 
-    async fn promote_player(&self, req: Request<rpc::PromotePlayerRequest>) -> Result<Response<rpc::Message>, Status> {
+    async fn promote_player(
+        &self,
+        req: Request<rpc::PromotePlayerRequest>,
+    ) -> Result<Response<rpc::PossibleWarning>, Status> {
         self.rpc_handler(req)
             .require_status(instance_status::Status::Running)
             .result(Self::promote_player)
             .await
     }
 
-    async fn demote_player(&self, req: Request<rpc::DemotePlayerRequest>) -> Result<Response<rpc::Message>, Status> {
+    async fn demote_player(
+        &self,
+        req: Request<rpc::DemotePlayerRequest>,
+    ) -> Result<Response<rpc::PossibleWarning>, Status> {
         self.rpc_handler(req)
             .require_status(instance_status::Status::Running)
             .result(Self::demote_player)
@@ -880,7 +889,7 @@ impl mod_rpc_server::ModRpc for Modtorio {
     async fn add_player_to_whitelist(
         &self,
         req: Request<rpc::AddPlayerToWhitelistRequest>,
-    ) -> Result<Response<rpc::Message>, Status> {
+    ) -> Result<Response<rpc::PossibleWarning>, Status> {
         self.rpc_handler(req)
             .require_status(instance_status::Status::Running)
             .result(Self::add_player_to_whitelist)
@@ -890,7 +899,7 @@ impl mod_rpc_server::ModRpc for Modtorio {
     async fn remove_player_from_whitelist(
         &self,
         req: Request<rpc::RemovePlayerFromWhitelistRequest>,
-    ) -> Result<Response<rpc::Message>, Status> {
+    ) -> Result<Response<rpc::PossibleWarning>, Status> {
         self.rpc_handler(req)
             .require_status(instance_status::Status::Running)
             .result(Self::remove_player_from_whitelist)

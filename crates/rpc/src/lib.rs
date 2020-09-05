@@ -11,16 +11,16 @@ impl From<()> for Empty {
     }
 }
 
-impl From<String> for Message {
-    fn from(msg: String) -> Message {
-        Message { msg }
+impl From<String> for PossibleWarning {
+    fn from(warning: String) -> PossibleWarning {
+        PossibleWarning { warning }
     }
 }
 
-impl From<Option<String>> for Message {
-    fn from(msg: Option<String>) -> Message {
-        Message {
-            msg: msg.unwrap_or_default(),
+impl From<Option<String>> for PossibleWarning {
+    fn from(warning: Option<String>) -> PossibleWarning {
+        PossibleWarning {
+            warning: warning.unwrap_or_default(),
         }
     }
 }
