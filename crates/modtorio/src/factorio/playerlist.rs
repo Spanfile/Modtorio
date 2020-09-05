@@ -24,17 +24,17 @@ where
     T: Serialize + de::DeserializeOwned + std::fmt::Debug + std::string::ToString + PartialEq,
 {
     /// Loads a new playerlist from a given playerlist file.
-    pub fn from_file<P>(banlist_file: P) -> anyhow::Result<Self>
+    pub fn from_file<P>(playerlist_file: P) -> anyhow::Result<Self>
     where
         P: AsRef<Path>,
     {
-        let file = File::open(&banlist_file)?;
+        let file = File::open(&playerlist_file)?;
         let reader = BufReader::new(file);
         let playerlist: Vec<T> = serde_json::from_reader(reader)?;
         debug!("Loaded playerlist: {:?}", playerlist);
 
         Ok(Playerlist {
-            path: banlist_file.as_ref().to_path_buf(),
+            path: playerlist_file.as_ref().to_path_buf(),
             playerlist,
         })
     }
