@@ -318,9 +318,9 @@ impl Factorio {
                 {
                     let msg = format!(
                         "Server ID {} isn't set to use the server's own whitelist (the `use_server_whitelist` \
-                         setting). While modifying the whitelist offline will save changes to the whitelist file, the \
-                         server will ignore the file when ran. Set the `use_server_whitelist` setting to `true` in \
-                         order to have the server use the whitelist file.",
+                         setting). Modifying the whitelist offline will save changes to the whitelist file, but the \
+                         server will not use the whitelist when ran. Set the `use_server_whitelist` setting to `true` \
+                         in order to have the server use the whitelist.",
                         store_id
                     );
                     warn!("{}", msg);
@@ -362,8 +362,9 @@ impl Factorio {
                     let msg = format!(
                         "Server ID {} isn't set to use the server's own whitelist (the `use_server_whitelist` \
                          setting). Modifying the whitelist while the server is online will apply the changes to the \
-                         current session, however the changes will not be saved to the whitelist file. Set the \
-                         `use_server_whitelist` setting to `true` in order to save the changes to the whitelist file.",
+                         current session, however the changes will not be saved to the whitelist file and will not \
+                         persist across server restarts. Set the `use_server_whitelist` setting to `true` in order to \
+                         save the changes to the whitelist file and have them persist across server restarts.",
                         store_id
                     );
                     warn!("{}", msg);
