@@ -327,16 +327,21 @@ impl Factorio {
                     return_msg = Some(msg);
                 }
 
-                let playerlist_file = match action {
-                    PlayerAction::Ban(_) | PlayerAction::Unban => self.get_banlist_file(),
-                    PlayerAction::Promote | PlayerAction::Demote => self.get_adminlist_file(),
-                    PlayerAction::AddToWhitelist | PlayerAction::RemoveFromWhitelist => self.get_whitelist_file(),
+                let mut playerlist = match action {
+                    PlayerAction::Ban(_) | PlayerAction::Unban => {
+                        Playerlist::<String>::from_file(self.get_banlist_file())?
+                    }
+                    PlayerAction::Promote | PlayerAction::Demote => {
+                        Playerlist::<String>::from_file(self.get_adminlist_file())?
+                    }
+                    PlayerAction::AddToWhitelist | PlayerAction::RemoveFromWhitelist => {
+                        Playerlist::<String>::from_file(self.get_whitelist_file())?
+                    }
                 };
-                let mut playerlist = Playerlist::from_file(playerlist_file)?;
 
                 match action {
                     PlayerAction::Ban(_) | PlayerAction::Promote | PlayerAction::AddToWhitelist => {
-                        playerlist.add(player)?
+                        playerlist.add(player.to_string())?
                     }
                     PlayerAction::Unban | PlayerAction::Demote | PlayerAction::RemoveFromWhitelist => {
                         playerlist.remove(player)?

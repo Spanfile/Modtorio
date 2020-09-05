@@ -3,6 +3,7 @@
 
 use crate::error::ServerError;
 use log::*;
+use serde::{de, Serialize};
 use std::{
     fs::File,
     io::BufReader,
@@ -11,14 +12,17 @@ use std::{
 
 /// Manages one of the server's playerlists.
 #[derive(Debug)]
-pub struct Playerlist {
+pub struct Playerlist<T> {
     /// The path where this playerlist is stored.
     path: PathBuf,
     /// The actual playerlist.
-    playerlist: Vec<String>,
+    playerlist: Vec<T>,
 }
 
-impl Playerlist {
+impl<T> Playerlist<T>
+where
+    T: Serialize + de::DeserializeOwned + std::fmt::Debug + std::string::ToString + PartialEq,
+{
     /// Loads a new playerlist from a given playerlist file.
     pub fn from_file<P>(banlist_file: P) -> anyhow::Result<Self>
     where
@@ -26,7 +30,7 @@ impl Playerlist {
     {
         let file = File::open(&banlist_file)?;
         let reader = BufReader::new(file);
-        let playerlist: Vec<String> = serde_json::from_reader(reader)?;
+        let playerlist: Vec<T> = serde_json::from_reader(reader)?;
         debug!("Loaded playerlist: {:?}", playerlist);
 
         Ok(Playerlist {
@@ -45,11 +49,10 @@ impl Playerlist {
     }
 
     /// Adds a player to the playerlist.
-    pub fn add(&mut self, player: &str) -> anyhow::Result<()> {
-        let player = player.to_lowercase();
+    pub fn add(&mut self, player: T) -> anyhow::Result<()> {
         for p in &self.playerlist {
             if p == &player {
-                return Err(ServerError::PlayerAlreadyExists(player).into());
+                return Err(ServerError::PlayerAlreadyExists(player.to_string()).into());
             }
         }
 
@@ -58,15 +61,18 @@ impl Playerlist {
     }
 
     /// Removes a player from the playerlist.
-    pub fn remove(&mut self, player: &str) -> anyhow::Result<()> {
-        let player = player.to_lowercase();
-        for (i, p) in self.playerlist.iter().enumerate() {
-            if p == &player {
-                self.playerlist.remove(i);
-                return Ok(());
-            }
+    // clippy complains that the player argument isn't consumed in the method and it should be a reference instead, but
+    // that assumes whatever is passed in is an owned type (i.e. not already a reference). trying to pass an &str for
+    // example wouldn't compile
+    #[allow(clippy::needless_pass_by_value)]
+    pub fn remove<P>(&mut self, player: P) -> anyhow::Result<()>
+    where
+        P: PartialEq<T> + std::string::ToString,
+    {
+        if self.playerlist.drain_filter(|p| &player == p).next().is_none() {
+            Err(ServerError::NoSuchPlayer(player.to_string()).into())
+        } else {
+            Ok(())
         }
-
-        Err(ServerError::NoSuchPlayer(player).into())
     }
 }
