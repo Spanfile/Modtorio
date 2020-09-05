@@ -63,19 +63,12 @@ impl From<send_command_request::Command> for Command {
                 player: whisper.player,
                 message: whisper.message,
             },
-            // send_command_request::Command::Ban(ban) => Self::Ban {
-            //     player: ban.player,
-            //     reason: ban.reason,
-            // },
-            // send_command_request::Command::Unban(unban) => Self::Unban(unban.player),
             send_command_request::Command::Kick(kick) => Self::Kick {
                 player: kick.player,
                 reason: kick.reason,
             },
             send_command_request::Command::Mute(mute) => Self::Mute(mute.player),
             send_command_request::Command::Unmute(unmute) => Self::Unmute(unmute.player),
-            send_command_request::Command::Promote(promote) => Self::Promote(promote.player),
-            send_command_request::Command::Demote(demote) => Self::Demote(demote.player),
             send_command_request::Command::Purge(purge) => Self::Purge(purge.player),
         }
     }

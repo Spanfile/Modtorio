@@ -150,8 +150,6 @@ message SendCommandRequest {
   }
   message Mute { string player = 1; }
   message Unmute { string player = 1; }
-  message Promote { string player = 1; }
-  message Demote { string player = 1; }
   message Purge { string player = 1; }
 
   oneof command {
@@ -163,9 +161,7 @@ message SendCommandRequest {
     Kick kick = 7;
     Mute mute = 8;
     Unmute unmute = 9;
-    Promote promote = 10;
-    Demote demote = 11;
-    Purge purge = 12;
+    Purge purge = 10;
   }
 }
 
